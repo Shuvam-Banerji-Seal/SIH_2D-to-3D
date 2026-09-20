@@ -1,0 +1,131 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "drone3d"
+version = "0.1.0"
+description = "Single-pass drone video to accurate, georeferenced 3D models (SIH PS 26158 / NTRO)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-2.0-only" }
+authors = [
+  { name = "Team SIH_2D-to-3D" },
+]
+keywords = [
+  "drone",
+  "photogrammetry",
+  "3d-reconstruction",
+  "structure-from-motion",
+  "georeferencing",
+  "uav",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Image Processing",
+  "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+  "numpy>=1.24",
+  "opencv-python-headless>=4.8",
+  "PyYAML>=6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+ai = [
+  "torch>=2.2",
+  "torchvision>=0.17",
+  "transformers>=4.40",
+  "ultralytics>=8.2",
+]
+sfm = ["pycolmap>=0.6"]
+mesh = ["open3d>=0.18", "trimesh>=4.0"]
+geo = ["pyproj>=3.6", "rasterio>=1.3", "laspy>=2.5"]
+api = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "python-multipart>=0.0.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/Shuvam-Banerji-Seal/SIH_2D-to-3D"
+Repository = "https://github.com/Shuvam-Banerji-Seal/SIH_2D-to-3D"
+Issues = "https://github.com/Shuvam-Banerji-Seal/SIH_2D-to-3D/issues"
+
+[project.scripts]
+drone3d = "drone3d.cli:main"
+
+# ---------------------------------------------------------------------------
+# uv: development dependencies (PEP 735 dependency groups).
+# `uv sync` installs the `dev` group by default; use `uv sync --all-extras`
+# to pull in every optional reconstruction backend.
+# ---------------------------------------------------------------------------
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+  "pre-commit>=3.7",
+]
+docs = [
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.25",
+]
+
+[tool.uv]
+package = true
+default-groups = ["dev"]
+# Keep resolution reproducible across machines/CI.
+resolution = "highest"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drone3d"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/configs",
+  "/docs",
+  "/README.md",
+  "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+  "slow: tests that need heavy optional backends or real datasets",
+  "gpu: tests that need a CUDA-capable device",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RET", "PTH"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ARG001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.coverage.run]
+source = ["src/drone3d"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

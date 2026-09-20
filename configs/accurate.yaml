@@ -1,0 +1,42 @@
+# Accuracy-first profile for benchmark runs and final evaluation.
+#
+#   drone3d run --config configs/accurate.yaml --set ingest.video=/data/pass.mp4
+#
+# Uses exhaustive matching, dense MVS with geometric consistency, texturing and
+# the full frame budget. Expect hours of CPU time on large 4K passes.
+
+run_name: accurate
+preprocess:
+  sample_fps: 3.0
+  max_frames: 1200
+  oversample: 2
+  min_sharpness: 40.0
+  min_spacing_s: 0.15
+  resize_width: null
+  selection: sharpness
+  deblur: true
+  stabilize: true
+  dynamic_masking: true
+
+sfm:
+  matcher: exhaustive
+  camera_model: OPENCV
+  max_features: 16384
+
+dense:
+  backend: mvs
+  max_image_size: 3200
+  geom_consistency: true
+
+mesh:
+  backend: poisson
+  depth: 12
+  trim: 8.0
+  texture: true
+
+geo:
+  align_mode: similarity
+
+metrics:
+  voxel_size: 0.25
+  report_thumbnails: 16

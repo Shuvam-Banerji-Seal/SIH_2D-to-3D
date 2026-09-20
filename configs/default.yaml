@@ -1,0 +1,90 @@
+# drone3d default configuration.
+#
+# All keys are optional; this file documents built-in defaults.
+# Override any key from the CLI, e.g.:
+#   drone3d run --config configs/default.yaml --set preprocess.max_frames=400
+
+run_name: run            # run directory prefix under output_root
+output_root: outputs     # generated artifacts (git-ignored)
+stages:                  # pipeline stages to execute, in order
+  - ingest
+  - preprocess
+  - sfm
+  - dense
+  - mesh
+  - georef
+  - metrics
+  - report
+log_level: INFO
+seed: 0
+
+# ---------------------------------------------------------------- input data
+ingest:
+  video: null            # path to the single-pass drone video (1080p/4K)
+  telemetry: null        # .csv | .srt (DJI) | .gpx | .json flight log
+  frames_dir: frames     # frames are written under <run_dir>/<frames_dir>
+  image_format: jpg
+  jpeg_quality: 92
+
+# ------------------------------------------- frame sampling & preprocessing
+preprocess:
+  sample_fps: 2.0        # target sampling rate; 0 keeps every source frame
+  max_frames: 600        # keyframes handed to reconstruction
+  oversample: 3          # extract max_frames * oversample candidates, rank by quality
+  min_sharpness: 20.0    # Laplacian-variance threshold for usable frames
+  min_spacing_s: 0.2     # minimum temporal separation between keyframes
+  resize_width: null     # optional downscale, e.g. 1920
+  selection: sharpness   # sharpness | uniform
+  deblur: false          # focus-aware Wiener + unsharp masking
+  deblur_sigma: 1.4
+  deblur_amount: 0.8
+  stabilize: false       # feature-based trajectory smoothing
+  dynamic_masking: false # mask vehicles/people so they do not enter the model
+
+# ------------------------------------------------- structure from motion
+sfm:
+  backend: colmap        # colmap | none
+  binary: colmap
+  matcher: sequential    # sequential | exhaustive | vocab_tree
+  camera_model: OPENCV
+  single_camera: true
+  max_features: 8192
+  use_gps_priors: true
+  allow_missing: true    # skip instead of failing when COLMAP is absent
+  extra_args: []
+
+# ------------------------------------------------- dense reconstruction
+dense:
+  backend: mvs           # mvs | mono | none
+  max_image_size: 2000
+  geom_consistency: true
+  mono_depth_model: depth-anything/Depth-Anything-V2-Small-hf
+  allow_missing: true
+
+# ------------------------------------------------- mesh & texturing
+mesh:
+  backend: poisson       # poisson | delaunay | open3d | none
+  depth: 11
+  trim: 10.0
+  texture: true
+  target_faces: null
+  allow_missing: true
+
+# ------------------------------------------- georeferencing (GPS/IMU priors)
+geo:
+  enabled: true
+  origin_lat: null       # null -> median of frame GPS fixes
+  origin_lon: null
+  origin_alt: 0.0
+  epsg: 4326
+  align_mode: similarity # similarity | translation | none
+  min_correspondences: 3
+  write_geojson: true
+
+# ------------------------------------------------- metrics & reporting
+metrics:
+  voxel_size: 0.5
+  reference_cloud: null  # optional ground-truth cloud for accuracy/completeness
+  expected_extent_m: null
+  report_thumbnails: 12
+  make_contact_sheet: true

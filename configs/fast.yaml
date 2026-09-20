@@ -1,0 +1,36 @@
+# Fast, near-real-time profile for field testing on a laptop (CPU only).
+#
+#   drone3d run --config configs/fast.yaml --set ingest.video=/data/pass.mp4
+#
+# Trades reconstruction density for latency: fewer keyframes, smaller images,
+# no texturing, no dynamic masking.
+
+run_name: fast
+preprocess:
+  sample_fps: 1.0
+  max_frames: 150
+  oversample: 2
+  min_spacing_s: 0.5
+  resize_width: 1280
+  selection: sharpness
+  deblur: false
+  stabilize: false
+  dynamic_masking: false
+
+sfm:
+  matcher: sequential
+  max_features: 4096
+
+dense:
+  backend: mvs
+  max_image_size: 1024
+  geom_consistency: false
+
+mesh:
+  backend: poisson
+  depth: 9
+  texture: false
+
+metrics:
+  voxel_size: 1.0
+  report_thumbnails: 8

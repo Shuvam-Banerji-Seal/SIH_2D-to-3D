@@ -216,3 +216,42 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# drone3d project-specific
+# ---------------------------------------------------------------------------
+# Datasets, videos, flight logs
+data/
+datasets/
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.srt
+*.gpx
+*.laz
+*.las
+
+# Run outputs and reconstruction artifacts
+outputs/
+runs/
+*.ply
+*.obj
+*.mtl
+*.glb
+*.gltf
+*.tif
+*.tiff
+*.npy
+*.npz
+
+# Model weights
+*.pt
+*.pth
+*.onnx
+*.engine
+weights/
+checkpoints/
+
+# COLMAP workspaces (inside ignored run directories)
+database.db

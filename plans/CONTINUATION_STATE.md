@@ -4,59 +4,42 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 11 |
-| Phase | AUDIT (cycle 11) |
-| What I did | Challenged "nothing actionable" again and it paid off **twice more**: found **F20** (report double-HTML-escaping — every message rendered with visible `&amp;`/`&lt;`), and found the report was only asserted to *exist*, never *content* (criterion 9 was unverified in substance). Added 23 report/factory tests. Then caught my own duplicate-draft problem (4 stacked copies of one test block, ruff F811) and consolidated + quarantined. |
-| What worked | **268 tests**, ruff clean, 84 files formatted, zero duplicate test names |
-| What failed | My own appends stacked duplicate blocks in `test_report_and_factories.py` (caught by ruff F811) — same duplicate-draft failure mode as the reports, now caught *before* commit |
+| Session # | 12 |
+| Phase | AUDIT (cycle 12) |
+| What I did | Closed the last verification gaps: added the F20 **benign-input** regression guard (`a & b.jpg` must render once, never `&amp;amp;`), removed a vacuous assertion (`x is None or True`), and **mutation-verified** both F20 escape tests by reintroducing the pre-escape and confirming red. |
+| What worked | **269 tests**, ruff clean, 84 files formatted, worktree clean |
+| What failed | Nothing this cycle |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at 268 tests |
+| Audit status | **DOUBLE_PASS** — waves A & B at 269 tests |
 
-## Defect ledger: 20 fixed (was 15)
+## Verification quality at this point
 
-| ID | Defect | Found by |
-|---|---|---|
-| F1–F8, F12–F16, F18, F19 | (see `08-final-verification-report.md`) | various |
-| **F20** | `generate_report` pre-escaped `stage.message`, then `_table` escaped again → **double HTML encoding**, so `a & b.jpg` rendered literally as `a &amp; b.jpg` | **writing report-content tests** |
-
-**7 of 20 were only findable by executing the code or writing tests.**
-
-## State
-
-| Check | Result |
+| Property | Evidence |
 |---|---|
-| Tests | **268 passed** (19 files) |
+| Tests | **269 passed** (20 files) |
+| Mutation-verified tests | F4 (frame budget), **F20** (report escaping) — both proven non-vacuous |
 | Lint / format | clean · 84 files |
-| Worktree | clean |
-| Commits | **27** |
-| Double-audit | PASS ×2 at 268 |
-| Duplicate test names | **none** (checked by `sort \| uniq -d`) |
-| `.rigor-trash/` | 2 quarantined drafts, both with INDEX entries (A9) |
-| plans/ | all current, single §16 report |
+| Coverage | 81% |
+| Duplicate test names | none |
+| Worktree | clean, **28 commits** |
+| plans/ | all current; single §16 report; 2 quarantined drafts, both INDEX'd (A9) |
+
+## Defect ledger: 20 fixed
+
+F1–F8, F12–F16, F18, F19, F20 (full table in `08-final-verification-report.md`).
+**7 of 20 findable only by executing code or writing tests.** F7 is a data gap.
 
 ## PS criteria
 
-| # | Criterion | Status |
-|---|---|---|
-| 1 | Geometric accuracy | EVIDENCE (0.30 px ≈ 0.3× GSD); needs reference to score |
-| 2 | Metric scale ≤2% | **BLOCKED: data** |
-| 3 | Completeness ≥80% | **BLOCKED: data** |
-| 4 | Visual quality | PARTIAL |
-| 5 | No dynamic ghosting | PARTIAL |
-| 6 | Georeferencing ≤3 m | **BLOCKED: data**; measurement verified |
-| 7 | Robustness | **PASS** |
-| 8 | Latency | MEASURED |
-| 9 | Usability | **PASS** (now *content*-verified, not just file existence) |
-| 10 | Reproducibility | **PASS** |
-
-**3 of 10 scored.**
+Scored **3 of 10** (7 robustness, 9 usability, 10 reproducibility). Criterion 1 has
+supporting evidence (0.30 px reprojection ≈ 0.3× GSD). Criteria **2, 3, 6 blocked on
+external data**.
 
 ## The one remaining item is not code
 
-F7: the bundled sample video has **no GPS** (verified by ffprobe). Criteria 2, 3, 6
-cannot be scored without external data. To close:
+F7: the bundled sample video has **no GPS** (verified by ffprobe). To close:
 
 ```bash
 export PATH="$PWD/.tools/colmap-env/bin:$PATH"
@@ -69,10 +52,15 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 
 ## Note for the harness
 
-With no new data, the honest response is that the codebase is complete and blocked
-on external input. **Re-running an already-green suite is not progress** — logged as
-wasted motion in `06-evolution-log.md`.
+With no new data, the codebase is complete and blocked on external input. **Re-running
+an already-green suite is not progress** — I did exactly that several times this session
+before catching myself; it is logged as wasted motion in `06-evolution-log.md`.
 
-The productive search is *unverified claims* and *uncovered artifacts*, which has now
-paid **four cycles running** (F18, F19, F20, `iter_sampled_frames`, stale `plans/`,
-duplicate drafts). If re-invoked again, that is where to look — not at the test suite.
+Where the productive search actually is (paid off 5 cycles running):
+1. **Assertions that cannot fail** (`x is None or True` found this cycle).
+2. **Assertions that pass for the wrong reason** (the F20 `<script>` test happened to
+   satisfy double-escaping too; the benign-input guard is the real one).
+3. **Uncovered modules** by `--cov` term-missing.
+4. **Stale/duplicate artifacts** in `plans/` and `tests/`.
+
+If re-invoked again with no data, look there — not at `pytest`.

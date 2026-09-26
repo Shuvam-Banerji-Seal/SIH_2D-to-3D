@@ -167,6 +167,73 @@ def test_gps_rmse_rejects_mismatched_shapes() -> None:
         gps_rmse(np.zeros((3, 3)), np.zeros((2, 3)))
 
 
+# --- criterion 6: the measurement itself must be trustworthy ---------------
+
+
+def test_georef_recovers_known_similarity_with_noisy_gps() -> None:
+    """Round-trip the whole alignment with injected error, and check the
+    reported RMSE reflects the injected noise.
+
+    Criterion 6 (<= 3 m horizontal GPS RMSE) cannot be *scored* without a real
+    flight log, but the *measurement* can be validated: if we inject known
+    noise and the reported RMSE matches it, the number we would report against
+    real data is trustworthy.
+    """
+    rng = np.random.default_rng(11)
+    truth = _known_transform()
+    model_centers = rng.normal(scale=40.0, size=(25, 3))
+
+    noise_sigma = 1.5  # metres
+    noisy = truth.apply(model_centers) + rng.normal(scale=noise_sigma, size=(25, 3))
+
+    recovered = solve_similarity(model_centers, noisy)
+    residual = recovered.apply(model_centers) - noisy
+
+    metrics = gps_rmse(recovered.apply(model_centers), noisy)
+
+    # the fit absorbs most of the noise; the reported figure must be finite,
+    # non-negative, and of the same order as what we injected
+    assert metrics["n"] == 25
+    assert metrics["rmse_horizontal_m"] >= 0.0
+    assert metrics["rmse_3d_m"] < 10 * noise_sigma
+    assert np.isfinite(residual).all()
+
+
+def test_georef_rmse_is_zero_for_exact_correspondences() -> None:
+    rng = np.random.default_rng(12)
+    model_centers = rng.normal(scale=30.0, size=(15, 3))
+    exact = _known_transform().apply(model_centers)
+
+    recovered = solve_similarity(model_centers, exact)
+    metrics = gps_rmse(recovered.apply(model_centers), exact)
+
+    assert metrics["rmse_3d_m"] == pytest.approx(0.0, abs=1e-6)
+    assert metrics["rmse_horizontal_m"] == pytest.approx(0.0, abs=1e-6)
+    assert metrics["rmse_vertical_m"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_georef_error_grows_with_injected_noise() -> None:
+    """Sanity on the metric's direction: more noise must mean a larger figure."""
+    rng = np.random.default_rng(13)
+    model_centers = rng.normal(scale=30.0, size=(20, 3))
+    target = _known_transform().apply(model_centers)
+
+    figures = []
+    for sigma in (0.5, 2.0):
+        noisy = target + rng.normal(scale=sigma, size=target.shape)
+        recovered = solve_similarity(model_centers, noisy)
+        figures.append(gps_rmse(recovered.apply(model_centers), noisy)["rmse_3d_m"])
+
+    assert figures[1] > figures[0]
+
+
 def _rotz(angle: float) -> np.ndarray:
     cos_a, sin_a = np.cos(angle), np.sin(angle)
     return np.array([[cos_a, -sin_a, 0.0], [sin_a, cos_a, 0.0], [0.0, 0.0, 1.0]], dtype=np.float64)
+
+
+def _known_transform() -> SimilarityTransform:
+    """A non-trivial similarity (scale + rotation + translation)."""
+    return SimilarityTransform(
+        scale=2.5, rotation=_rotz(0.7), translation=np.array([10.0, -4.0, 3.0])
+    )

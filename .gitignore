@@ -255,3 +255,6 @@ checkpoints/
 
 # COLMAP workspaces (inside ignored run directories)
 database.db
+
+# Extracted frames from sample footage (see resources.md)
+frames/

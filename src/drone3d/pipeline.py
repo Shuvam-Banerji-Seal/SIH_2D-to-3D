@@ -677,9 +677,14 @@ class Pipeline:
         for stage in self._result.stages:
             if stage.metrics:
                 metrics[stage.name] = stage.metrics
-        stored = _read_json(self.run_dir / "metrics" / "metrics.json")
-        if stored:
-            metrics["summary"] = stored
+        # `metrics/metrics.json` is the payload the `metrics` stage already
+        # reports in memory; re-storing it under `summary` made the report render
+        # every number twice (F22). Only fall back to the file when no stage
+        # supplied it.
+        if "metrics" not in metrics:
+            stored = _read_json(self.run_dir / "metrics" / "metrics.json")
+            if stored:
+                metrics["summary"] = stored
         return metrics
 
     def _write_manifest(self) -> Path:

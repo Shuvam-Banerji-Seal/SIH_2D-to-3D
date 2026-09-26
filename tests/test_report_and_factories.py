@@ -263,3 +263,26 @@ def test_partial_rerun_keeps_earlier_stage_metrics(tmp_path: Path) -> None:
     assert metrics["sfm"]["num_points"] == 1286
     assert metrics["dense"]["num_points"] == 246354
     assert metrics["mesh"]["num_vertices"] == 31883
+
+
+def test_metrics_are_not_stored_twice(tmp_path: Path) -> None:
+    """F22: `metrics.json` is the same payload the `metrics` stage reports.
+
+    Storing both under `metrics` and `summary` made the report render every
+    number twice.
+    """
+    run_dir = tmp_path / "run"
+    payload = {"frames": {"count": 20}}
+    (run_dir / "metrics").mkdir(parents=True, exist_ok=True)
+    (run_dir / "metrics" / "metrics.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    pipeline = object.__new__(Pipeline)
+    pipeline.run_dir = run_dir
+    result = PipelineResult(run_dir=run_dir)
+    result.stages = [StageReport("metrics", "ok", "summarised", metrics=payload)]
+    pipeline._result = result
+
+    metrics = pipeline._collect_metrics()
+
+    assert metrics["metrics"]["frames"]["count"] == 20
+    assert "summary" not in metrics

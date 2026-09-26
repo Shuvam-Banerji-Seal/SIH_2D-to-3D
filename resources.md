@@ -22,6 +22,11 @@ repository stores links and local paths, not the media itself. Extracted frames
 | 8 | Petronas Twin Tower in FPV drone - 4K | https://www.youtube.com/watch?v=p9jSKslwZWo | `datasets/Petronas Twin Tower in FPV drone - 4K - Niche Films [p9jSKslwZWo].webm` | 103 MB | Aggressive FPV motion, motion-blur case |
 | 9 | Above clouds - PNB Merdeka 118 \| Cinematic Aerial Shots | https://www.youtube.com/watch?v=ucpkDTp1Th4 | `datasets/Above clouds - PNB Merdeka 118 ｜ Cinematic Aerial Shots [ucpkDTp1Th4].webm` | 98 MB | Skyscraper, clouds/haze, dynamic range |
 | 10 | Aerial Views of Rural Riches: Drone Shot of Farmland | https://www.youtube.com/watch?v=p8eRmxosalI | `datasets/Aerial Views of Rural Riches： Drone Shot of Farmland 🌾🚁 [p8eRmxosalI].webm` | 22 MB | Terrain/vegetation, low-texture fields |
+| 11 | Jal Mahal, Jaipur, India, Drone Cinematic | https://www.youtube.com/watch?v=l8rXEYoVxDY | `datasets/Jal Mahal, Jaipur, India, Drone Cinematic [l8rXEYoVxDY].webm` | 67MB | |
+| 12 | HAGIA SOPHIA 4K | Vibes of Istanbul | https://www.youtube.com/watch?v=mTlqTdui6Zo | `datasets/HAGIA SOPHIA 4K ｜ Vibes of Istanbul [mTlqTdui6Zo].webm` | 127MB | |
+| 13 | FPV Drone Flight through Beautiful Iceland Canyon | https://www.youtube.com/watch?v=kcfs1-ryKWE | `datasets/FPV Drone Flight through Beautiful Iceland Canyon [kcfs1-ryKWE].webm` | 110MB | |
+| 14 | Flying a Drone through a Waterfall | https://www.youtube.com/shorts/y8CAxo3QuRU | `datasets/GoPro ｜ Flying a Drone through a Waterfall 🎬 Fabio Tischler #Shorts #FPV [y8CAxo3QuRU].webm` | 9.7MB | |
+| 15 | Breathtaking Aerial Views of Hanoi Opera House - Stunning Drone Footage in HD | `datasets/Breathtaking Aerial Views of Hanoi Opera House - Stunning Drone Footage in HD [rkk1QxjYBb4].webm` | 184MB | |
 
 Total footage: ~2.1 GB, all `.webm` (VP8/VP9 in WebM containers).
 

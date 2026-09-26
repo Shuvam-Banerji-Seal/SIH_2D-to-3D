@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import pytest
 
-from drone3d.io.video import compute_frame_step, extract_frames
+from drone3d.io.video import compute_frame_step, extract_frames, iter_sampled_frames
 from drone3d.types import VideoInfo
 
 FRAME_COUNT = 10
@@ -148,3 +148,67 @@ def test_extracted_frames_are_written_to_disk(
         assert record.path.is_file()
         assert record.path.parent == out_dir
         assert record.path.name == f"frame_{record.index:06d}.jpg"
+
+
+# --- iter_sampled_frames (streaming generator) -----------------------------
+
+
+def test_iter_yields_every_frame_when_no_sampling(
+    monkeypatch: pytest.MonkeyPatch, tiny_video: Path
+) -> None:
+    monkeypatch.setattr(
+        "drone3d.io.video.probe_video",
+        lambda p: _fake_probe(tiny_video, frame_count=FRAME_COUNT),
+    )
+
+    pairs = list(iter_sampled_frames(tiny_video, sample_fps=0.0))
+
+    assert len(pairs) == FRAME_COUNT
+    assert [ts for ts, _ in pairs] == [i / FPS for i in range(FRAME_COUNT)]
+    assert pairs[0][1].shape == (24, 32, 3)
+
+
+def test_iter_respects_sample_fps(monkeypatch: pytest.MonkeyPatch, tiny_video: Path) -> None:
+    monkeypatch.setattr(
+        "drone3d.io.video.probe_video",
+        lambda p: _fake_probe(tiny_video, frame_count=FRAME_COUNT),
+    )
+
+    pairs = list(iter_sampled_frames(tiny_video, sample_fps=FPS / 2))
+
+    # step == 2 -> every other frame
+    assert [round(ts * FPS) for ts, _ in pairs] == [0, 2, 4, 6, 8]
+
+
+def test_iter_respects_max_frames(monkeypatch: pytest.MonkeyPatch, tiny_video: Path) -> None:
+    monkeypatch.setattr(
+        "drone3d.io.video.probe_video",
+        lambda p: _fake_probe(tiny_video, frame_count=FRAME_COUNT),
+    )
+
+    pairs = list(iter_sampled_frames(tiny_video, sample_fps=0.0, max_frames=3))
+
+    assert len(pairs) == 3
+
+
+def test_iter_start_and_end_window(monkeypatch: pytest.MonkeyPatch, tiny_video: Path) -> None:
+    monkeypatch.setattr(
+        "drone3d.io.video.probe_video",
+        lambda p: _fake_probe(tiny_video, frame_count=FRAME_COUNT),
+    )
+
+    # timestamps are index / FPS = i / 10.0; window [0.5, 1.2] -> i in {5..9}
+    pairs = list(iter_sampled_frames(tiny_video, sample_fps=0.0, start_s=0.5, end_s=1.2))
+
+    assert [round(ts * FPS) for ts, _ in pairs] == [5, 6, 7, 8, 9]
+
+
+def test_iter_empty_when_start_is_past_clip(
+    monkeypatch: pytest.MonkeyPatch, tiny_video: Path
+) -> None:
+    monkeypatch.setattr(
+        "drone3d.io.video.probe_video",
+        lambda p: _fake_probe(tiny_video, frame_count=FRAME_COUNT),
+    )
+
+    assert list(iter_sampled_frames(tiny_video, start_s=100.0)) == []

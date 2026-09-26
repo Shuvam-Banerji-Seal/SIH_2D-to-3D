@@ -25,6 +25,9 @@ log = get_logger(__name__)
 
 _MAX_SAMPLES = 50_000
 _CHUNK = 1_000
+# Upper bound on the ``(chunk, n_ref)`` scratch block used by
+# `point_to_cloud_distances`, so reference size cannot blow up memory.
+_MEMORY_BUDGET_BYTES = 64 * 1024 * 1024
 
 
 def _as_points(points: Any) -> np.ndarray:
@@ -82,17 +85,31 @@ def point_to_cloud_distances(
     *,
     chunk: int = _CHUNK,
 ) -> np.ndarray:
-    """Distance from every query point to the nearest reference point (chunked)."""
+    """Distance from every query point to the nearest reference point (chunked).
+
+    Uses ``|a-b|^2 = |a|^2 + |b|^2 - 2 a·b`` so a chunk never materialises a
+    ``(chunk, n_ref, 3)`` broadcast array (which, with ``deltas**2``, cost two
+    such arrays at once -- ~2.4 GB at the default 50k reference points). The
+    chunk size is clamped so the ``(chunk, n_ref)`` scratch block stays inside
+    :data:`_MEMORY_BUDGET_BYTES`.
+    """
     query = np.asarray(query, dtype=np.float64).reshape(-1, 3)
     reference = np.asarray(reference, dtype=np.float64).reshape(-1, 3)
     if len(reference) == 0 or len(query) == 0:
         raise IngestionError("both clouds must be non-empty")
 
+    ref_sq = np.einsum("ij,ij->i", reference, reference)
+    max_chunk = max(1, _MEMORY_BUDGET_BYTES // (len(reference) * np.dtype(np.float64).itemsize))
+    step = max(1, min(chunk, max_chunk, len(query)))
+
     distances = np.empty(len(query), dtype=np.float64)
-    for start in range(0, len(query), chunk):
-        block = query[start : start + chunk]
-        deltas = block[:, None, :] - reference[None, :, :]
-        distances[start : start + chunk] = np.sqrt((deltas**2).sum(axis=2)).min(axis=1)
+    for start in range(0, len(query), step):
+        block = query[start : start + step]
+        block_sq = np.einsum("ij,ij->i", block, block)
+        sq = block_sq[:, None] + ref_sq[None, :] - 2.0 * (block @ reference.T)
+        # Cancellation can make an exact zero slightly negative.
+        np.maximum(sq, 0.0, out=sq)
+        distances[start : start + step] = np.sqrt(sq.min(axis=1))
     return distances
 
 

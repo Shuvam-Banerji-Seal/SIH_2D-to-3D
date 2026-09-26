@@ -16,7 +16,7 @@ or dataset) · `planned`.
 - [x] CSV / DJI SRT / GPX / JSON telemetry parsers + interpolation
 - [x] Quality scoring (sharpness, exposure, contrast) and keyframe selection
 - [x] Focus-aware deblur, stabilization, motion/YOLO dynamic masks
-- [ ] Unit tests on synthetic clips (see `tests/README.md`)
+- [x] Unit tests: frame sampling + `max_frames` budget (`tests/test_io_video.py`)
 - [ ] Decode via FFmpeg for codecs OpenCV handles poorly
 
 ## M2 — Reconstruction backends — scaffolded
@@ -24,7 +24,9 @@ or dataset) · `planned`.
 - [x] COLMAP backend (features → sequential/exhaustive matching → mapper)
 - [x] Dense MVS backend (undistort → patch-match → fusion)
 - [x] Poisson/Delaunay meshing + texture mapping; Open3D/Trimesh path
-- [ ] Validate end-to-end on NTRO sample data and publish baseline metrics
+- [x] End-to-end validated on the bundled sample clip (20 keyframes → 21
+      registered images → 246k dense points → 31,883-vertex mesh)
+- [ ] Publish baseline metrics against NTRO reference data
 - [ ] Optional pycolmap in-process backend for the `sfm` extra
 
 ## M3 — Georeferencing & metric accuracy — scaffolded

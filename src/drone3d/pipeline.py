@@ -219,7 +219,10 @@ class Pipeline:
 
         selected_dir = self.run_dir / "frames_selected"
         selected_dir.mkdir(parents=True, exist_ok=True)
-        mask_dir = selected_dir / "masks"
+        # Masks must live OUTSIDE `selected_dir`: COLMAP enumerates image_path
+        # recursively (GetRecursiveFileList), so a `masks/` subdir would be
+        # ingested as if it were more input images.
+        mask_dir = self._stage_dir("preprocess") / "masks"
         pairs: list[tuple[Any, np.ndarray]] = []
         for record in selected:
             image = cv2.imread(str(record.path), cv2.IMREAD_COLOR)
@@ -240,7 +243,11 @@ class Pipeline:
                 mask = masker.mask(image)
                 mask_ratios.append(float(np.count_nonzero(mask)) / float(mask.size))
                 mask_dir.mkdir(parents=True, exist_ok=True)
-                cv2.imwrite(str(mask_dir / f"{record.path.stem}.png"), mask)
+                # COLMAP convention: the mask for `frame_000012.jpg` is named
+                # `frame_000012.jpg.png` (image name + ".png"), and pixels of
+                # value 0 are ignored. `mask` marks dynamic pixels as 255, so
+                # invert to drop them and keep everything else.
+                cv2.imwrite(str(mask_dir / f"{record.path.name}.png"), 255 - mask)
             if cfg.deblur:
                 image = auto_deblur(
                     image,
@@ -312,7 +319,13 @@ class Pipeline:
                 f"SfM backend '{backend.name}' unavailable; install COLMAP or set sfm.backend=none",
             )
         stage_dir = self._stage_dir("sfm")
-        result: SfMResult = backend.reconstruct(images_dir, stage_dir, cfg)
+        mask_dir = self._stage_dir("preprocess") / "masks"
+        result: SfMResult = backend.reconstruct(
+            images_dir,
+            stage_dir,
+            cfg,
+            mask_dir=mask_dir if any(mask_dir.glob("*.png")) else None,
+        )
         result_path = _write_json(stage_dir / "result.json", result.to_dict())
         artifacts = [Artifact("sfm_result", result_path)]
         if result.sparse_ply is not None:
@@ -452,11 +465,20 @@ class Pipeline:
         origin_alt = float(np.median(alts)) if alts else cfg.origin_alt
         plane = LocalTangentPlane(origin_lat, origin_lon, origin_alt)
 
-        model_centers = np.array([pose.center for pose, _ in matches], dtype=np.float64)
+        # `frame_lookup` only holds records that have a fix, but that invariant is
+        # invisible to the type checker. Narrow explicitly and derive BOTH arrays
+        # from one list so a record can never silently drop out of one and not the
+        # other (which would corrupt the Umeyama correspondence).
+        located = [
+            (pose, record, lat, lon)
+            for pose, record in matches
+            if (lat := record.lat) is not None and (lon := record.lon) is not None
+        ]
+        model_centers = np.array([pose.center for pose, _, _, _ in located], dtype=np.float64)
         gps_local = np.array(
             [
-                plane.to_local(record.lat, record.lon, record.alt_m or origin_alt)
-                for _, record in matches
+                plane.to_local(lat, lon, record.alt_m or origin_alt)
+                for _, record, lat, lon in located
             ],
             dtype=np.float64,
         )

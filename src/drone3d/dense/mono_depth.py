@@ -42,7 +42,14 @@ class MonoDepthEstimator:
         self._pipeline = pipeline(task="depth-estimation", model=model_id, device=device)
 
     def depth(self, image: np.ndarray) -> np.ndarray:
-        """Return a float32 depth-like map in ``[0, 1]`` (1 = farthest)."""
+        """Return a float32 relative depth map normalised to ``[0, 1]``.
+
+        Polarity: **1 = nearest, 0 = farthest.** Depth Anything V2 predicts
+        inverse depth (disparity), and the min-max normalisation below preserves
+        that polarity, so larger values are *closer*. Verified empirically on
+        2026-09-26 with ``Depth-Anything-V2-Small-hf``: a street photo's near
+        bottom half normalised to 0.63 against 0.31 for the far top half.
+        """
         from PIL import Image  # provided by transformers
 
         rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)

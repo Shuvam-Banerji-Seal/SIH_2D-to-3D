@@ -54,7 +54,7 @@ ISO-8601; absolute times are normalised to seconds relative to the first fix.
 | Artifact | Path | Consumer |
 | --- | --- | --- |
 | Keyframes | `frames_selected/*.jpg` | SfM, texturing, contact sheet |
-| Dynamic masks | `frames_selected/masks/*.png` | COLMAP mask input (255 = ignore) |
+| Dynamic masks | `preprocess/masks/*.png` | COLMAP mask input (`0` = ignore; name = image name + `.png`) |
 | Frame manifest | `ingest/frames.csv`, `preprocess/selected_frames.csv` | All stages |
 | Sparse model | `sfm/sparse/` (COLMAP), `sfm/sparse.ply` | dense, georef |
 | Dense cloud | `dense/fused.ply` | mesh, georef, metrics |

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -119,7 +119,14 @@ class TelemetrySample:
         return self.lat is not None and self.lon is not None
 
     def to_dict(self) -> dict[str, Any]:
-        return {k: v for k, v in self.__dict__.items() if v is not None}
+        """Serialise as a plain dict, omitting unset (``None``) optional fields.
+
+        Uses :func:`dataclasses.fields` rather than ``self.__dict__`` so this
+        works with ``@dataclass(slots=True)``, which has no ``__dict__``.
+        """
+        return {
+            f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None
+        }
 
 
 @dataclass(slots=True)

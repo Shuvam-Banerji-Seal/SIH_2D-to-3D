@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from drone3d.config import MeshConfig
-from drone3d.exceptions import BackendUnavailable, ReconstructionError
+from drone3d.exceptions import BackendUnavailable, Drone3DError, ReconstructionError
 from drone3d.logging_utils import get_logger
 from drone3d.mesh.base import MeshBackend
 from drone3d.types import MeshResult
@@ -54,36 +54,21 @@ class ColmapMesher(MeshBackend):
 
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        mesh_path = output_dir / f"mesh-{self.method}.ply"
 
-        if self.method == "poisson":
-            run_command(
-                [
-                    resolved,
-                    "poisson_mesher",
-                    "--input_path",
-                    dense_ply,
-                    "--output_path",
-                    mesh_path,
-                    "--PoissonMeshing.depth",
-                    str(config.depth),
-                    "--PoissonMeshing.trim",
-                    str(config.trim),
-                ]
-            )
-        else:
-            run_command(
-                [
-                    resolved,
-                    "delaunay_mesher",
-                    "--input_path",
-                    dense_ply.parent,
-                    "--output_type",
-                    "PLY",
-                    "--output_path",
-                    mesh_path,
-                ]
-            )
+        method = self.method
+        mesh_path = output_dir / f"mesh-{method}.ply"
+        try:
+            self._mesh(resolved, method, dense_ply, mesh_path, config)
+        except Drone3DError as exc:
+            # Poisson surface trimming is known to crash (SIGSEGV) on some
+            # clouds; Delaunay is COLMAP's documented more robust mesher.
+            if method != "poisson":
+                raise
+            log.warning("poisson_mesher failed (%s); falling back to delaunay_mesher", exc)
+            method = "delaunay"
+            mesh_path = output_dir / f"mesh-{method}.ply"
+            self._mesh(resolved, method, dense_ply, mesh_path, config)
+
         if not mesh_path.is_file():
             raise ReconstructionError(f"meshing produced no output: {mesh_path}")
         vertices, faces = ply_element_counts(mesh_path)
@@ -109,10 +94,48 @@ class ColmapMesher(MeshBackend):
 
         log.info("mesh: %d vertices / %d faces -> %s", vertices, faces, mesh_path)
         return MeshResult(
-            backend=f"colmap-{self.method}",
+            backend=f"colmap-{method}",
             mesh_path=mesh_path,
             textured_mesh_path=textured_path,
             num_vertices=vertices,
             num_faces=faces,
             metadata={"textured": textured_path is not None},
         )
+
+    def _mesh(
+        self,
+        resolved: str,
+        method: str,
+        dense_ply: Path,
+        mesh_path: Path,
+        config: MeshConfig,
+    ) -> None:
+        """Run one mesher; raises on failure so the caller can fall back."""
+        if method == "poisson":
+            run_command(
+                [
+                    resolved,
+                    "poisson_mesher",
+                    "--input_path",
+                    dense_ply,
+                    "--output_path",
+                    mesh_path,
+                    "--PoissonMeshing.depth",
+                    str(config.depth),
+                    "--PoissonMeshing.trim",
+                    str(config.trim),
+                ]
+            )
+        else:
+            # `delaunay_mesher` has no `--output_type` option (COLMAP 4.x rejects
+            # it outright); the output format is inferred from the file extension.
+            run_command(
+                [
+                    resolved,
+                    "delaunay_mesher",
+                    "--input_path",
+                    dense_ply.parent,
+                    "--output_path",
+                    mesh_path,
+                ]
+            )

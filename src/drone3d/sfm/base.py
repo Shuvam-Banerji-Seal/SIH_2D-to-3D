@@ -22,8 +22,19 @@ class SfMBackend(ABC):
         """Return True when the backend's runtime dependencies are present."""
 
     @abstractmethod
-    def reconstruct(self, images_dir: Path, output_dir: Path, config: SfMConfig) -> SfMResult:
-        """Reconstruct camera poses and a sparse point cloud from calibrated images."""
+    def reconstruct(
+        self,
+        images_dir: Path,
+        output_dir: Path,
+        config: SfMConfig,
+        mask_dir: Path | None = None,
+    ) -> SfMResult:
+        """Reconstruct camera poses and a sparse point cloud from calibrated images.
+
+        ``mask_dir`` optionally holds per-image masks in COLMAP's convention:
+        the mask for ``images_dir/abc/012.jpg`` is ``mask_dir/abc/012.jpg.png``,
+        and pixels of value 0 mark regions to ignore.
+        """
 
     def describe(self) -> str:
         return f"{self.name} (available={self.is_available()})"
@@ -37,7 +48,13 @@ class NullSfMBackend(SfMBackend):
     def is_available(self) -> bool:
         return True
 
-    def reconstruct(self, images_dir: Path, output_dir: Path, config: SfMConfig) -> SfMResult:
+    def reconstruct(
+        self,
+        images_dir: Path,
+        output_dir: Path,
+        config: SfMConfig,
+        mask_dir: Path | None = None,
+    ) -> SfMResult:
         raise BackendUnavailable(
             "SfM backend is set to 'none'; set sfm.backend=colmap to reconstruct a model"
         )

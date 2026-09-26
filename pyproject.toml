@@ -110,6 +110,9 @@ markers = [
 line-length = 100
 src = ["src", "tests"]
 target-version = "py310"
+# `.tools/` holds external tooling (e.g. a conda env with the COLMAP binary);
+# it is vendored third-party code and must not be linted or formatted.
+extend-exclude = [".tools"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RET", "PTH"]

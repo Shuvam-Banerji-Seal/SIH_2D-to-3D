@@ -166,7 +166,16 @@ def extract_frames(
             picks = np.linspace(0, len(candidates) - 1, num=max_frames).round().astype(int)
             candidates = [candidates[i] for i in sorted({int(p) for p in picks})]
             log.info("decimated %d candidate frames to %d", len(candidates), max_frames)
-    wanted = set(candidates) if candidates is not None else None
+        wanted: set[int] | None = set(candidates)
+    else:
+        # Unknown-length container (frame_count <= 0): a uniform subset cannot be
+        # precomputed, so honour `step` and the `max_frames` budget while streaming.
+        wanted = None
+        log.warning(
+            "video reports no frame count; sampling every %d frame(s), budget max_frames=%d",
+            step,
+            max_frames,
+        )
 
     fmt = image_format.lower().lstrip(".")
     encode_params: list[int] = []
@@ -193,7 +202,8 @@ def extract_frames(
             ok, frame = capture.read()
             if not ok:
                 break
-            if wanted is None or index in wanted:
+            selected = index in wanted if wanted is not None else index % step == 0
+            if selected:
                 if resize_width and frame.shape[1] > resize_width:
                     scale = resize_width / frame.shape[1]
                     frame = cv2.resize(
@@ -218,6 +228,9 @@ def extract_frames(
                 progress.update(1)
             index += 1
             if candidates is not None and index > candidates[-1]:
+                break
+            if wanted is None and len(records) >= max_frames:
+                log.info("hit max_frames budget (%d) on unknown-length video", max_frames)
                 break
     finally:
         capture.release()

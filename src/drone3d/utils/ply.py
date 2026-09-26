@@ -169,9 +169,19 @@ def write_ply(
     header.append("end_header")
     header_bytes = ("\n".join(header) + "\n").encode("ascii")
 
+    # PLY binary data is INTERLEAVED per vertex (x,y,z[,r,g,b] * N), not one
+    # block of positions followed by one block of colours. Writing the two
+    # arrays back-to-back misaligns every byte after the first vertex and
+    # silently corrupts the cloud on read.
+    fields = [("x", "<f4"), ("y", "<f4"), ("z", "<f4")]
+    if colors is not None:
+        fields += [("red", "u1"), ("green", "u1"), ("blue", "u1")]
+    record = np.empty(len(points), dtype=np.dtype(fields))
+    record["x"], record["y"], record["z"] = points[:, 0], points[:, 1], points[:, 2]
+    if colors is not None:
+        record["red"], record["green"], record["blue"] = colors[:, 0], colors[:, 1], colors[:, 2]
+
     with ply_path.open("wb") as handle:
         handle.write(header_bytes)
-        handle.write(points.astype("<f4").tobytes())
-        if colors is not None:
-            handle.write(colors.astype("u1").tobytes())
+        handle.write(record.tobytes())
     return ply_path

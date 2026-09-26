@@ -151,6 +151,8 @@ activemq-data/
 .env
 .envrc
 .venv
+# External tooling installed in-tree (e.g. conda env with the COLMAP binary).
+.tools/
 env/
 venv/
 ENV/

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict
 
 from drone3d.config import SfMConfig
 from drone3d.exceptions import BackendUnavailable, ReconstructionError
@@ -42,7 +43,13 @@ class ColmapSfMBackend(SfMBackend):
             )
         return resolved
 
-    def reconstruct(self, images_dir: Path, output_dir: Path, config: SfMConfig) -> SfMResult:
+    def reconstruct(
+        self,
+        images_dir: Path,
+        output_dir: Path,
+        config: SfMConfig,
+        mask_dir: Path | None = None,
+    ) -> SfMResult:
         binary = self._executable()
         images_dir = Path(images_dir)
         output_dir = Path(output_dir)
@@ -52,7 +59,7 @@ class ColmapSfMBackend(SfMBackend):
         if database.exists():
             database.unlink()
 
-        self._extract_features(binary, images_dir, database, config)
+        self._extract_features(binary, images_dir, database, config, mask_dir=mask_dir)
         self._match(binary, database, config)
 
         sparse_dir = output_dir / "sparse"
@@ -92,6 +99,10 @@ class ColmapSfMBackend(SfMBackend):
             ]
         )
         text_dir = output_dir / "sparse_txt"
+        # `model_converter --output_type TXT` writes several files *into* a
+        # directory and aborts if it does not already exist (PLY output does not
+        # have this requirement, which is why the step above needs no mkdir).
+        text_dir.mkdir(parents=True, exist_ok=True)
         run_command(
             [
                 binary,
@@ -116,25 +127,32 @@ class ColmapSfMBackend(SfMBackend):
         )
 
     def _extract_features(
-        self, binary: str, images_dir: Path, database: Path, config: SfMConfig
+        self,
+        binary: str,
+        images_dir: Path,
+        database: Path,
+        config: SfMConfig,
+        mask_dir: Path | None = None,
     ) -> None:
-        run_command(
-            [
-                binary,
-                "feature_extractor",
-                "--database_path",
-                database,
-                "--image_path",
-                images_dir,
-                "--ImageReader.camera_model",
-                config.camera_model,
-                "--ImageReader.single_camera",
-                "1" if config.single_camera else "0",
-                "--SiftExtraction.max_num_features",
-                str(config.max_features),
-                *config.extra_args,
-            ]
-        )
+        cmd: list[str | Path] = [
+            binary,
+            "feature_extractor",
+            "--database_path",
+            database,
+            "--image_path",
+            images_dir,
+            "--ImageReader.camera_model",
+            config.camera_model,
+            "--ImageReader.single_camera",
+            "1" if config.single_camera else "0",
+            "--SiftExtraction.max_num_features",
+            str(config.max_features),
+        ]
+        # COLMAP masks: the file for `image_path/abc/012.jpg` must live at
+        # `mask_path/abc/012.jpg.png`, and regions with value 0 are ignored.
+        if mask_dir is not None and any(Path(mask_dir).glob("*.png")):
+            cmd += ["--ImageReader.mask_path", Path(mask_dir)]
+        run_command([str(item) for item in [*cmd, *config.extra_args]])
 
     def _match(self, binary: str, database: Path, config: SfMConfig) -> None:
         matcher = _MATCHERS.get(config.matcher)
@@ -148,7 +166,7 @@ def _largest_model(sparse_dir: Path) -> Path | None:
     candidates = [
         path
         for path in sparse_dir.iterdir()
-        if path.is_dir() and (path / "images.bin").exists() or (path / "images.txt").exists()
+        if path.is_dir() and ((path / "images.bin").exists() or (path / "images.txt").exists())
     ]
     if not candidates:
         return None
@@ -162,9 +180,17 @@ def _largest_model(sparse_dir: Path) -> Path | None:
     )
 
 
-def _read_model_stats(text_dir: Path) -> dict[str, float | int]:
+class _ModelStats(TypedDict):
+    """Counts parsed out of a COLMAP TXT model."""
+
+    num_images: int
+    num_points: int
+    mean_reprojection_error: float
+
+
+def _read_model_stats(text_dir: Path) -> _ModelStats:
     """Parse image count, point count and mean reprojection error from a TXT model."""
-    stats: dict[str, float | int] = {
+    stats: _ModelStats = {
         "num_images": 0,
         "num_points": 0,
         "mean_reprojection_error": 0.0,

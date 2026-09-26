@@ -5,7 +5,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from drone3d.metrics.quality import chamfer_distance, point_to_cloud_distances
+from drone3d.exceptions import IngestionError
+from drone3d.metrics.quality import (
+    chamfer_distance,
+    cloud_bounds,
+    completeness,
+    geometric_scale_error,
+    point_to_cloud_distances,
+    summarize_cloud,
+    voxel_coverage,
+)
 
 
 def _brute_force(query: np.ndarray, reference: np.ndarray) -> np.ndarray:
@@ -80,3 +89,94 @@ def test_chamfer_is_symmetric_and_non_negative() -> None:
         "accuracy_mean_m",
         "completeness_mean_m",
     }
+
+
+# --- criterion 3: bounds, voxel coverage, completeness ----------------------
+
+
+def test_cloud_bounds() -> None:
+    points = np.array([[0.0, 0.0, 0.0], [2.0, 4.0, 6.0], [1.0, 1.0, 1.0]])
+
+    bounds = cloud_bounds(points)
+
+    assert bounds["n_points"] == 3
+    assert bounds["min"] == [0.0, 0.0, 0.0]
+    assert bounds["max"] == [2.0, 4.0, 6.0]
+    assert bounds["extent"] == [2.0, 4.0, 6.0]
+    assert bounds["max_extent_m"] == 6.0
+    assert bounds["centroid"] == pytest.approx([1.0, 5 / 3, 7 / 3])
+
+
+def test_cloud_bounds_rejects_empty() -> None:
+    with pytest.raises(IngestionError):
+        cloud_bounds(np.empty((0, 3)))
+
+
+def test_voxel_coverage_counts_occupied_cells() -> None:
+    points = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2], [10.0, 10.0, 10.0]])
+
+    coverage = voxel_coverage(points, voxel_size=1.0)
+
+    assert coverage["voxel_size_m"] == 1.0
+    assert coverage["occupied_voxels"] == 2  # two share a cell, one is alone
+    assert coverage["volume_m3"] == 2.0
+    assert coverage["points_per_m3"] == 1.5
+
+
+def test_voxel_coverage_rejects_bad_inputs() -> None:
+    with pytest.raises(ValueError):
+        voxel_coverage(np.zeros((2, 3)), voxel_size=0.0)
+    with pytest.raises(IngestionError):
+        voxel_coverage(np.empty((0, 3)), voxel_size=1.0)
+
+
+def test_completeness_perfect_match() -> None:
+    cloud = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+
+    metrics = completeness(cloud, cloud, distance_threshold_m=0.5)
+
+    assert metrics["completeness_ratio"] == 1.0
+    assert metrics["mean_distance_m"] == 0.0
+    assert metrics["distance_threshold_m"] == 0.5
+
+
+def test_completeness_partial_match() -> None:
+    reference = np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]])
+    predicted = np.array([[0.0, 0.0, 0.0]])
+
+    metrics = completeness(reference, predicted, distance_threshold_m=0.5)
+
+    # one reference point is recovered, the other is 100 m away
+    assert metrics["completeness_ratio"] == 0.5
+    assert metrics["mean_distance_m"] == 50.0
+
+
+def test_geometric_scale_error() -> None:
+    metrics = geometric_scale_error(measured_m=102.0, expected_m=100.0)
+
+    assert metrics["absolute_error_m"] == pytest.approx(2.0)
+    assert metrics["relative_error"] == pytest.approx(0.02)
+
+
+def test_geometric_scale_error_rejects_nonpositive_expected() -> None:
+    with pytest.raises(ValueError):
+        geometric_scale_error(1.0, 0.0)
+
+
+def test_summarize_cloud_without_reference() -> None:
+    summary = summarize_cloud(np.zeros((5, 3)) + np.arange(5)[:, None], voxel_size=1.0)
+
+    assert summary["bounds"]["n_points"] == 5
+    assert summary["coverage"]["occupied_voxels"] >= 1
+    assert "accuracy_vs_reference" not in summary
+
+
+def test_summarize_cloud_with_reference_includes_criterion_metrics() -> None:
+    rng = np.random.default_rng(5)
+    points = rng.normal(size=(30, 3))
+
+    summary = summarize_cloud(points, voxel_size=1.0, reference=points)
+
+    assert summary["completeness_vs_reference"]["completeness_ratio"] == 1.0
+    # self-distance is 0 up to the cancellation round-off of the BLAS expansion
+    assert summary["accuracy_vs_reference"]["chamfer_mean_m"] == pytest.approx(0.0, abs=1e-6)

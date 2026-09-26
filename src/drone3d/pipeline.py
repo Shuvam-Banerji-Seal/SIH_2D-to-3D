@@ -662,7 +662,18 @@ class Pipeline:
     # ------------------------------------------------------------------ helpers
 
     def _collect_metrics(self) -> dict[str, Any]:
+        """Gather per-stage metrics for the report and manifest.
+
+        Stages re-run in this invocation take priority, but every stage's
+        persisted ``result.json`` is merged in as well. Without that fallback a
+        partial re-run (``--stages metrics``) would render a report stripped of
+        the earlier stages' numbers (F21).
+        """
         metrics: dict[str, Any] = {}
+        for name in ALL_STAGES:
+            stored = self._stage_result(name)
+            if stored:
+                metrics[name] = stored
         for stage in self._result.stages:
             if stage.metrics:
                 metrics[stage.name] = stage.metrics

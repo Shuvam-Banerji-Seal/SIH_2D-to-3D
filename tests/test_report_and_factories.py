@@ -6,6 +6,7 @@ pass even if it rendered empty -- criterion 9 needs its *content* verified.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from drone3d.config import DenseConfig, MeshConfig, SfMConfig
 from drone3d.dense.base import NullDenseBackend, get_dense_backend
 from drone3d.exceptions import BackendUnavailable, ConfigError
 from drone3d.mesh.base import NullMeshBackend, get_mesh_backend
+from drone3d.pipeline import Pipeline
 from drone3d.report.html import generate_report, make_contact_sheet
 from drone3d.sfm.base import NullSfMBackend, get_sfm_backend
 from drone3d.types import Artifact, PipelineResult, StageReport
@@ -232,3 +234,32 @@ def test_report_honours_out_path(tmp_path: Path) -> None:
 
     assert path == target
     assert target.is_file()
+
+
+def test_partial_rerun_keeps_earlier_stage_metrics(tmp_path: Path) -> None:
+    """F21 regression: re-running one stage must not strip the others' metrics.
+
+    `_collect_metrics` read only `self._result.stages`, so a later
+    `--stages metrics` run rendered a report with the sfm/dense/mesh numbers
+    missing even though their `result.json` files were still on disk.
+    """
+    run_dir = tmp_path / "run"
+    for name, payload in (
+        ("sfm", {"num_registered_images": 21, "num_points": 1286}),
+        ("dense", {"num_points": 246354}),
+        ("mesh", {"num_vertices": 31883, "num_faces": 63904}),
+    ):
+        (run_dir / name).mkdir(parents=True, exist_ok=True)
+        (run_dir / name / "result.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    pipeline = object.__new__(Pipeline)
+    pipeline.run_dir = run_dir
+    result = PipelineResult(run_dir=run_dir)
+    result.stages = [StageReport("metrics", "ok", "4 cloud(s) summarised")]
+    pipeline._result = result
+
+    metrics = pipeline._collect_metrics()
+
+    assert metrics["sfm"]["num_points"] == 1286
+    assert metrics["dense"]["num_points"] == 246354
+    assert metrics["mesh"]["num_vertices"] == 31883

@@ -113,8 +113,23 @@ def test_report_escapes_untrusted_messages(tmp_path: Path) -> None:
     assert "&lt;script&gt;" in html
 
 
+def test_report_escapes_exactly_once(tmp_path: Path) -> None:
+    """F20: the message used to be escaped by the caller *and* by `_table`,
+    so a benign filename rendered with visible entity artifacts."""
+    result = _result()
+    result.stages[0].message = "a & b.jpg"
+
+    html = generate_report(
+        run_dir=tmp_path, result=result, context={}, out_path=tmp_path / "r.html"
+    ).read_text(encoding="utf-8")
+
+    assert "a &amp; b.jpg" in html  # escaped once
+    assert "a &amp;amp; b.jpg" not in html  # never double-encoded
+
+
 def test_contact_sheet_of_missing_images_is_empty(tmp_path: Path) -> None:
-    assert make_contact_sheet([tmp_path / "nope.jpg"], tmp_path / "sheet.jpg") is None or True
+    """Missing images yield None rather than raising."""
+    assert make_contact_sheet([tmp_path / "nope.jpg"], tmp_path / "sheet.jpg") is None
 
 
 # --- backend factories -----------------------------------------------------

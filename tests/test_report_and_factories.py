@@ -183,3 +183,37 @@ def test_sfm_factory_rejects_unknown() -> None:
 def test_null_sfm_backend_raises_on_use(tmp_path: Path) -> None:
     with pytest.raises(BackendUnavailable):
         NullSfMBackend().reconstruct(tmp_path, tmp_path / "o", SfMConfig())
+
+
+# --- contact sheet ---------------------------------------------------------
+
+
+def test_make_contact_sheet_builds_an_image(tmp_path: Path) -> None:
+    import cv2
+    import numpy as np
+
+    paths: list[Path] = []
+    for i in range(3):
+        path = tmp_path / f"f{i}.png"
+        cv2.imwrite(str(path), np.full((24, 32, 3), 40 * i + 20, dtype=np.uint8))
+        paths.append(path)
+
+    sheet = make_contact_sheet(paths, out_path=tmp_path / "sheet.png")
+
+    assert sheet is not None
+    assert sheet.is_file()
+    assert sheet.stat().st_size > 0
+
+
+def test_make_contact_sheet_returns_none_without_frames(tmp_path: Path) -> None:
+    """An empty run must yield None rather than crash."""
+    assert make_contact_sheet([], out_path=tmp_path / "empty.png") is None
+
+
+def test_report_honours_out_path(tmp_path: Path) -> None:
+    target = tmp_path / "nested" / "custom.html"
+
+    path = generate_report(run_dir=tmp_path, result=_result(), context={}, out_path=target)
+
+    assert path == target
+    assert target.is_file()

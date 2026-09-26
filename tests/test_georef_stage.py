@@ -11,11 +11,11 @@ import json
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from drone3d.config import load_config
 from drone3d.geo.enu import enu_to_geodetic
 from drone3d.pipeline import Pipeline
+from drone3d.types import PipelineResult
 from drone3d.utils.ply import load_ply, write_ply
 
 ORIGIN = {"lat0": 12.5, "lon0": 77.6, "alt0": 500.0}
@@ -37,23 +37,34 @@ def _build_run(tmp_path: Path, *, n: int = 6, noise_m: float = 0.0) -> Path:
     centers = rng.normal(scale=30.0, size=(n, 3))
 
     # images.txt: IMAGE_ID QW QX QY QZ TX TY TZ CAMERA_ID NAME
+    # ImagePose.center == -R^T @ tvec, so with an identity rotation the camera
+    # centre is -tvec.
     pose_lines = []
     for i, center in enumerate(centers):
-        pose_lines.append(f"{i + 1} 1 0 0 0 0 0 0 1 frame_{i:06d}.jpg")
+        tx, ty, tz = (-float(c) for c in center)
+        pose_lines.append(f"{i + 1} 1 0 0 0 {tx:.8f} {ty:.8f} {tz:.8f} 1 frame_{i:06d}.jpg")
         pose_lines.append("")  # blank points2D line
     (text_model / "images.txt").write_text("\n".join(pose_lines) + "\n", encoding="utf-8")
 
     csv_lines = ["index,timestamp_s,path,lat,lon,alt_m"]
     for i, center in enumerate(centers):
         noisy = center + rng.normal(scale=noise_m, size=3) if noise_m else center
-        lat, lon, alt = enu_to_geodetic(
-            float(noisy[0]), float(noisy[1]), float(noisy[2]), **ORIGIN
-        )
+        lat, lon, alt = enu_to_geodetic(float(noisy[0]), float(noisy[1]), float(noisy[2]), **ORIGIN)
         csv_lines.append(f"{i},{i}.0,frames/frame_{i:06d}.jpg,{lat:.8f},{lon:.8f},{alt:.3f}")
     (run / "ingest" / "frames.csv").write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
 
+    # A minimal sparse cloud the stage can georeference.
+    sparse_ply = run / "sfm" / "sparse.ply"
+    write_ply(sparse_ply, np.arange(18, dtype=np.float64).reshape(6, 3))
+
     (run / "sfm" / "result.json").write_text(
-        json.dumps({"backend": "colmap", "metadata": {"text_model": str(text_model)}}),
+        json.dumps(
+            {
+                "backend": "colmap",
+                "sparse_ply": str(sparse_ply),
+                "metadata": {"text_model": str(text_model)},
+            }
+        ),
         encoding="utf-8",
     )
     return run
@@ -64,7 +75,7 @@ def _pipeline(run: Path) -> Pipeline:
     pipeline = object.__new__(Pipeline)
     pipeline.run_dir = run
     pipeline.config = config
-    pipeline._result = type("R", (), {"stages": []})()
+    pipeline._result = PipelineResult(run_dir=run)
     return pipeline
 
 
@@ -109,9 +120,13 @@ def test_georef_skips_below_min_correspondences(tmp_path: Path) -> None:
 
 def test_georef_rmse_reflects_injected_gps_noise(tmp_path: Path) -> None:
     """Criterion 6's *measurement* must track the real error it reports."""
-    quiet = json.loads(
-        (_build_run(tmp_path / "q", n=8) / "georef" / "result.json").read_text(encoding="utf-8")
-    ) if False else None  # placeholder, computed below
+    quiet = (
+        json.loads(
+            (_build_run(tmp_path / "q", n=8) / "georef" / "result.json").read_text(encoding="utf-8")
+        )
+        if False
+        else None
+    )  # placeholder, computed below
 
     run_quiet = _build_run(tmp_path / "q", n=8, noise_m=0.0)
     _pipeline(run_quiet)._stage_georef()
@@ -128,7 +143,7 @@ def test_georef_rmse_reflects_injected_gps_noise(tmp_path: Path) -> None:
 def test_georeferenced_cloud_is_written_and_finite(tmp_path: Path) -> None:
     run = _build_run(tmp_path, n=6)
     sparse = run / "sfm" / "sparse.ply"
-    write_ply(sparse, np.array([[i, i, i], [i + 1, i, i] for i in range(3)], dtype=float).reshape(-1, 3))
+    write_ply(sparse, np.arange(18, dtype=np.float64).reshape(6, 3))
 
     report = _pipeline(run)._stage_georef()
 

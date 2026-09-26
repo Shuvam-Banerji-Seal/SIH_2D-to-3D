@@ -144,7 +144,9 @@ def parse_csv_telemetry(path: str | Path) -> list[TelemetrySample]:
     except csv.Error:
         delimiter = ","
     reader = csv.DictReader(text.splitlines(), delimiter=delimiter)
-    if reader.fieldnames is None:
+    # DictReader reports `[]` (not `None`) for blank input, so a truthiness
+    # check is required for the no-header guard to ever fire.
+    if not reader.fieldnames:
         raise IngestionError(f"telemetry CSV has no header: {csv_path}")
 
     mapping = {
@@ -371,31 +373,40 @@ def telemetry_summary(samples: list[TelemetrySample]) -> dict[str, Any]:
         "has_position": bool(positions),
     }
     if positions:
-        lats = [s.lat for s in positions if s.lat is not None]
-        lons = [s.lon for s in positions if s.lon is not None]
+        # `has_position()` guarantees both lat and lon, but that invariant is
+        # invisible to the type checker. Narrow explicitly and derive every
+        # statistic from one list so the bbox and the path length can never
+        # disagree about which samples they include.
+        located = [
+            (sample, lat, lon)
+            for sample in positions
+            if (lat := sample.lat) is not None and (lon := sample.lon) is not None
+        ]
+        lats = [lat for _, lat, _ in located]
+        lons = [lon for _, _, lon in located]
         summary["bbox"] = {
             "min_lat": round(min(lats), 8),
             "max_lat": round(max(lats), 8),
             "min_lon": round(min(lons), 8),
             "max_lon": round(max(lons), 8),
         }
-        origin = positions[0]
+        origin_lat, origin_lon = located[0][1], located[0][2]
         path_length = 0.0
         previous = geodetic_to_enu(
-            positions[0].lat,
-            positions[0].lon,
+            origin_lat,
+            origin_lon,
             0.0,
-            lat0=origin.lat,
-            lon0=origin.lon,
+            lat0=origin_lat,
+            lon0=origin_lon,
             alt0=0.0,
         )
-        for sample in positions[1:]:
+        for _, lat, lon in located[1:]:
             current = geodetic_to_enu(
-                sample.lat,
-                sample.lon,
+                lat,
+                lon,
                 0.0,
-                lat0=origin.lat,
-                lon0=origin.lon,
+                lat0=origin_lat,
+                lon0=origin_lon,
                 alt0=0.0,
             )
             path_length += float(((current - previous) ** 2).sum() ** 0.5)

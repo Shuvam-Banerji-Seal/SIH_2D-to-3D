@@ -4,80 +4,89 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 3 |
-| Phase | IMPLEMENT → TEST (cycle 3) |
-| What I did | Closed the interrupted venv verification (all 13 extras import; slow but healthy). Installed COLMAP 4.2.0 CUDA into `.tools/colmap-env` (dedicated env, NOT miniforge base — would break the uv venv). Fixed **F1, F2, F3, F4, F5, F6, F8** and found + fixed **3 new defects (F13/F14/F15)** by running the real pipeline. Wrote the repo's **first tests: 27 passing**. Full pipeline now runs end-to-end. |
-| What worked | Mutation-checked F4 test (red-then-green). Real pipeline run exposed 3 defects no amount of reading would have found. Verifying COLMAP masks against live docs caught an **inverted-polarity** bug that would have silently kept the vehicles. |
-| What failed | 2 wrong hypotheses, both retracted: (a) "no NVIDIA Vulkan" (R2-a), (b) "TXT export fails because of COLMAP 4 rig/frames.bin" (R3-a) — real cause was a missing `mkdir`. Also my synthetic 2-tone depth test gave a **wrong** verdict; a real photo corrected it (R4-a). |
-| Errors remaining | **F7** (data gap: sample video has no GPS — not fixable in code). Pre-existing LSP type errors: `colmap_backend.py:122-123` (`_read_model_stats` returns `float\|int`), `pipeline.py:471` (`to_local` gets `float\|None`) |
-| Next priorities | 1) Fix the 2 pre-existing type errors · 2) F7/Q2: obtain or synthesise telemetry to unblock `georef` + criteria 2/6 · 3) `docs/roadmap.md` still says "no tests" — stale · 4) Commit the work |
-| Blockers | F7 needs telemetry data from the user (real drone log) — nothing to fix in code |
-| Audit status | PARTIAL — macro-audit checklist drafted in `05-audit-log.md`, not yet a double-pass |
+| Session # | 4 |
+| Phase | AUDIT (cycle 4) |
+| What I did | Completed priorities 1–4 (type errors, F7 telemetry, roadmap, commit `87fa8ab`). Fixed **F16** (`write_ply` colour-block data corruption) with 8 tests. Ran the **double-audit: two consecutive green passes**. Verified criterion 10 (metrics byte-identical across runs). |
+| What worked | 50 tests green × 2 passes, ruff clean, format clean, pipeline 8/8 stages, metrics reproducible byte-for-byte |
+| What failed | Nothing this cycle |
+| Errors remaining | **F7 is a data gap**, not a code defect: the bundled sample video carries no GPS. Criteria 1, 2, 3, 6 cannot be scored without a genuine flight log or reference cloud. |
+| Next priorities | 1) Add `tests/test_telemetry.py` (CSV/SRT/GPX/JSON parsing — the largest remaining coverage gap) · 2) Add `tests/test_preprocess.py` + `tests/test_config.py` · 3) Obtain real telemetry to score criteria 2 & 6 · 4) Delete nothing; commit incremental test additions |
+| Blockers | External data only: needs a real drone flight log (or NTRO reference cloud) to validate accuracy criteria |
+| Audit status | **DOUBLE_PASS** (two consecutive green verification waves, see `05-audit-log.md`) |
 
-## What is now working (verified by execution)
+## IMPORTANT: prior priorities are DONE — do not redo them
 
-| Stage | Status | Evidence |
+The harness prompt has been repeating these stale items. All verified complete on disk:
+
+| Old priority | Status | Evidence |
 |---|---|---|
-| ingest | OK | 20 frames @ 1 fps from 19.1 s |
-| preprocess | OK | 20/20 selected, **20 masks** in `preprocess/masks/frame_0000NN.jpg.png` |
-| sfm | OK | 21 images, 1286 points (COLMAP CUDA) |
-| dense | OK | 246,354 points |
-| mesh | OK | 31,883 vertices / 63,904 faces (Poisson→Delaunay fallback) |
-| georef | SKIPPED | "no frame GPS fixes (ingest.telemetry missing?)" — graceful, expected |
-| metrics / report | OK | 2 clouds summarised, `report.html` written |
+| 1) Fix 2 pre-existing type errors | **DONE** | `colmap_backend.py:183` `class _ModelStats(TypedDict)`; `pipeline.py:472` `located = [...]` narrowing. LSP clean. |
+| 2) F7/Q2 telemetry | **DONE (synthesised)** | `tools/synthesize_telemetry.py`; `georef` runs: 19 tie points, horizontal RMSE 0.00 m |
+| 3) `docs/roadmap.md` stale | **DONE** | M1/M2 checkmarks + real numbers ("End-to-end validated on the bundled sample clip") |
+| 4) Commit the work | **DONE** | `87fa8ab` — 14 modified + 8 new files; worktree clean |
 
-Command (needs COLMAP on PATH):
-```bash
-export PATH="$PWD/.tools/colmap-env/bin:$PATH"
-uv run drone3d run --config configs/fast.yaml --run-dir outputs/sample_fast \
-  --set "ingest.video=datasets/Aerial Views of Rural Riches： Drone Shot of Farmland 🌾🚁 [p8eRmxosalI].webm" \
-  --set preprocess.dynamic_masking=true
-```
+## Verified state
 
-## Defect ledger
+| Check | Result |
+|---|---|
+| `uv run pytest` | **50 passed** (2 consecutive clean passes, `-p no:cacheprovider`) |
+| `uv run ruff check .` | All checks passed |
+| `uv run ruff format --check .` | 66 files already formatted |
+| Pipeline | ingest/preprocess/sfm/dense/mesh/georef/metrics/report = **8/8 OK** |
+| Reproducibility (criterion 10) | `metrics.json` **byte-identical** across re-runs |
+| COLMAP mask polarity | `0 = ignore` **[VERIFIED: colmap.github.io/faq.html]** — "no features will be extracted in regions where the mask image is black (pixel intensity value 0 in grayscale)" |
+| Depth polarity (F6) | `1 = nearest` **[VERIFIED: empirical]** — real photo: near 0.627 vs far 0.308 |
+| Nothing deleted (A9) | Confirmed; no removals |
 
-| ID | Defect | Status | Fix |
-|---|---|---|---|
-| F1 | `TelemetrySample.to_dict` crashes (`slots` has no `__dict__`) | **fixed** | `dataclasses.fields()` |
-| F2 | Masks written but never fed to COLMAP | **fixed** | `--ImageReader.mask_path`; moved out of images dir; **renamed** `<img>.png`; **inverted** polarity (0 = ignore) |
-| F3 | `_largest_model` boolean precedence | **fixed** | parentheses |
-| F4 | `max_frames`/`sample_fps` ignored when `frame_count <= 0` | **fixed** | stream with `step` + hard budget |
-| F5 | chamfer allocated ~2.4 GB/chunk | **fixed** | BLAS identity + 64 MB budget |
-| F6 | mono_depth docstring polarity wrong | **fixed** | "1 = nearest", verified empirically |
-| F7 | Sample video has **no GPS** | **data gap** | needs telemetry from user |
-| F8 | COLMAP absent | **fixed** | `.tools/colmap-env` (4.2.0 CUDA) |
-| F13 | `model_converter --output_type TXT` aborted: output dir missing | **fixed** | `text_dir.mkdir()` |
-| F14 | `poisson_mesher` SIGSEGV in Poisson trimmer | **fixed** | logged fallback → delaunay |
-| F15 | `delaunay_mesher --output_type` unrecognised (never worked) | **fixed** | drop the flag |
-| F12 | `.tools/` broke ruff (1011 errors) + untracked 4.4 GB | **fixed** | `extend-exclude` + `.gitignore` |
+## Defect ledger (all fixed except F7)
 
-## Test suite (was 0, now 27)
+| ID | Defect | Status |
+|---|---|---|
+| F1 | `TelemetrySample.to_dict` slots crash | fixed |
+| F2 | Masks written but never fed to COLMAP (3-way: location, name, polarity) | fixed |
+| F3 | `_largest_model` boolean precedence | fixed |
+| F4 | Frame budget ignored when `frame_count<=0` | fixed |
+| F5 | Chamfer ~2.4 GB/chunk | fixed |
+| F6 | Depth polarity docstring wrong | fixed |
+| **F7** | **Sample video has no GPS** | **DATA GAP — needs real flight log** |
+| F8 | COLMAP absent | fixed (`.tools/colmap-env`, 4.2.0 CUDA) |
+| F12 | `.tools/` broke ruff + 4.4G untracked | fixed |
+| F13 | `model_converter` TXT aborted on missing dir | fixed |
+| F14 | `poisson_mesher` SIGSEGV | fixed (Delaunay fallback) |
+| F15 | `delaunay_mesher --output_type` rejected | fixed |
+| **F16** | **`write_ply` colour-block data corruption** | fixed + 8 tests |
+
+## Test suite: 50 tests / 7 files
 
 | File | Tests | Covers |
 |---|---|---|
-| `tests/test_types.py` | 4 | F1 |
-| `tests/test_io_video.py` | 6 | F4 (mutation-verified) |
-| `tests/test_sfm_colmap_backend.py` | 8 | F2, F3, F13 |
-| `tests/test_mesh_colmap_mesher.py` | 4 | F14, F15 |
-| `tests/test_metrics_quality.py` | 5 | F5 |
+| `test_geo.py` | 15 | ECEF/ENU round-trips, Umeyama, GPS RMSE |
+| `test_sfm_colmap_backend.py` | 8 | COLMAP argv, mask wiring, model selection, F13 |
+| `test_ply.py` | 8 | **F16** interleaved binary round-trip |
+| `test_io_video.py` | 6 | Frame sampling, `max_frames` (mutation-verified) |
+| `test_metrics_quality.py` | 5 | Chamfer vs brute force, memory clamping |
+| `test_mesh_colmap_mesher.py` | 4 | Poisson→Delaunay fallback, F15 |
+| `test_types.py` | 4 | F1 slots `to_dict` |
 
 ## File Manifest
 
 | File | Status | Last modified |
 |------|--------|---------------|
-| plans/00-understanding.md | stale (F-table now superseded) | cycle 1 |
+| plans/00-understanding.md | stale (F-table superseded by ledger above) | cycle 1 |
 | plans/01-research.md | current | cycle 2 |
 | plans/02-strategy.md | current | cycle 2 |
-| plans/04-decisions.md | stale (needs F13-F15) | cycle 2 |
-| plans/05-audit-log.md | **new** | cycle 3 |
-| plans/CONTINUATION_STATE.md | **current** | cycle 3 |
-| plans/INFINITY_DONE | absent (correct) | - |
+| plans/04-decisions.md | stale (pre-dates F13–F16) | cycle 2 |
+| plans/05-audit-log.md | **current** | cycle 4 |
+| plans/CONTINUATION_STATE.md | **current** | cycle 4 |
+| plans/INFINITY_DONE | absent — accuracy criteria blocked on external data | - |
 
 ## Continuation Prompt Hints
 
-Do **not** re-research Spirula (D1) or re-diagnose F1–F8/F13–F15 (all fixed and tested).
-Highest leverage next:
-1. Fix the 2 pre-existing type errors (`colmap_backend._read_model_stats` int typing; `pipeline.to_local` optional handling) — cheap, removes LSP noise.
-2. **F7 is the real remaining blocker** for scored criteria 2 & 6: the shipped sample has no GPS (verified via ffprobe — only `language`/`DURATION`/`ENCODER` tags). Either obtain a real drone log, or synthesise a clearly-labelled synthetic track so `georef`/`metrics` can be exercised and tested.
-3. Update `docs/roadmap.md` (claims no tests) and `tests/README.md` (now has real tests).
-4. Commit: 8 modified + 4 new test files + `plans/`, nothing deleted.
+**Do not redo priorities 1–4** (see table above). Do not re-research Spirula (D1 settled).
+Next highest leverage:
+1. `tests/test_telemetry.py` — CSV/SRT/GPX/JSON parsing + interpolation is the biggest
+   uncovered module (`io/telemetry.py`, 417 lines, zero tests).
+2. `tests/test_config.py` (load/`--set` overrides) and `tests/test_preprocess.py`
+   (quality metrics, keyframe selection).
+3. Real telemetry / reference cloud to turn criteria 2 & 6 from blocked into scored.
+4. Commit incremental test additions. Keep everything green (`uv run pytest`, `ruff`).

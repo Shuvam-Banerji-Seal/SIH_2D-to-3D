@@ -149,7 +149,10 @@ def generate_report(
                 f'font-weight:600">{html.escape(stage.status)}</span>'
             ),
             f"{stage.duration_s:.2f}s",
-            html.escape(stage.message or "-"),
+            # Left raw on purpose: `_table` escapes every non-`_Raw` cell, so
+            # escaping here too would double-encode (F20) and print literal
+            # `&amp;`/`&lt;` in the rendered report.
+            stage.message or "-",
         ]
         for stage in result.stages
     ]

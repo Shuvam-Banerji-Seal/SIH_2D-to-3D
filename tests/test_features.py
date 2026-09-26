@@ -57,12 +57,22 @@ def test_detect_features_akaze_unavailable_on_opencv5() -> None:
 
 
 def test_detect_features_sift_still_works_without_akaze() -> None:
-    """Regression for F19: one missing backend must not break the others."""
-    assert not hasattr(cv2, "AKAZE_create") or True
+    """Regression for F19: one missing backend must not break the others.
 
-    keypoints, _ = detect_features(_scene(), method="sift")
+    The F19 failure mode was that constructing the detector *map* evaluated
+    every factory, so an unavailable AKAZE broke `method="sift"` too. What
+    matters is that sift works regardless of AKAZE's presence -- so assert the
+    outcome, not the environment.
+    """
+    keypoints, descriptors = detect_features(_scene(), method="sift")
 
     assert len(keypoints) > 0
+    assert descriptors is not None
+
+    # and ORB is likewise unaffected
+    orb_points, orb_descriptors = detect_features(_scene(), method="orb")
+    assert len(orb_points) > 0
+    assert orb_descriptors is not None
 
 
 def test_detect_features_accepts_bgr_input() -> None:

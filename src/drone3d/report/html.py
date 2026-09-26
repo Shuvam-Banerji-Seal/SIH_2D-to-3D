@@ -152,6 +152,9 @@ def generate_report(
             # Left raw on purpose: `_table` escapes every non-`_Raw` cell, so
             # escaping here too would double-encode (F20) and print literal
             # `&amp;`/`&lt;` in the rendered report.
+            # Left raw on purpose: `_table` escapes every non-`_Raw` cell, so
+            # escaping here too would double-encode (F20) and print literal
+            # `&amp;`/`&lt;` in the rendered report.
             stage.message or "-",
         ]
         for stage in result.stages

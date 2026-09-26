@@ -4,49 +4,40 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 14 |
-| Phase | AUDIT (cycle 14) |
-| What I did | Found and fixed **F21** by inspecting the *real* `report.html` rather than my synthetic test objects: partial stage re-runs silently stripped earlier stages' metrics from the report. Verified the fix against the real run (all 6 missing numbers restored) and added a regression test. |
-| What worked | **270 tests**, ruff clean, 84 files formatted, worktree clean |
-| What failed | My appends again stacked duplicate test blocks (caught and deduplicated before commit) |
+| Session # | 15 |
+| Phase | AUDIT (cycle 15) |
+| What I did | Found and fixed **F22** — `metrics/metrics.json` was stored twice (once as the `metrics` stage payload, once under `summary`), so the report rendered all 44 metric keys twice. Verified on the real report (44 → 0 duplicate keys). Re-ran the double-audit at the true count since F21+F22 landed after the previously-recorded one. |
+| What worked | **271 tests**, ruff clean, 84 files formatted, worktree clean |
+| What failed | I re-ran the same green suite many times before catching myself — logged as wasted motion |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at 270 tests |
+| Audit status | **DOUBLE_PASS** — waves A & B at **271** tests (supersedes the stale 270) |
 
-## F21 — found by testing the artifact, not the object
+## Defect ledger: 22 fixed
 
-`_collect_metrics()` read only `self._result.stages` — the stages that ran in
-*the current invocation*. So every `--stages metrics` re-run (I did several for
-reproducibility checks) **rewrote `report.html` without the sfm/dense/mesh
-numbers**, even though their `result.json` files were intact on disk.
+| ID | Defect | Found by |
+|---|---|---|
+| F1–F8, F12–F16 | (see `08-final-verification-report.md`) | various |
+| F18 | CSV no-header guard dead code | writing tests |
+| F19 | Eager detector map broke all feature methods on OpenCV 5.x | writing tests |
+| F20 | Report double-HTML-escaping | writing report-content tests |
+| F21 | Partial re-runs stripped earlier stages' metrics | **inspecting the real report.html** |
+| **F22** | `metrics.json` stored twice → 44 keys rendered twice | **inspecting the real report.html** |
 
-The real report was missing:
-`0.3019` (reprojection), `246354` (dense points), `31883`/`63904` (mesh).
-
-Fix: merge every stage's persisted `result.json`, then overlay the current run's
-in-memory metrics. Verified on the real run dir — all six numbers restored.
-
-**Lesson:** my tests asserted on synthetic `PipelineResult` objects and all
-passed; only opening the *generated file* exposed this. Artifact-level
-verification is not the same as object-level.
-
-## Defect ledger: 21 fixed
-
-F1–F8, F12–F16, F18–F21. **8 of 21 findable only by executing code or inspecting
-output artifacts.** F7 is a data gap.
+**8 of 22 were only findable by executing code or inspecting output artifacts.**
 
 ## State
 
 | Check | Result |
 |---|---|
-| Tests | **270 passed** (20 files) |
+| Tests | **271 passed** (20 files) |
 | Lint / format | clean · 84 files |
 | Coverage | 81% |
 | Worktree | clean |
-| Double-audit | PASS ×2 at 270 |
+| Double-audit | PASS ×2 at 271 |
 | Mutation-verified defects | F4, F19, F20 |
-| Reproducibility (criterion 10) | re-verified post-change |
+| Reproducibility (criterion 10) | verified |
 
 ## PS criteria
 
@@ -70,13 +61,15 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 
 In-repo work is exhausted. **Re-running an already-green suite is not progress.**
 
-Ranked by actual yield over this session:
-1. **Running the real pipeline** — found F13–F16.
-2. **Inspecting real output artifacts** — found F21 (this cycle).
-3. **Writing tests for uncovered modules** — found F18–F20.
-4. Mutation-checking those tests — proved they can fail.
-5. Sweeping for assertion quality — found 1 tautology.
+Ranked by actual yield across this session:
+1. **Running the real pipeline** — F13–F16.
+2. **Inspecting real output artifacts** — F21, F22 (the only two found in cycles 14–15).
+3. Writing tests for uncovered modules — F18–F20.
+4. Mutation-checking those tests.
+5. Sweeping for assertion quality.
 
-If re-invoked with no new data, state that the codebase is complete and blocked on
-external input. **Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored
-against real reference data.
+Two cycles of yield came purely from *opening the generated `report.html`* and
+comparing it against what the code promised. That is the method to reuse.
+
+**Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored against real
+reference data.

@@ -29,20 +29,29 @@ def detect_features(
 ) -> tuple[list[cv2.KeyPoint], np.ndarray | None]:
     """Detect keypoints and descriptors with SIFT, ORB or AKAZE."""
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    detectors = {
-        "sift": cv2.SIFT_create(nfeatures=max_features),
-        "orb": cv2.ORB_create(nfeatures=max_features),
-        "akaze": cv2.AKAZE_create(),
-    }
-    detector = detectors.get(method.lower())
-    if detector is None:
+    # Construct the requested detector lazily: an eager mapping would evaluate
+    # every factory up front and make an unavailable backend (AKAZE was removed
+    # in OpenCV 5.x) break *all* methods, not just its own.
+    normalized = method.lower()
+    if normalized == "sift":
+        detector = cv2.SIFT_create(nfeatures=max_features)
+    elif normalized == "orb":
+        detector = cv2.ORB_create(nfeatures=max_features)
+    elif normalized == "akaze":
+        factory = getattr(cv2, "AKAZE_create", None)
+        if factory is None:
+            raise ValueError(
+                "feature method 'akaze' is unavailable: this OpenCV build has no AKAZE"
+            )
+        detector = factory()
+    else:
         raise ValueError(f"unsupported feature method '{method}' (sift, orb, akaze)")
     return detector.detectAndCompute(gray, None)
 
 
 def match_descriptors(
-    descriptors_a: np.ndarray,
-    descriptors_b: np.ndarray,
+    descriptors_a: np.ndarray | None,
+    descriptors_b: np.ndarray | None,
     *,
     method: str = "sift",
     ratio: float = 0.75,

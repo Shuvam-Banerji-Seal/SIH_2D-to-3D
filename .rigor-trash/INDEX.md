@@ -1,0 +1,1 @@
+| 2026-09-27T02:25:01+05:30 | plans/08-verification-report.md | superseded duplicate of 08-final-verification-report.md (two drafts written after a schema error on the first write); content merged into the canonical report | merge done — restore from .rigor-trash/20260927-022501-plans-08-verification-report |

@@ -8,7 +8,7 @@ below carries its evidence; numbers are copied from run artifacts on disk.
 
 ```bash
 uv sync --all-extras                      # 7.3 GB; CPython 3.12.8
-uv run pytest                             # 238 tests
+uv run pytest                             # 271 tests
 uv run ruff check . && uv run ruff format --check .
 
 export PATH="$PWD/.tools/colmap-env/bin:$PATH"   # COLMAP 4.2.0 CUDA
@@ -24,8 +24,8 @@ and `manifest.json` written.
 
 | Check | Result | Evidence |
 |---|---|---|
-| Tests | **238 passed** (18 files) | `uv run pytest`, repeated |
-| Coverage | **78%** | `--cov=src/drone3d` |
+| Tests | **271 passed** (20 files) | `uv run pytest`, repeated |
+| Coverage | **81%** | `--cov=src/drone3d` |
 | Lint | clean | `ruff check .` |
 | Format | clean | `ruff format --check .` (81 files) |
 | CI | would pass | `uv lock --check` ok; CI's exact pytest line executed locally |
@@ -63,7 +63,7 @@ and `manifest.json` written.
 **Scored: 3 of 10** (7, 9, 10). Evidence for 1; measured-but-unscored 4, 5, 8;
 **blocked on data: 2, 3, 6**.
 
-## 5. Defects: 15 found and fixed
+## 5. Defects: 22 found and fixed
 
 | ID | Defect | Found by |
 |---|---|---|
@@ -81,9 +81,12 @@ and `manifest.json` written.
 | F16 | `write_ply` colour-block **data corruption** | running the pipeline |
 | F18 | CSV no-header guard dead code | writing tests |
 | F19 | Eager detector map broke *all* feature methods on OpenCV 5.x | writing tests |
+| F20 | Report double-HTML-escaping (`a & b.jpg` → `a &amp; b.jpg`) | writing report-content tests |
+| F21 | Partial re-runs stripped earlier stages' metrics from the report | inspecting the real `report.html` |
+| F22 | `metrics.json` stored twice → all 44 metric keys rendered twice | inspecting the real `report.html` |
 | F7 | **Sample video has no GPS** | ffprobe — *data gap, not code* |
 
-**6 of 15 were only findable by executing the real pipeline or writing tests.**
+**9 of 22 were only findable by executing the code or inspecting output artifacts.**
 Static code reading found just 2.
 
 ## 6. Honest limitations

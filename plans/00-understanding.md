@@ -18,7 +18,7 @@ textured mesh, georeferenced PLY + camera-track GeoJSON, metrics, one-page HTML 
 | --- | --- |
 | Maturity | `0.1.0`, 18 commits |
 | Structure | `src/drone3d`, 8 artifact-contract stages |
-| Tests | **238 passing** across 18 files; 78 % coverage |
+| Tests | **271 passing** across 20 files; 81 % coverage |
 | CI | ruff lint+format, import smoke, `drone3d doctor`, config load, pytest |
 | Env | `uv` `.venv` (CPython 3.12.8, all extras), COLMAP 4.2.0 CUDA in `.tools/colmap-env` |
 | Sample data | 1 × `.webm` — 2560×1440 VP9, 23.976 fps, 457 frames / 19.06 s, 22.7 MB |

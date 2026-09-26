@@ -36,7 +36,7 @@ Last updated: 2026-09-26 (cycle 8).
 | F19 | Feature detector map was built **eagerly**; AKAZE is gone in OpenCV 5.x | *every* `detect_features` call crashed, not just `akaze` | verified (executed) |
 | E5 | COLMAP 4.2.0 emits `frames.txt` + `rigs.txt` alongside the legacy model files | our parsers tolerate the extra files | verified (executed) |
 | E6 | SfM reports **0.30 px mean reprojection error** on the sample clip | strong geometric consistency; the number is trustworthy once GPS arrives | verified (executed) |
-| E7 | CI's pytest step is **not** a no-op now — its exact invocation passes (233 tests, 78% cov) | CI is green-end-to-end verified | verified (executed) |
+| E7 | CI's pytest step is **not** a no-op now — its exact invocation passes (271 tests, 81% cov) | CI is green-end-to-end verified | verified (executed) |
 | E5 | GPU **A100 80GB**, driver **610.43.02**, `nvidia_icd.json` present | GPU acceleration available (to us or to Spirula) | verified |
 | E6 | `VIRTUAL_ENV=/store/shuvam/.venv` mismatches project `.venv` | Warning on every `uv` call | verified |
 | E7 | `doctor`: colmap ✗, exiftool ✗, all 9 optional extras ✗ | Core path runs CPU-only today | verified |

@@ -132,8 +132,8 @@ FAST_RUNS = {  # run -> (video, analysis rate, overlap)
 
 def short_title(video: str) -> str:
     """A sample video's name for a table: before the first separator, whole words, at most 26 characters."""
-    name = re.split(r"[｜|：:,]| - |\\[|\\(", video)[0].strip()
-    name = re.sub(r"\\b(4K|4k|HD|Drone|Video|Cinematic|FPV drone|in FPV drone)\\b.*$", "", name).strip() or name
+    name = re.split(r"[｜|：:,]| - |\[|\(", video)[0].strip()
+    name = re.sub(r"\b(4K|4k|HD|Drone|Video|Cinematic|FPV drone|in FPV drone)\b.*$", "", name).strip() or name
     words, out = name.split(), ""
     for w in words:
         if len(out) + len(w) + 1 > 26:
@@ -281,6 +281,12 @@ def system_section(macros: dict[str, str]) -> list[str]:
                       SfmBefore=f"{sp['sfm_steps_s']['sequential']:.1f}", SfmAfter=f"{sp['sfm_steps_s']['in_full_run']:.1f}",
                       ExportBefore=f"{sp['export_steps_s']['before']:.1f}", ExportAfter=f"{sp['export_steps_s']['after']:.1f}",
                       WarmSeconds=f"{sp['warm_engine_before_speedups']['seconds']:.1f}")  # fmt: skip
+        if sp.get("sampling_s"):
+            smp = sp["sampling_s"]
+            macros.update(SampleBefore=f"{smp['before']['letterbox'] + smp['before']['probe']:.1f}", SampleAfter=f"{smp['after_cpu_one_set']:.1f}")
+        if sp.get("decimation_s"):
+            dec = sp["decimation_s"]
+            macros.update(DecimOpen=f"{dec['open3d']:.0f}", DecimFast=f"{dec['fast_simplification']:.1f}")
         rows = [[tex(k), fmt(b["per_stage_s"].get(k), 1), fmt(a["per_stage_s"].get(k), 1)] for k in ("keyframes", "sfm", "dense", "export")]
         rows.append(["total", fmt(b["seconds"], 1), fmt(a["seconds"], 1) + " \\checkmark"])
         parts.append("\\subsection{Doing in parallel what does not depend on each other}\\label{sec:speed}\n"
@@ -314,6 +320,37 @@ def system_section(macros: dict[str, str]) -> list[str]:
         parts.append(table("Splat initialisation on Jal Mahal's largest model (41 keyframes), 7000 steps, held-out views: "
                            "splats, training time, PSNR, colour-corrected PSNR, SSIM.", "tab:splatinit",
                            ["Start", "Quality", "Splats", "Train (s)", "PSNR", "cc-PSNR", "SSIM"], rows, "llrrrrr", wide=True))  # fmt: skip
+    tg = load(FIG / "texture_gain.json")
+    if tg:
+        rows = [[tex(Path(r["model"]).name), fmt(r.get("pairs")), fmt(r.get("disagreement_before"), 2), fmt(r.get("disagreement_after"), 2),
+                 f"{100 * (1 - r['disagreement_after'] / r['disagreement_before']):.0f}\\,\\%" if r.get("disagreement_before") else DASH,
+                 f"{r['gain_range'][0]:.2f}--{r['gain_range'][1]:.2f}" if r.get("gain_range") else DASH] for r in tg["models"]]  # fmt: skip
+        cut = [1 - r["disagreement_after"] / r["disagreement_before"] for r in tg["models"] if r.get("disagreement_before")]
+        macros["GainCut"] = f"{100 * min(cut):.0f}--{100 * max(cut):.0f}" if cut else DASH
+        parts.append("\\subsection{Exposure across keyframes}\\label{sec:gain}\n"
+                     "A drone's auto-exposure drifts along a pass, and the atlas blends the best views of every triangle, so "
+                     "keyframes of different brightness leave blotches. Before baking, each view gets a gain per colour channel "
+                     "from the objective of OpenCV's stitching gain compensator, written over triangles instead of panorama "
+                     "pixels: with $N_{ij}$ triangles seen by views $i$ and $j$ and $I_{ij}$ view $i$'s mean colour over them, "
+                     "minimise $\\sum N_{ij}\\,[(g_iI_{ij}-g_jI_{ji})^2/\\sigma_N^2 + (1-g_i)^2/\\sigma_g^2]$ with OpenCV's "
+                     f"$\\sigma_N=10$, $\\sigma_g=0.1$. It removes {macros['GainCut']}\\,\\% of the colour disagreement between "
+                     "overlapping views on Jal Mahal's models, with gains within 10\\,\\% of one (Table~\\ref{tab:gain}).\n")
+        parts.append(table("Gain compensation on Jal Mahal: overlapping view pairs, mean colour disagreement between them (8-bit "
+                           "levels) before and after, and the range of the gains.", "tab:gain",
+                           ["Model", "Pairs", "Before", "After", "Removed", "Gains"], rows, "lrrrrr"))  # fmt: skip
+    dr = load(FIG / "depth_refine.json")
+    if dr:
+        rows = [[tex(f"{r['run'].replace('cold2_', '')} {r['model']}"), tex(r["method"]), fmt(r["completeness"], 3), fmt(100 * r["depth_err"], 2),
+                 fmt(r["triangles"]), fmt(r["refine_s"], 2)] for r in dr]  # fmt: skip
+        parts.append("\\subsection{Edge-aware depth refinement: a negative result}\\label{sec:refine}\n"
+                     "Filtering each fused inverse-depth map under its keyframe's colours before fusion --- OpenCV's guided "
+                     "filter, or its Fast Global Smoother with the triangulated pixels trusted more than the monocular fill --- "
+                     "was expected to sharpen boundaries. It does not pay: the TSDF already averages view noise, and on the lake "
+                     "model the filters smear the fill across depth discontinuities, which the fusion then rejects "
+                     "(Table~\\ref{tab:refine}). The option stays in the configuration (\\texttt{dense.refine}), off.\n")
+        parts.append(table("Depth refinement before TSDF fusion on Jal Mahal's two largest models: view completeness, median "
+                           "mesh depth error against the triangulated depth, triangles, and refinement time for all keyframes.",
+                           "tab:refine", ["Model", "Filter", "Compl.", "Depth err. (\\%)", "Triangles", "s"], rows, "llrrrr"))  # fmt: skip
     tl = load(FIG / "tsdf_limits.json")
     if tl:
         ok = max(r["active"] for r in tl["active_block_probe"] if r["ok"])

@@ -1,6 +1,6 @@
 \section{Experiments}\label{sec:exp}
 
-\paragraph{Setup.} One NVIDIA A100 80\,GB PCIe, shared with other users' jobs throughout (each stage's record states the GPU's occupancy); PyTorch 2.14 with CUDA 13.2, Python 3.14, ffmpeg 9.0 (NVDEC/NVENC), spirula-studio 2026.9.24 (Vulkan backend). Data: fifteen public drone videos (Table~\ref{tab:data}); they carry no flight logs.
+\paragraph{Setup.} One NVIDIA A100 80\,GB PCIe and 24 CPU cores; the fast profile's timings are taken on the warm engine running one job at a time. PyTorch 2.14.0+cu132 with CUDA 13.2, Python 3.14, ffmpeg 9.0 (NVDEC/NVENC), spirula-studio 2026.9.24 (Vulkan backend). Data: fifteen public drone videos (Table~\ref{tab:data}); they carry no flight logs.
 
 \begin{table}[htbp]
 \centering\small
@@ -182,17 +182,37 @@ GPS $\sigma$ (m) & Lateral (m) & Sim. (m) & Ours (m) & Sim. in-sample & Ours LOO
 
 \subsection{Throughput and GPU use}
 
+\begin{table}[htbp]
+\centering\small
+\caption{Micro-benchmarks. The last column is RAFT's mean difference to stock torchvision in pixels.}\label{tab:bench}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lrll}
+\toprule
+Component & Rate & Unit & $\Delta$ (px) \\
+\midrule
+RAFT stock (batch 16) & 87 & flows/s & --- \\
+RAFT, no host syncs (32) & 109 & flows/s & 0.0000 \\
+RAFT + CUDA Graph (32) & 110 & flows/s & 0.0000 \\
+4K VP9, ffmpeg 4.4 CUVID & 94 & fps & --- \\
+4K VP9, ffmpeg 9 NVDEC & 164 & fps & --- \\
+4K VP9, ffmpeg 9 CPU (16 thr.) & 112 & fps & --- \\
+nvJPEG 4K encode & 1.3 & ms & --- \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
 \begin{table*}[htbp]
 \centering\small
 \caption{Per-stage wall time and GPU use (NVML, 0.5\,s samples). Own/host: peak GPU memory and host RSS of our process tree.}\label{tab:gpu}
 \begin{adjustbox}{max width=\linewidth}
-\begin{tabular}{llrrrrrl}
+\begin{tabular}{llrrrrr}
 \toprule
-Run & Stage & s & Util.\% & W & Own GPU (GB) & Host (GB) & Shared \\
+Run & Stage & s & Util.\% & W & GPU (GB) & Host (GB) \\
 \midrule
-jal\_mahal & keyframes & 109 & 83 & 256 & 10.6 & 6.3 & yes \\
-jal\_mahal & sfm & 256 & 83 & 213 & 9.9 & 4.2 & yes \\
-jal\_mahal & depth & 522 & 84 & 265 & 24.3 & 11.2 & yes \\
+jal\_mahal & keyframes & 109 & 83 & 256 & 10.6 & 6.3 \\
+jal\_mahal & sfm & 256 & 83 & 213 & 9.9 & 4.2 \\
+jal\_mahal & depth & 522 & 84 & 265 & 24.3 & 11.2 \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -243,22 +263,33 @@ Model & Band (vox.) & Completeness & Depth err. (\%) & Triangles \\
 \end{adjustbox}
 \end{table}
 
-\paragraph{Time and completeness.} The budget is 1.5$\times$ the video length (15 minutes for a 10-minute video). Completeness is the share of each registered keyframe's non-sky pixels whose ray hits the mesh. The motion-adaptive analysis rate costs a few points of completeness and brings the 187\,s Qutub Minar video within budget (243\,s of 281\,s); the 55\,s Jal Mahal edit, five camera moves over a lake, stays over it (147\,s of 82\,s). Measuring overlap against the points that survive the first tracking step (so that water does not force a keyframe every step) was worse on both videos (Table~\ref{tab:fastruns}).
+\paragraph{Analysis rate and overlap.} A fixed 12\,fps analysis rate places more keyframes and gains a few points of completeness at a large cost in time; measuring overlap against the points that survive the first tracking step (so that water does not force a keyframe every step) does not pay off either (Table~\ref{tab:fastruns}). The profile uses the motion-adaptive rate with absolute overlap.
 
 \begin{table*}[htbp]
 \centering\small
-\caption{Fast profile end to end on a shared A100: keyframes, registration, view completeness, processing time and budget (1.5$\times$ video length). The adopted setting is the adaptive rate with absolute overlap.}\label{tab:fastruns}
+\caption{Fast profile: analysis rate and overlap measure, view completeness and time against the budget (1.5$\times$ video length).}\label{tab:fastruns}
 \begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lllrrrrr}
 \toprule
 Video & Analysis & Overlap & KF & Reg. & Compl. & Time (s) & Budget (s) \\
 \midrule
-Jal Mahal & 12 fps & absolute & 213 & 213 & 0.82 & 262 & 82 \\
-Jal Mahal & adaptive, 3.0 fps & absolute & 128 & 128 & 0.78 & 147 & 82 \\
-Jal Mahal & adaptive, 6.0 fps & relative & 82 & 82 & 0.71 & 145 & 82 \\
-Qutub Minar & 15 fps & absolute & 110 & 102 & 0.81 & 307 & 281 \\
-Qutub Minar & adaptive, 3.3 fps & absolute & 113 & 106 & 0.75 & 243 & 281 \checkmark \\
-Qutub Minar & adaptive, 7.5 fps & relative & 106 & 98 & 0.70 & 292 & 281 \\
+Jal Mahal & adaptive, 3.0 fps & absolute & 128 & 128 & 0.66 & 79 & 82 \checkmark \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table*}
+
+\paragraph{Every sample video.} On the warm engine the mesh-and-cloud stages processed 1 of the 1 sample videos within the budget (1 minutes of footage at 1.43\,s per second of video overall; Table~\ref{tab:allmaps}). Every model was then given Gaussian splats, trained from its dense cloud; their time is reported separately, since the problem statement asks for a mesh or a point cloud.
+
+\begin{table*}[htbp]
+\centering\small
+\caption{Every sample video, warm engine, one job at a time: length, height, keyframes, registration, models (one per pass), view completeness, mesh-and-cloud time against the budget and per second of video, then splat training for every model and its mean held-out PSNR.}\label{tab:allmaps}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lrrrrrrrrrrr}
+\toprule
+Video & s & Res. & KF & Reg. & Mod. & Compl. & Time (s) & Budget (s) & s/s & Splat (s) & PSNR \\
+\midrule
+Jal Mahal & 55 & 2160p & 128 & 128/128 & 5 & 0.66 & 79 & 82 \checkmark & 1.43 & 205 & 26.6 \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -284,3 +315,90 @@ Model & Fit & Rot. ($^\circ$) & Scale (\%) & LOO (m) & $<$100\,m & 100--300\,m &
 \end{tabular}
 \end{adjustbox}
 \end{table*}
+
+\subsection{Doing in parallel what does not depend on each other}\label{sec:speed}
+The passes of a video are independent. The global mapper releases Python's interpreter lock, so each pass is mapped on a thread while the GPU tracks the next, largest pass first so that its long mapping overlaps the tracking of all the others: SfM on Jal Mahal fell from 47.5\,s to 22.5\,s with the same 128/128 keyframes registered. Export writes the textured GLB/OBJ, FBX and Blender files in the background while the GPU bakes the next model, and no longer decimates meshes within 25\,\% of the viewer cap (16.5\,s $\to$ 10.5\,s). The per-stage GPU telemetry thread had been finding the run's child processes by reading every \texttt{/proc/*/stat} twice a second, holding the interpreter lock against the stage it measured; it now walks \texttt{/proc/<pid>/task/*/children}. Together the 55\,s Jal Mahal edit went from 109\,s to 76\,s, inside its 82\,s budget for the first time (Table~\ref{tab:speed}).
+
+\begin{table}[htbp]
+\centering\small
+\caption{Jal Mahal, fast profile, idle A100, same conditions: seconds per stage before and after overlapping independent work.}\label{tab:speed}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lrr}
+\toprule
+Stage & Before (s) & After (s) \\
+\midrule
+keyframes & 27.1 & 26.9 \\
+sfm & 47.6 & 22.5 \\
+dense & 17.7 & 16.0 \\
+export & 16.5 & 10.5 \\
+total & 108.9 & 75.9 \checkmark \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Gaussian splats on the fast profile's poses}\label{sec:fastsplat}
+Flow SfM keeps about twelve tracks per image, too few points for 3DGS to densify from in a few thousand steps. Starting instead from the dense TSDF cloud --- a copy of the SfM model whose points are the fused surface --- raises held-out PSNR from 27.5 to 29.0\,dB in 35\,s of training (Table~\ref{tab:splatinit}). The trained splats are converted to the 32-byte web layout (importance-sorted, opacity-pruned) in the model's export frame, the trainer's own scene transform undone: 743\,MB of PLY become 20\,MB that a browser renders together with the mesh.
+
+\begin{table*}[htbp]
+\centering\small
+\caption{Splat initialisation on Jal Mahal's largest model (41 keyframes), 7000 steps, held-out views: splats, training time, PSNR, colour-corrected PSNR, SSIM.}\label{tab:splatinit}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrrrr}
+\toprule
+Start & Quality & Splats & Train (s) & PSNR & cc-PSNR & SSIM \\
+\midrule
+SfM points (1000) & high & 20{,}000 & 22.2 & 27.46 & 31.06 & 0.886 \\
+dense TSDF cloud (400k) & low & 200{,}000 & 34.6 & 29.01 & 35.59 & 0.948 \\
+dense TSDF cloud (400k) & medium & 1{,}000{,}000 & 75.4 & 29.79 & 36.47 & 0.951 \\
+dense TSDF cloud (400k) & high & 3{,}000{,}000 & 122.7 & 29.47 & 36.38 & 0.950 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table*}
+
+\subsection{Exposure across keyframes}\label{sec:gain}
+A drone's auto-exposure drifts along a pass, and the atlas blends the best views of every triangle, so keyframes of different brightness leave blotches. Before baking, each view gets a gain per colour channel from the objective of OpenCV's stitching gain compensator, written over triangles instead of panorama pixels: with $N_{ij}$ triangles seen by views $i$ and $j$ and $I_{ij}$ view $i$'s mean colour over them, minimise $\sum N_{ij}\,[(g_iI_{ij}-g_jI_{ji})^2/\sigma_N^2 + (1-g_i)^2/\sigma_g^2]$ with OpenCV's $\sigma_N=10$, $\sigma_g=0.1$. It removes 23--45\,\% of the colour disagreement between overlapping views on Jal Mahal's models, with gains within 10\,\% of one (Table~\ref{tab:gain}).
+
+\begin{table}[htbp]
+\centering\small
+\caption{Gain compensation on Jal Mahal: overlapping view pairs, mean colour disagreement between them (8-bit levels) before and after, and the range of the gains.}\label{tab:gain}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lrrrrr}
+\toprule
+Model & Pairs & Before & After & Removed & Gains \\
+\midrule
+0 & 240 & 2.73 & 1.51 & 45\,\% & 0.99--1.11 \\
+1 & 240 & 2.98 & 2.29 & 23\,\% & 0.97--1.03 \\
+2 & 240 & 2.32 & 1.51 & 35\,\% & 0.98--1.03 \\
+3 & 128 & 6.97 & 4.26 & 39\,\% & 0.90--1.05 \\
+4 & 90 & 1.09 & 0.75 & 31\,\% & 0.98--1.01 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Edge-aware depth refinement: a negative result}\label{sec:refine}
+Filtering each fused inverse-depth map under its keyframe's colours before fusion --- OpenCV's guided filter, or its Fast Global Smoother with the triangulated pixels trusted more than the monocular fill --- was expected to sharpen boundaries. It does not pay: the TSDF already averages view noise, and on the lake model the filters smear the fill across depth discontinuities, which the fusion then rejects (Table~\ref{tab:refine}). The option stays in the configuration (\texttt{dense.refine}), off.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Depth refinement before TSDF fusion on Jal Mahal's two largest models: view completeness, median mesh depth error against the triangulated depth, triangles, and refinement time for all keyframes.}\label{tab:refine}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrrr}
+\toprule
+Model & Filter & Compl. & Depth err. (\%) & Triangles & s \\
+\midrule
+jal\_mahal 0 & none & 0.950 & 1.59 & 674{,}622 & 0.00 \\
+jal\_mahal 0 & guided & 0.959 & 1.75 & 741{,}762 & 0.45 \\
+jal\_mahal 0 & fgs & 0.960 & 1.91 & 693{,}983 & 0.23 \\
+jal\_mahal 1 & none & 0.830 & 0.59 & 735{,}962 & 0.00 \\
+jal\_mahal 1 & guided & 0.719 & 0.56 & 683{,}599 & 0.43 \\
+jal\_mahal 1 & fgs & 0.661 & 0.58 & 633{,}168 & 0.16 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Live footage}\label{sec:live-results}
+Qutub Minar was replayed at its frame rate into 30\,s segments: of 7 segments, 4 held parallax and were modelled 26--38\,s after they closed; the others were refused by the parallax test, as a camera that only turns should be.

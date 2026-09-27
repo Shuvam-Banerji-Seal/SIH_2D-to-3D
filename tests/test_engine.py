@@ -201,3 +201,80 @@ def test_engine_runs_a_job_and_writes_the_console_files(tmp_path: Path) -> None:
             engine.submit("bad", {"stages": ["nope"]})
     finally:
         engine.shutdown()
+
+
+def test_two_slots_run_together_and_keep_their_logs_apart(tmp_path: Path) -> None:
+    from drone3d.engine.service import Engine
+
+    a, b = _test_video(tmp_path / "a.mp4", seconds=2), _test_video(tmp_path / "b.mp4", seconds=3)
+    engine = Engine(tmp_path, tmp_path / "outputs", device="cpu", slots=2)
+    try:
+        for name, video in (("ja", a), ("jb", b)):
+            engine.submit(
+                name,
+                {
+                    "stages": ["ingest"],
+                    "ingest": {"video": str(video)},
+                    "metrics": {"gpu_telemetry": False},
+                },
+            )
+        deadline = time.time() + 60
+        while time.time() < deadline and (engine.queue or engine.running):
+            time.sleep(0.1)
+        for name, other in (("ja", "b.mp4"), ("jb", "a.mp4")):
+            assert (
+                json.loads((tmp_path / "outputs" / name / "ui_job.json").read_text())["status"]
+                == "done"
+            )
+            log = (tmp_path / "outputs" / name / "logs" / "run.log").read_text()
+            assert "stage ingest: ok" in log and other not in log
+        assert engine.status()["slots"] == 2
+    finally:
+        engine.shutdown()
+
+
+def test_marigold_runs_take_the_engine_to_themselves(tmp_path: Path) -> None:
+    from drone3d.engine.service import Engine, Job
+
+    engine = Engine(tmp_path, tmp_path / "outputs", device="cpu", slots=2)
+    engine._stop.set()  # drive admission by hand
+    engine._wake.set()
+    for t in engine._threads:
+        t.join(timeout=5)
+    plain = lambda n: Job(
+        name=n, run_dir=str(tmp_path / n), config={"stages": ["ingest", "keyframes"]}
+    )  # noqa: E731
+    marigold = Job(
+        name="m", run_dir=str(tmp_path / "m"), config={"stages": ["ingest", "depth", "splat"]}
+    )
+    engine.queue.extend([plain("p1"), marigold, plain("p2")])
+    assert engine._next().name == "p1"
+    assert engine._next() is None  # the Marigold run waits for p1, and p2 waits behind it
+    engine.running.clear()
+    assert engine._next().name == "m"
+    assert engine._next() is None  # nothing joins a Marigold run
+    engine.running.clear()
+    assert engine._next().name == "p2"
+
+
+def test_raft_wrappers_are_per_engine_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    cache = _fake_cache(monkeypatch, free_gb=40.0)
+
+    class FakeRaft:
+        def __init__(self, model: str, *, batch: int, iters: int, device: str, net: object) -> None:
+            self.net = net
+
+    monkeypatch.setattr("drone3d.keyframes.flow.RaftFlow", FakeRaft)
+    models.activate(cache)
+    here = models.raft("raft_large", batch=8, iters=12)
+    other = {}
+    t = threading.Thread(
+        target=lambda: other.update(w=models.raft("raft_large", batch=8, iters=12))
+    )
+    t.start()
+    t.join()
+    assert (
+        other["w"] is not here and other["w"].net is here.net
+    )  # own buffers and graphs, one network

@@ -15,7 +15,10 @@ from drone3d.mesh.colmap_mesher import ColmapMesher
 def dense_ply(tmp_path: Path) -> Path:
     path = tmp_path / "dense" / "fused.ply"
     path.parent.mkdir(parents=True)
-    path.write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n" + b"\x00" * 12)
+    path.write_bytes(
+        b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
+        + b"\x00" * 12
+    )
     return path
 
 
@@ -30,7 +33,10 @@ def test_poisson_falls_back_to_delaunay_on_crash(
         attempts.append(argv[1])
         if argv[1] == "poisson_mesher":
             raise ReconstructionError("command failed (exit -11): colmap poisson_mesher")
-        Path(argv[argv.index("--output_path") + 1]).write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n" + b"\x00" * 12)
+        Path(argv[argv.index("--output_path") + 1]).write_bytes(
+            b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
+            + b"\x00" * 12
+        )
         return None
 
     monkeypatch.setattr("drone3d.mesh.colmap_mesher.run_command", fake_run_command)
@@ -73,7 +79,10 @@ def test_delaunay_command_has_no_output_type_flag(
     def fake_run_command(cmd: list[str], **_: object) -> object:
         argv = [str(item) for item in cmd]
         argvs.append(argv)
-        Path(argv[argv.index("--output_path") + 1]).write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n" + b"\x00" * 12)
+        Path(argv[argv.index("--output_path") + 1]).write_bytes(
+            b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
+            + b"\x00" * 12
+        )
         return None
 
     monkeypatch.setattr("drone3d.mesh.colmap_mesher.run_command", fake_run_command)

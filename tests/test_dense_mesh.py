@@ -43,7 +43,9 @@ def test_mvs_issues_the_three_colmap_stages(
         argvs.append(argv)
         # stereo_fusion must find its output
         if argv[1] == "stereo_fusion":
-            Path(argv[argv.index("--output_path") + 1]).write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+            Path(argv[argv.index("--output_path") + 1]).write_bytes(
+                b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            )
         return None
 
     monkeypatch.setattr("drone3d.dense.mvs.run_command", fake_run)
@@ -70,7 +72,9 @@ def test_mvs_passes_geom_consistency_flag(monkeypatch: pytest.MonkeyPatch, tmp_p
         argv = [str(c) for c in cmd]
         argvs.append(argv)
         if argv[1] == "stereo_fusion":
-            Path(argv[argv.index("--output_path") + 1]).write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+            Path(argv[argv.index("--output_path") + 1]).write_bytes(
+                b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            )
         return None
 
     monkeypatch.setattr("drone3d.dense.mvs.run_command", fake_run)
@@ -189,9 +193,13 @@ def test_texture_step_uses_mesh_texturer_not_the_old_name(
         if argv[1] == "mesh_texturer":
             out = Path(argv[argv.index("--output_path") + 1])
             out.mkdir(parents=True, exist_ok=True)
-            (out / "mesh.ply").write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+            (out / "mesh.ply").write_bytes(
+                b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            )
         elif argv[1] == "delaunay_mesher":
-            Path(argv[argv.index("--output_path") + 1]).write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+            Path(argv[argv.index("--output_path") + 1]).write_bytes(
+                b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            )
         return None
 
     monkeypatch.setattr("drone3d.mesh.colmap_mesher.run_command", fake_run)
@@ -200,7 +208,9 @@ def test_texture_step_uses_mesh_texturer_not_the_old_name(
 
     dense = tmp_path / "dense" / "fused.ply"
     dense.parent.mkdir(parents=True)
-    dense.write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+    dense.write_bytes(
+        b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    )
 
     result = ColmapMesher(method="delaunay", binary="colmap").build(
         dense, tmp_path / "images", tmp_path / "out", MeshConfig(texture=True)
@@ -225,9 +235,13 @@ def test_texture_step_uses_the_dense_workspace(
         if argv[1] == "mesh_texturer":
             out = Path(argv[argv.index("--output_path") + 1])
             out.mkdir(parents=True, exist_ok=True)
-            (out / "mesh.ply").write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+            (out / "mesh.ply").write_bytes(
+                b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            )
         elif argv[1] == "delaunay_mesher":
-            Path(argv[argv.index("--output_path") + 1]).write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+            Path(argv[argv.index("--output_path") + 1]).write_bytes(
+                b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            )
         return None
 
     monkeypatch.setattr("drone3d.mesh.colmap_mesher.run_command", fake_run)
@@ -236,7 +250,9 @@ def test_texture_step_uses_the_dense_workspace(
 
     dense = tmp_path / "dense" / "fused.ply"
     dense.parent.mkdir(parents=True)
-    dense.write_bytes(b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+    dense.write_bytes(
+        b"ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    )
 
     ColmapMesher(method="delaunay").build(
         dense, tmp_path / "images", tmp_path / "out", MeshConfig(texture=True)

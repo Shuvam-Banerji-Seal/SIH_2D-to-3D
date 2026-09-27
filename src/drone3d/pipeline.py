@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 
 from drone3d.config import ALL_STAGES, PipelineConfig
-from drone3d.exceptions import BackendUnavailable, Drone3DError
+from drone3d.exceptions import BackendUnavailable, Drone3DError, ReconstructionError
 from drone3d.logging_utils import get_logger
 from drone3d.types import Artifact, PipelineResult, StageReport
 from drone3d.version import __version__
@@ -542,6 +542,13 @@ class Pipeline:
         have_depth = (self.dataset / "depths").is_dir()
         dense = {m["model"]: m for m in (self._stage_result("dense") or {}).get("models", []) if m.get("status") == "ok"}
         def train(model: dict) -> dict:
+            try:
+                return train_one(model)
+            except ReconstructionError as exc:  # one model's trainer failing must not lose the others
+                log.warning("splat %s: %s", Path(model["path"]).name, exc)
+                return {"model": model["path"], "passes": model.get("passes"), "status": "failed", "error": str(exc)[:300]}
+
+        def train_one(model: dict) -> dict:
             recon = Path(model["path"]).relative_to(self.dataset)
             if cfg.init == "dense" and model["path"] in dense:  # start from the TSDF cloud, not ~1000 SfM points
                 from drone3d.splat.spirula import dense_init_model
@@ -569,7 +576,7 @@ class Pipeline:
                 eval_interval=cfg.eval_interval,
                 flags=flags,
             )
-            return {"model": model["path"], "passes": model.get("passes"), **result.to_dict()}
+            return {"model": model["path"], "passes": model.get("passes"), "status": "ok", **result.to_dict()}
 
         if cfg.parallel > 1 and len(models) > 1:  # one trainer leaves the GPU idle between its small kernels
             from concurrent.futures import ThreadPoolExecutor
@@ -580,12 +587,13 @@ class Pipeline:
             trained = [train(m) for m in models]
         payload = {"models": trained, "depth_supervised": have_depth and cfg.depth_weight > 0}
         _write_json(self._stage_dir("splat") / "result.json", payload)
+        ok = [t for t in trained if t.get("status") != "failed"]
         summary = "; ".join(
             f"{Path(t['run_dir']).name}: PSNR {_mean_metric(t['eval_metrics'], 'psnr'):.2f} dB, "
             f"{t['num_splats']} splats"
-            for t in trained
-        )
-        return StageReport("splat", "ok", summary, metrics=payload)
+            for t in ok
+        ) + "".join(f"; {Path(t['model']).name}: failed" for t in trained if t.get("status") == "failed")
+        return StageReport("splat", "ok" if ok else "failed", summary, metrics=payload)
 
     def _stage_mesh(self) -> StageReport:
         cfg = self.config.mesh
@@ -597,7 +605,7 @@ class Pipeline:
         from drone3d.splat.spirula import run_mesh
 
         meshes = []
-        for model in splat["models"]:
+        for model in (m for m in splat["models"] if m.get("run_dir")):
             result = run_mesh(
                 Path(model["run_dir"]),
                 formats=cfg.formats,
@@ -1017,7 +1025,7 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
     if splat:
         out["splat"] = [
             {"run": Path(m["run_dir"]).name, "passes": m.get("passes"), "num_splats": m["num_splats"], "seconds": m["seconds"], **{k: round(_mean_metric(m["eval_metrics"], k), 4) for k in ("psnr", "ssim", "lpips", "cc_psnr", "cc_ssim")}}
-            for m in splat["models"]
+            for m in splat["models"] if m.get("run_dir")
         ]  # fmt: skip
     mesh = _read_json(run_dir / "mesh" / "result.json")
     if mesh:

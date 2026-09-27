@@ -57,10 +57,18 @@ def spirula_binary() -> Path:
     )
 
 
+STALLED = -1000  # _run's return code when the process stopped writing and was killed
+
+
 def _run(
-    cmd: Sequence[str | Path], log_path: Path, cwd: Path | None = None
+    cmd: Sequence[str | Path], log_path: Path, cwd: Path | None = None, *, stall_s: float | None = None
 ) -> tuple[int, str, float]:
-    """Run ``cmd`` streaming stdout+stderr to ``log_path``; return (code, text, seconds)."""
+    """Run ``cmd`` streaming stdout+stderr to ``log_path``; return (code, text, seconds).
+
+    With ``stall_s``, a process whose log has not grown for that long is killed
+    and the code is :data:`STALLED`: a Vulkan trainer once sat in ``poll`` at step 1
+    for 20 minutes (6 s of CPU), and with no limit it held the engine's queue.
+    """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     args = [str(c) for c in cmd]
     log.info("exec: %s", " ".join(args))
@@ -68,11 +76,25 @@ def _run(
     with log_path.open("w", encoding="utf-8") as handle:
         handle.write("$ " + " ".join(args) + "\n")
         handle.flush()
-        process = subprocess.run(
-            args, stdout=handle, stderr=subprocess.STDOUT, cwd=cwd, check=False
-        )
+        process = subprocess.Popen(args, stdout=handle, stderr=subprocess.STDOUT, cwd=cwd)
+        size, quiet_since = -1, time.monotonic()
+        while True:
+            try:
+                code = process.wait(timeout=2.0)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            now_size = log_path.stat().st_size
+            if now_size != size:
+                size, quiet_since = now_size, time.monotonic()
+            elif stall_s is not None and time.monotonic() - quiet_since > stall_s:
+                process.kill()
+                process.wait()
+                handle.write(f"\n[drone3d] no output for {stall_s:.0f} s: killed\n")
+                code = STALLED
+                break
     elapsed = time.perf_counter() - started
-    return process.returncode, log_path.read_text(encoding="utf-8", errors="replace"), elapsed
+    return code, log_path.read_text(encoding="utf-8", errors="replace"), elapsed
 
 
 # ----------------------------------------------------------------------------- SfM
@@ -257,6 +279,7 @@ def run_train(
     depth_weight: float = 0.0,
     eval_interval: int = 8,
     flags: dict[str, object] | None = None,
+    stall_s: float = 300.0,
 ) -> TrainResult:
     """``spirula train`` headless; held-out views every ``eval_interval``-th image."""
     binary = spirula_binary()
@@ -277,7 +300,15 @@ def run_train(
     for key, value in (flags or {}).items():
         cmd += [f"--{key.replace('_', '-')}", str(int(value) if isinstance(value, bool) else value)]
     log_path = out_dir.parent / f"{out_dir.name}.log"
-    code, text, seconds = _run(cmd, log_path)
+    for attempt in (1, 2):  # a stalled trainer is retried once in a fresh process
+        code, text, seconds = _run(cmd, log_path, stall_s=stall_s)
+        if code != STALLED:
+            break
+        log.warning("spirula train %s stalled (attempt %d); %s", out_dir.name, attempt, "retrying" if attempt == 1 else "giving up")
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+    if code == STALLED:
+        raise ReconstructionError(f"spirula train stalled twice (no output for {stall_s:.0f} s); see {log_path}")
     if code != 0:
         raise ReconstructionError(f"spirula train failed (exit {code}); see {log_path}")
     metrics_path = out_dir / "metrics.json"

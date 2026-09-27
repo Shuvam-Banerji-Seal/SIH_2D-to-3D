@@ -220,6 +220,16 @@ def create_app(
         try:
             with part.open("wb") as fh:
                 shutil.copyfileobj(file.file, fh, 8 << 20)
+            if Path(name).suffix.lower() in VIDEO_EXT:  # refuse now what the ingest stage would fail on later
+                from drone3d.io.nvdec import probe_stream
+
+                try:
+                    info = probe_stream(part, count_frames=False)
+                    ok = info.width > 0 and info.height > 0 and info.duration_s > 0
+                except Exception:
+                    ok = False
+                if not ok:
+                    raise HTTPException(400, f"{name} is not a readable video (no video stream with a duration)")
             dest, reused = _place(part, uploads / name)
         finally:
             part.unlink(missing_ok=True)

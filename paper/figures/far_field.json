@@ -1,0 +1,266 @@
+[
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 0,
+  "keyframes": 52,
+  "shares": {
+   "sky": 0.166,
+   "triangulated": 0.2203,
+   "filled": 0.3479,
+   "empty_far": 0.2341,
+   "empty_other": 0.0318
+  },
+  "extrapolation": [
+   {
+    "ratio": "0-1",
+    "images": 0,
+    "median_rel_err": null
+   },
+   {
+    "ratio": "1-1.25",
+    "images": 49,
+    "median_rel_err": 0.055
+   },
+   {
+    "ratio": "1.25-1.5",
+    "images": 32,
+    "median_rel_err": 0.1814
+   },
+   {
+    "ratio": "1.5-2",
+    "images": 26,
+    "median_rel_err": 0.2518
+   },
+   {
+    "ratio": "2-3",
+    "images": 29,
+    "median_rel_err": 0.2555
+   },
+   {
+    "ratio": "3-99",
+    "images": 32,
+    "median_rel_err": 0.5859
+   }
+  ]
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 1,
+  "keyframes": 13,
+  "shares": {
+   "sky": 0.2127,
+   "triangulated": 0.2027,
+   "filled": 0.4666,
+   "empty_far": 0.118,
+   "empty_other": 0.0
+  },
+  "extrapolation": [
+   {
+    "ratio": "0-1",
+    "images": 0,
+    "median_rel_err": null
+   },
+   {
+    "ratio": "1-1.25",
+    "images": 13,
+    "median_rel_err": 0.0405
+   },
+   {
+    "ratio": "1.25-1.5",
+    "images": 10,
+    "median_rel_err": 0.1533
+   },
+   {
+    "ratio": "1.5-2",
+    "images": 4,
+    "median_rel_err": 0.673
+   },
+   {
+    "ratio": "2-3",
+    "images": 2,
+    "median_rel_err": 1.5667
+   },
+   {
+    "ratio": "3-99",
+    "images": 7,
+    "median_rel_err": 0.8707
+   }
+  ]
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 2,
+  "keyframes": 12,
+  "shares": {
+   "sky": 0.1821,
+   "triangulated": 0.173,
+   "filled": 0.4039,
+   "empty_far": 0.2411,
+   "empty_other": 0.0
+  },
+  "extrapolation": [
+   {
+    "ratio": "0-1",
+    "images": 0,
+    "median_rel_err": null
+   },
+   {
+    "ratio": "1-1.25",
+    "images": 12,
+    "median_rel_err": 0.1472
+   },
+   {
+    "ratio": "1.25-1.5",
+    "images": 7,
+    "median_rel_err": 0.4907
+   },
+   {
+    "ratio": "1.5-2",
+    "images": 5,
+    "median_rel_err": 0.3517
+   },
+   {
+    "ratio": "2-3",
+    "images": 3,
+    "median_rel_err": 0.9964
+   },
+   {
+    "ratio": "3-99",
+    "images": 5,
+    "median_rel_err": 0.8738
+   }
+  ]
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 0,
+  "keyframes": 41,
+  "shares": {
+   "sky": 0.1475,
+   "triangulated": 0.5584,
+   "filled": 0.2941,
+   "empty_far": 0.0,
+   "empty_other": 0.0
+  },
+  "extrapolation": [
+   {
+    "ratio": "0-1",
+    "images": 0,
+    "median_rel_err": null
+   },
+   {
+    "ratio": "1-1.25",
+    "images": 41,
+    "median_rel_err": 0.0616
+   },
+   {
+    "ratio": "1.25-1.5",
+    "images": 41,
+    "median_rel_err": 0.1134
+   },
+   {
+    "ratio": "1.5-2",
+    "images": 41,
+    "median_rel_err": 0.1994
+   },
+   {
+    "ratio": "2-3",
+    "images": 34,
+    "median_rel_err": 0.1813
+   },
+   {
+    "ratio": "3-99",
+    "images": 0,
+    "median_rel_err": null
+   }
+  ]
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 1,
+  "keyframes": 39,
+  "shares": {
+   "sky": 0.3722,
+   "triangulated": 0.2718,
+   "filled": 0.3559,
+   "empty_far": 0.0002,
+   "empty_other": 0.0
+  },
+  "extrapolation": [
+   {
+    "ratio": "0-1",
+    "images": 0,
+    "median_rel_err": null
+   },
+   {
+    "ratio": "1-1.25",
+    "images": 39,
+    "median_rel_err": 0.4212
+   },
+   {
+    "ratio": "1.25-1.5",
+    "images": 32,
+    "median_rel_err": 0.6648
+   },
+   {
+    "ratio": "1.5-2",
+    "images": 36,
+    "median_rel_err": 0.6328
+   },
+   {
+    "ratio": "2-3",
+    "images": 32,
+    "median_rel_err": 0.6488
+   },
+   {
+    "ratio": "3-99",
+    "images": 24,
+    "median_rel_err": 0.7296
+   }
+  ]
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 2,
+  "keyframes": 19,
+  "shares": {
+   "sky": 0.4525,
+   "triangulated": 0.2365,
+   "filled": 0.2981,
+   "empty_far": 0.0129,
+   "empty_other": 0.0
+  },
+  "extrapolation": [
+   {
+    "ratio": "0-1",
+    "images": 0,
+    "median_rel_err": null
+   },
+   {
+    "ratio": "1-1.25",
+    "images": 19,
+    "median_rel_err": 0.0284
+   },
+   {
+    "ratio": "1.25-1.5",
+    "images": 19,
+    "median_rel_err": 0.0627
+   },
+   {
+    "ratio": "1.5-2",
+    "images": 19,
+    "median_rel_err": 0.0702
+   },
+   {
+    "ratio": "2-3",
+    "images": 14,
+    "median_rel_err": 0.0624
+   },
+   {
+    "ratio": "3-99",
+    "images": 17,
+    "median_rel_err": 0.4735
+   }
+  ]
+ }
+]

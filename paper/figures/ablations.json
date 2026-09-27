@@ -1,0 +1,64 @@
+{
+ "sampling": [
+  {
+   "label": "1 fps (uniform)",
+   "frames": 55,
+   "registered": 40,
+   "models": 2,
+   "largest": 22,
+   "note": "no letterbox crop"
+  },
+  {
+   "label": "uniform, same budget",
+   "frames": 241,
+   "registered": 237,
+   "models": 4,
+   "largest": 98,
+   "note": "no letterbox crop"
+  },
+  {
+   "label": "overlap band (dev)",
+   "frames": 241,
+   "registered": 241,
+   "models": 4,
+   "largest": 155,
+   "note": "no letterbox crop"
+  },
+  {
+   "label": "overlap band (canonical)",
+   "frames": 213,
+   "registered": 213,
+   "models": 4,
+   "largest": 156,
+   "note": "cropped, fades trimmed"
+  }
+ ],
+ "camera": [
+  {
+   "model": "OpenCV (fx, fy free)",
+   "focals": "3112/2812, 2055/2080, 2827/3382, 2986/2754",
+   "reproj": 0.761,
+   "points": 96940
+  },
+  {
+   "model": "radial (one focal)",
+   "focals": "3118, 2684, 2808, 3109",
+   "reproj": 0.771,
+   "points": 96598
+  }
+ ],
+ "splat": [
+  {
+   "run": "jal_mahal",
+   "label": "model_0, depth prior (v1 mask)",
+   "num_splats": 3000000,
+   "psnr": 34.9975,
+   "ssim": 0.976969,
+   "cc_psnr": 37.1855,
+   "lpips": null,
+   "seconds": 3822.12,
+   "eval_views": 20,
+   "depth_weight": 0.05
+  }
+ ]
+}

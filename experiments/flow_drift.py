@@ -23,6 +23,8 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+import drone3d  # noqa: E402, F401  (first: undoes OpenMP thread binding before torch loads)
+
 sys.path.insert(0, str(ROOT / "tools"))
 
 from make_degenerate_clip import rotation  # noqa: E402

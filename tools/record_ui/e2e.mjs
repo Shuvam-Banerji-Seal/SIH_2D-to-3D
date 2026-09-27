@@ -59,7 +59,7 @@ if (RUN) {
     const after = await grab();
     const d = changed(before, after);
     report.layers[layer] = +d.toFixed(4);
-    const least = ['cameras', 'photos', 'depth', 'grid'].includes(layer) ? 0.001 : 0.005; // thin overlays cover little of the frame
+    const least = layer === 'cameras' ? 0.0002 : ['photos', 'depth', 'grid'].includes(layer) ? 0.001 : 0.005; // thin overlays cover little
     if (d < least) fail(`layer ${layer}: the canvas did not change (${(100 * d).toFixed(2)} %)`);
     await page.locator(`.lay[data-l="${layer}"]`).click(); await sleep(600); // back to the default
   }

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +49,22 @@ def _to_full(tracks: FlowTracks, full: tuple[int, int]) -> FlowTracks:
     return FlowTracks(tracks.image, tracks.track, ((tracks.xy + 0.5) * s - 0.5).astype(np.float32), full, tracks.stats)
 
 
+def _map_pass(db: Path, images: Path, work_dir: Path, name: str, n_images: int, mapper: str):  # type: ignore[no-untyped-def]
+    """Verify and map one pass; falls back to the other mapper when under 80 % registers."""
+    recs, t = map_tracks(db, images, work_dir / f"models_{name}", mapper=mapper)
+    best = max(recs.values(), key=lambda r: r.num_reg_images(), default=None)
+    used = mapper
+    if best is None or best.num_reg_images() < 0.8 * n_images:
+        # the other mapper on the same verified pairs; keep whichever registers more
+        other = "global" if mapper == "incremental" else "incremental"
+        recs2, t2 = map_tracks(db, images, work_dir / f"models_{name}_{other}", mapper=other, verify=False)
+        t = {**t, "mapping_s": t["mapping_s"] + t2["mapping_s"]}
+        best2 = max(recs2.values(), key=lambda r: r.num_reg_images(), default=None)
+        if best2 is not None and (best is None or best2.num_reg_images() > best.num_reg_images()):
+            best, used, recs = best2, other, recs2
+    return best, used, recs, t
+
+
 def run_flow_sfm(
     dataset: Path,
     work_dir: Path,
@@ -59,14 +76,19 @@ def run_flow_sfm(
     mapper: str = "global",
     hfov_deg: float = 72.0,
     min_images: int = 3,
+    map_workers: int = 2,
 ) -> dict:
-    """Map every pass of ``dataset/images``; models go to ``dataset/sparse/N``, largest first."""
+    """Map every pass of ``dataset/images``; models go to ``dataset/sparse/N``, largest first.
+
+    Passes are independent: the GPU builds the tracks of one while up to
+    ``map_workers`` threads verify and map the ones before it.
+    """
     import shutil
 
     import pycolmap
     import torch
 
-    from drone3d.keyframes.flow import RaftFlow
+    from drone3d.engine import models
 
     started = time.perf_counter()
     images = dataset / "images"
@@ -75,10 +97,15 @@ def run_flow_sfm(
         shutil.rmtree(sparse)
     work_dir.mkdir(parents=True, exist_ok=True)
     passes = sorted(p for p in images.iterdir() if p.is_dir()) or [images]
-    raft = RaftFlow("raft_large", batch=8, iters=12)
+    # largest first: its mapping (the longest) then overlaps the tracking of all the others
+    passes.sort(key=lambda p: -sum(1 for _ in p.glob("*.jpg")))
+    raft = models.raft("raft_large", batch=8, iters=12)
     per_pass, found = [], []
     timing = {"load": 0.0, "tracks": 0.0, "database": 0.0, "verification": 0.0, "mapping": 0.0}
     input_images = 0
+    # GPU tracks for pass k+1 while the CPU maps pass k: pycolmap releases the GIL, so threads overlap
+    pool = ThreadPoolExecutor(max_workers=map_workers)
+    jobs = []
     for folder in passes:
         paths = sorted(folder.glob("*.jpg"))
         input_images += len(paths)
@@ -99,24 +126,20 @@ def run_flow_sfm(
         focal = 0.5 * full[0] / math.tan(math.radians(hfov_deg) / 2)
         db_info = write_database(db, images, names, tracks, focal_px=focal, max_gap=max_gap)
         timing["database"] += time.perf_counter() - t0
-        recs, t = map_tracks(db, images, work_dir / f"models_{folder.name}", mapper=mapper)
+        row = {"pass": folder.name, "keyframes": len(paths), "tracks": tracks.stats, "database": db_info}
+        jobs.append((row, pool.submit(_map_pass, db, images, work_dir, folder.name, len(paths), mapper)))
+    t0 = time.perf_counter()
+    for row, job in jobs:
+        best, used, recs, t = job.result()
         timing["verification"] += t["verification_s"]
         timing["mapping"] += t["mapping_s"]
-        best = max(recs.values(), key=lambda r: r.num_reg_images(), default=None)
-        used = mapper
-        if best is None or best.num_reg_images() < 0.8 * len(paths):
-            # the other mapper on the same verified pairs; keep whichever registers more
-            other = "global" if mapper == "incremental" else "incremental"
-            recs2, t2 = map_tracks(db, images, work_dir / f"models_{folder.name}_{other}", mapper=other, verify=False)
-            timing["mapping"] += t2["mapping_s"]
-            best2 = max(recs2.values(), key=lambda r: r.num_reg_images(), default=None)
-            if best2 is not None and (best is None or best2.num_reg_images() > best.num_reg_images()):
-                best, used, recs = best2, other, recs2
-        rows = summarize(recs)
-        per_pass.append({"pass": folder.name, "keyframes": len(paths), "tracks": tracks.stats, "database": db_info,
-                         "mapper": used, "models": rows, "timing_s": t})  # fmt: skip
+        per_pass.append({**row, "mapper": used, "models": summarize(recs), "timing_s": t})
         if best is not None and best.num_reg_images() >= min_images:  # one model per pass: the largest
-            found.append((best.num_reg_images(), folder.name, 0, best))
+            found.append((best.num_reg_images(), row["pass"], 0, best))
+    found.sort(key=lambda f: f[1])  # pass order, so equal-sized models keep a stable numbering
+    pool.shutdown()
+    per_pass.sort(key=lambda r: r["pass"])
+    timing["mapping_wait"] = time.perf_counter() - t0  # mapping left after the last pass was tracked
     del raft
     torch.cuda.empty_cache()
     found.sort(key=lambda f: -f[0])

@@ -187,18 +187,23 @@ def estimate_up(
         pts = pts[rng.choice(len(pts), max_points, replace=False)]
     extent = float(np.linalg.norm(np.ptp(pts, axis=0))) or 1.0
     threshold = inlier_fraction_of_extent * extent
-    best_normal, best_count = np.array([0.0, 0.0, 1.0]), -1
-    for _ in range(iterations):
-        a, b, c = pts[rng.choice(len(pts), 3, replace=False)]
-        normal = np.cross(b - a, c - a)
-        norm = np.linalg.norm(normal)
-        if norm < 1e-12:
-            continue
-        normal /= norm
-        count = int(np.sum(np.abs((pts - a) @ normal) < threshold))
-        if count > best_count:
-            best_normal, best_count = normal, count
-            anchor = a
+    # All hypotheses at once: [n, k] residuals in chunks, instead of one matrix-vector product per
+    # iteration (0.8 s per model on a loaded 24-thread host; this is ~50 ms).
+    triples = np.stack([rng.choice(len(pts), 3, replace=False) for _ in range(iterations)])
+    a, b, c = pts[triples[:, 0]], pts[triples[:, 1]], pts[triples[:, 2]]
+    normals = np.cross(b - a, c - a)
+    norms = np.linalg.norm(normals, axis=1)
+    ok = norms > 1e-12
+    if not ok.any():
+        raise ReconstructionError("degenerate points: no plane hypothesis")
+    a, normals = a[ok], normals[ok] / norms[ok, None]
+    offsets = np.einsum("kj,kj->k", a, normals)  # plane k: x . n_k = offset_k
+    counts = np.zeros(len(normals), dtype=np.int64)
+    for s in range(0, len(normals), 64):
+        res = np.abs(pts @ normals[s : s + 64].T - offsets[s : s + 64])
+        counts[s : s + 64] = (res < threshold).sum(axis=0)
+    best = int(np.argmax(counts))  # first maximum: the earliest hypothesis wins ties, as before
+    best_normal, anchor = normals[best], a[best]
     # Refine on the inliers by PCA.
     inliers = pts[np.abs((pts - anchor) @ best_normal) < threshold]
     centered = inliers - inliers.mean(axis=0)

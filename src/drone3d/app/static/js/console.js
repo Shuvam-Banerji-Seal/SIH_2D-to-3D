@@ -85,11 +85,15 @@ async function engineTick() {
     </dl>
     ${e.poisoned ? `<div class="err">${esc(e.poisoned)}</div>` : ''}
     <div class="row" style="margin-top:14px">
-      ${e.online ? `<button class="btn small danger" id="engStop">${icon.power}Stop engine</button>` : `<button class="btn primary" id="engStart">${icon.power}Bring engine online</button>`}
+      ${e.online ? `<button class="btn small danger" id="engStop">${icon.power}Stop engine</button>
+        <select id="engSlots" style="width:auto">${[1, 2, 3].map((n) => `<option value="${n}" ${n === (e.slots || 1) ? 'selected' : ''}>${n} slot${n > 1 ? 's' : ''}</option>`).join('')}</select>
+        <button class="btn small" id="engRestart" ${e.draining ? 'disabled' : ''}>${e.draining ? 'draining…' : 'Restart (keeps the queue)'}</button>` : `<button class="btn primary" id="engStart">${icon.power}Bring engine online</button>`}
     </div>`;
   const start = $('#engStart'), stop = $('#engStop');
   if (start) start.onclick = () => act(() => post('/api/engine/start', { warm: null }), 'Starting the engine (torch + CUDA)…', () => 'Engine online');
   if (stop) stop.onclick = () => act(() => post('/api/engine/stop', { force: false }), 'Stopping the engine…', () => 'Engine stopped; its GPU memory is free');
+  const rs = $('#engRestart');
+  if (rs) rs.onclick = () => act(() => post('/api/engine/restart', { slots: +$('#engSlots').value }), 'Draining: running jobs finish, the queue is kept…', () => 'The engine restarts when its running jobs finish');
   renderModels(e);
   if (e.online && !state.caps && state.capsPid !== e.pid) { state.capsPid = e.pid; loadCaps(); }
 }

@@ -241,9 +241,10 @@ def test_marigold_runs_take_the_engine_to_themselves(tmp_path: Path) -> None:
     engine._wake.set()
     for t in engine._threads:
         t.join(timeout=5)
-    plain = lambda n: Job(
-        name=n, run_dir=str(tmp_path / n), config={"stages": ["ingest", "keyframes"]}
-    )  # noqa: E731
+
+    def plain(n: str) -> Job:
+        return Job(name=n, run_dir=str(tmp_path / n), config={"stages": ["ingest", "keyframes"]})
+
     marigold = Job(
         name="m", run_dir=str(tmp_path / "m"), config={"stages": ["ingest", "depth", "splat"]}
     )
@@ -278,3 +279,38 @@ def test_raft_wrappers_are_per_engine_slot(monkeypatch: pytest.MonkeyPatch) -> N
     assert (
         other["w"] is not here and other["w"].net is here.net
     )  # own buffers and graphs, one network
+
+
+def test_restart_drains_and_keeps_the_queue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from drone3d.engine import service
+    from drone3d.engine.service import Engine, Job
+
+    exits = []
+    monkeypatch.setattr(service.os, "_exit", lambda code: exits.append(code))
+    engine = Engine(tmp_path, tmp_path / "outputs", device="cpu", slots=1)
+    engine._stop.set()
+    engine._wake.set()
+    for t in engine._threads:
+        t.join(timeout=5)
+    busy = Job(
+        name="busy", run_dir=str(tmp_path / "busy"), config={"stages": ["ingest"]}, status="running"
+    )
+    engine.running["busy"] = busy
+    engine.queue.append(
+        Job(name="next", run_dir=str(tmp_path / "next"), config={"stages": ["ingest"]})
+    )
+    engine.restart(slots=2)
+    assert engine._next() is None  # draining: nothing new starts
+    time.sleep(1.0)
+    assert exits == []  # still waiting for the running job
+    engine.running.clear()
+    deadline = time.time() + 5
+    while not exits and time.time() < deadline:
+        time.sleep(0.1)
+    assert exits == [0]
+    assert json.loads((tmp_path / "outputs" / ".engine_restart").read_text()) == {"slots": 2}
+    assert [
+        r["name"] for r in json.loads((tmp_path / "outputs" / ".engine_queue.json").read_text())
+    ] == ["next"]

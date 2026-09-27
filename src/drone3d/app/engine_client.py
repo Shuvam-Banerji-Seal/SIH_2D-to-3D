@@ -84,10 +84,12 @@ class EngineClient:
         return {**base, "online": True, **s}
 
     # ---------------------------------------------------------- lifecycle
-    def start(self, warm: list[str] | None = None) -> dict[str, Any]:
+    def start(self, warm: list[str] | None = None, slots: int | None = None) -> dict[str, Any]:
         with self._lock:
             if self.online():
                 return {"started": False, "reason": "already online"}
+            if slots is not None:
+                self.slots = int(slots)
             cmd = [str(Path(sys.executable).with_name("drone3d")), "engine", "--port", str(self.default_port),
                    "--outputs", str(self.outputs), "--slots", str(self.slots)]  # fmt: skip
             if warm is not None:
@@ -124,18 +126,24 @@ class EngineClient:
         An engine that exits for a restart leaves ``.engine_poisoned`` (and its
         queue and warm list); one we started also reports exit code 3.
         """
-        marker = self.outputs / ".engine_poisoned"
+        marker, handover = self.outputs / ".engine_poisoned", self.outputs / ".engine_restart"
         while True:
             time.sleep(1.0)
             proc = self.proc
             if proc is not None and proc.poll() is not None:
                 self.last_exit = proc.returncode
                 self.proc = None
-            if marker.is_file() and not self.online():
-                marker.unlink(missing_ok=True)
-                self.restarts += 1
-                with contextlib.suppress(EngineError):
-                    self.start(warm=None)  # the engine re-warms what it held from .engine_warm.json
+            for m in (marker, handover):
+                if m.is_file() and not self.online():
+                    settings = {}
+                    with contextlib.suppress(OSError, ValueError):
+                        settings = json.loads(m.read_text() or "{}") if m is handover else {}
+                    m.unlink(missing_ok=True)
+                    self.restarts += 1
+                    with contextlib.suppress(
+                        EngineError
+                    ):  # the engine re-warms what it held and resumes the queue
+                        self.start(warm=None, slots=settings.get("slots"))
 
     # ------------------------------------------------------------ forwarding
     def load(self, key: str) -> Any:
@@ -161,6 +169,9 @@ class EngineClient:
 
     def live_stop(self, name: str) -> Any:
         return self._call("POST", f"/live/{name}/stop", {}, timeout=10)
+
+    def restart(self, slots: int | None = None) -> Any:
+        return self._call("POST", "/restart", {"slots": slots}, timeout=10)
 
     def capabilities(self) -> Any:
         return self._call("GET", "/capabilities", timeout=30)

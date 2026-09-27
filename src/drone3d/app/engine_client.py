@@ -66,9 +66,25 @@ class EngineClient:
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
             raise EngineError(f"engine unreachable at {self.url}: {exc}", 503) from exc
 
-    def online(self) -> bool:
+    def _pid(self) -> int | None:
         try:
-            self._call("GET", "/health", timeout=0.6)
+            return int(json.loads((self.outputs / ".engine.json").read_text())["pid"])
+        except (OSError, ValueError, KeyError):
+            return None
+
+    def online(self) -> bool:
+        """Is an engine running? A busy engine can be slow to answer HTTP (its GIL is shared with the run's
+        Python work), so its live process counts; HTTP decides only when there is no record of one."""
+        pid = self._pid()
+        if pid is not None:
+            try:  # alive, and still a drone3d engine (a stale record's pid may have been reused)
+                cmd = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+                if any(c.endswith(b"drone3d") for c in cmd) and b"engine" in cmd:
+                    return True
+            except OSError:
+                pass
+        try:
+            self._call("GET", "/health", timeout=3.0)
             return True
         except EngineError:
             return False
@@ -77,9 +93,9 @@ class EngineClient:
         base = {"url": self.url, "managed": self.proc is not None and self.proc.poll() is None,
                 "restarts": self.restarts, "last_exit": self.last_exit}  # fmt: skip
         try:
-            s = self._call("GET", "/status", timeout=2.0)
+            s = self._call("GET", "/status", timeout=6.0)
         except EngineError as exc:
-            return {**base, "online": False, "error": str(exc)}
+            return {**base, "online": self.online(), "busy_unresponsive": self.online(), "error": str(exc)}
         s.pop("gpu", None)  # the console samples the GPU itself, every second
         return {**base, "online": True, **s}
 

@@ -215,6 +215,10 @@ def fast_section(macros: dict[str, str]) -> list[str]:
         total_fast = sum(r["fast_s"] for r in am)
         macros.update(BenchN=str(len(am)), BenchWithin=str(ok), BenchRate=f"{total_fast / total_video:.2f}",
                       BenchFootage=f"{total_video / 60:.0f}")  # fmt: skip
+        comp = sorted(r["completeness"] for r in am if r.get("completeness") is not None)
+        if comp:
+            macros.update(BenchComplMedian=f"{comp[len(comp) // 2] if len(comp) % 2 else (comp[len(comp) // 2 - 1] + comp[len(comp) // 2]) / 2:.2f}",
+                          BenchComplMin=f"{comp[0]:.2f}", BenchComplMax=f"{comp[-1]:.2f}")  # fmt: skip
         misses = [r for r in am if not r["fast_within_budget"]]
         fpv = [r for r in misses if (r["keyframes"] or 0) / max(r["seconds"] or 1, 1) > 4]
         short = [r for r in misses if r not in fpv and (r["seconds"] or 0) < 30]

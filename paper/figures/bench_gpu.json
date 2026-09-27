@@ -1,0 +1,58 @@
+{
+ "gpu": "NVIDIA A100 80GB PCIe",
+ "torch": "2.14.0+cu132",
+ "cuda": "13.2",
+ "raft": {
+  "pairs": 64,
+  "size": [
+   640,
+   360
+  ],
+  "context": {
+   "util_before_pct": 39.2,
+   "foreign_processes": 2,
+   "memory_used_gb": 7.07985408
+  },
+  "stock_b16_flows_per_s": 86.80644303017232,
+  "patched_b32_flows_per_s": 109.16655711387055,
+  "patched_b32_mean_abs_diff_px": 0.0,
+  "graph_b32_flows_per_s": 110.1772117764499,
+  "graph_b32_mean_abs_diff_px": 0.0
+ },
+ "decode": {
+  "context": {
+   "util_before_pct": 34.8,
+   "foreign_processes": 2,
+   "memory_used_gb": 11.622285312
+  },
+  "ffmpeg4_cuvid": {
+   "seconds": 13.954556938959286,
+   "source_fps": 94.30611131234853,
+   "ok": true
+  },
+  "ffmpeg9_nvdec": {
+   "seconds": 8.018302745884284,
+   "source_fps": 164.1245088526359,
+   "ok": true
+  },
+  "ffmpeg9_cpu": {
+   "seconds": 11.783676234073937,
+   "source_fps": 111.6799183767987,
+   "ok": true
+  },
+  "frames": 1316,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "codec": "vp9"
+ },
+ "nvjpeg": {
+  "ms_per_4k_frame": 1.2574723456054926,
+  "context": {
+   "util_before_pct": 4.2,
+   "foreign_processes": 3,
+   "memory_used_gb": 12.443910144
+  }
+ }
+}

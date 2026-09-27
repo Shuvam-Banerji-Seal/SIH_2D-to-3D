@@ -67,7 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=f"Comma-separated subset of: {', '.join(ALL_STAGES)}",
     )
-    run_parser.add_argument("--quiet", action="store_true", help="Only log warnings and errors")
+    run_parser.add_argument("--quiet", action="store_true", help="No console log (logs/run.log still records everything)")
     run_parser.set_defaults(func=cmd_run)
 
     init_parser = subparsers.add_parser("init-config", help="Write a default configuration file")
@@ -112,9 +112,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     except ConfigError as exc:
         print(f"configuration error: {exc}", file=sys.stderr)
         return 2
-    if args.quiet:
-        config.log_level = "WARNING"
-
     stages = [stage.strip() for stage in args.stages.split(",")] if args.stages else None
     try:
         pipeline = Pipeline(config, args.run_dir)

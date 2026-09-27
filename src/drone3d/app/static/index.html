@@ -3,22 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>drone3d — single-pass drone video to 3D</title>
-<link rel="icon" href="data:,">
+<title>drone3d console · single-pass drone video to 3D</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 29 10v12L16 29 3 22V10z' fill='%23ff9f1c'/%3E%3Cpath d='M16 9 23 13v6l-7 4-7-4v-6z' fill='%23090d12'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/app.css">
+<script type="importmap">
+{ "imports": { "three": "/viewer/vendor/three.module.min.js", "three/addons/": "/viewer/vendor/addons/" } }
+</script>
 </head>
 <body>
+<aside class="rail">
+  <a class="mark" href="#/console" title="drone3d">
+    <svg viewBox="0 0 32 32" width="36" height="36"><path d="M16 2.5 29 9.7v12.6L16 29.5 3 22.3V9.7z" fill="#ff9f1c"/><path d="M16 9 22.4 12.6v7L16 23.2l-6.4-3.6v-7z" fill="#090d12"/><circle cx="16" cy="16" r="2.2" fill="#4fd1e8"/></svg>
+  </a>
+  <a class="nav" href="#/console" data-nav="console"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Console</a>
+  <a class="nav" href="#/new" data-nav="new"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>Build</a>
+  <a class="nav" href="#/live" data-nav="live"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg>Live</a>
+  <a class="nav" href="#/runs" data-nav="runs"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Runs</a>
+  <a class="nav" href="#/about" data-nav="about"><svg viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM8 7h6M8 11h6"/></svg>Method</a>
+  <div class="spacer"></div>
+  <div class="ver" id="ver"></div>
+</aside>
 <header class="top">
-  <a class="brand" href="#/new"><span class="logo">◈</span> drone3d <span class="tag">single-pass drone video → 3D model</span></a>
-  <nav>
-    <a href="#/new" data-nav="new">New reconstruction</a>
-    <a href="#/runs" data-nav="runs">Runs</a>
-    <a href="#/about" data-nav="about">About</a>
-  </nav>
-  <div class="sys" id="sys" title="GPU status">GPU …</div>
+  <div class="brand">drone<b>3d</b></div>
+  <span class="ps">SIH 2026 · PS 26158 · NTRO</span>
+  <div class="links">
+    <span class="link-dot" title="web console"><span class="led ok" id="ledApi"></span>API</span>
+    <span class="link-dot" id="engineDot" title="warm GPU engine"><span class="led" id="ledEngine"></span><span id="engineTxt">engine</span></span>
+    <span class="link-dot" id="gpuDot" title="GPU"><span class="led" id="ledGpu"></span><span id="gpuTxt">GPU</span></span>
+  </div>
 </header>
 <main id="main"></main>
-<footer class="foot">SIH 2026 · Problem Statement 26158 (NTRO) · <span id="ver"></span></footer>
-<script type="module" src="/static/app.js"></script>
+<div class="toast" id="toast"></div>
+<script type="module" src="/static/js/app.js"></script>
 </body>
 </html>

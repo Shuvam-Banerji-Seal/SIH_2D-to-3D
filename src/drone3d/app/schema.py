@@ -121,7 +121,7 @@ def profiles(config_dir: Path) -> list[dict]:
         desc = " ".join(
             h
             for h in header
-            if h and not h.startswith(("uv run", "--", "[", "drone3d ")) and "--set" not in h
+            if h and not h.startswith(("uv run", "--", "[", "drone3d run", "drone3d ui", "drone3d view")) and "--set" not in h
         ).strip()
         out.append(
             {

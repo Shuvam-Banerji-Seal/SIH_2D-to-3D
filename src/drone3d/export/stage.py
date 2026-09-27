@@ -208,6 +208,10 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         rec = pycolmap.Reconstruction(m["model"])
         posed = [im for im in sorted(rec.images.values(), key=lambda i: i.name) if im.has_pose]
         cams = np.array([im.projection_center() for im in posed])
+        # world-from-camera rotations: the viewer flies the drone's path and looks through its keyframes
+        cam_rots = np.array([im.cam_from_world().rotation.matrix().T for im in posed])
+        cam0 = rec.cameras[posed[0].camera_id]
+        intr = {"f": float(cam0.focal_length_x), "width": int(cam0.width), "height": int(cam0.height)}
         # initial viewer pose: the middle keyframe's camera, looking at the model's median depth
         mid = posed[len(posed) // 2]
         axis = mid.cam_from_world().rotation.matrix()[2]  # optical axis in world coordinates
@@ -236,6 +240,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             tr = geo["transform"]
             t = SimilarityTransform(scale=tr["scale"], rotation=np.asarray(tr["rotation"]), translation=np.asarray(tr["translation"]))
             v, p, cams, view, scale = t.apply(v), t.apply(p), t.apply(cams), t.apply(view), float(t.scale)
+            cam_rots = np.asarray(t.rotation) @ cam_rots
             dv = t.apply(dv)
             if baked is not None:
                 baked = (t.apply(baked[0]), *baked[1:])
@@ -245,6 +250,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             with clock("level"):
                 rot = _level(p, cams)
             v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
+            cam_rots = rot @ cam_rots
             dv = dv @ rot.T
             if baked is not None:
                 baked = (baked[0] @ rot.T, *baked[1:])
@@ -302,6 +308,8 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             "name": f"model {name}",
             "mesh": f"model_{name}/mesh_textured.glb" if baked is not None else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),
             "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units, "dir": f"model_{name}",
+            "camera_rotations": cam_rots.reshape(len(cam_rots), 9).round(5).tolist(), "intrinsics": intr,
+            "images": [im.name for im in posed],
             "splat": f"model_{name}/splats.splat" if splat_file is not None else None,
             "georeferenced": geo is not None, "up": [0, 0, 1],
             # frame the view on the bulk of the model, not on stray far-field fragments
@@ -320,7 +328,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             scene_models[k]["files"].append({"label": path.name, "path": rel})
     pool.shutdown()
     if viewer and scene_models:
-        for item in ("index.html", "vendor"):
+        for item in ("index.html", "explorer.js", "vendor"):
             src, dst = VIEWER / item, out_dir / item
             if dst.exists():
                 shutil.rmtree(dst) if dst.is_dir() else dst.unlink()

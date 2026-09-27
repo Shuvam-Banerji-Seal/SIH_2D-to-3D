@@ -6,25 +6,27 @@
 <title>drone3d viewer</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { --bg: #0d1520; --panel: #16212f; --line: #2a3a4f; --text: #e8edf3; --muted: #93a4b8; --accent: #ff9933; --ok: #3fb950; }
+  :root { --bg: #0b1118; --panel: #0e151cdd; --line: #26364a; --text: #e7edf3; --muted: #8b9bac; --saffron: #ff9f1c; --cyan: #4fd1e8; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 "IBM Plex Sans", system-ui, sans-serif; overflow: hidden; }
   #view { position: fixed; inset: 0; }
-  #panel { position: fixed; top: 12px; left: 12px; width: min(320px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto;
-           background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-  h1 { font-size: 15px; margin: 0 0 2px; } .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
-  label { color: var(--muted); } input[type=range] { width: 130px; }
-  button { background: #22344a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; font: inherit; }
-  select { background: #22344a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; max-width: 170px; }
-  button.on { background: var(--accent); color: #111; border-color: var(--accent); }
+  #panel { position: fixed; top: 12px; left: 12px; width: min(300px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto;
+           background: var(--panel); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  h1 { font: 800 20px/1 "Big Shoulders Display", "Arial Narrow", sans-serif; letter-spacing: .04em; text-transform: uppercase; margin: 0 0 3px; }
+  h1 b { color: var(--saffron); }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  h2 { font: 700 11px/1 "Big Shoulders Display", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 12px 0 6px; }
+  .lay { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  button, select { background: #16212d; color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; cursor: pointer; font: inherit; }
+  button.on { border-color: var(--saffron); color: var(--saffron); }
+  select { width: 100%; }
+  .row { display: flex; gap: 6px; align-items: center; } .row > * { flex: 1; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; } td { padding: 2px 0; } td:last-child { text-align: right; color: var(--muted); }
-  .sec { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
-  .sec h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
-  a { color: #5ad1ff; } #files a { display: inline-block; margin: 2px 8px 2px 0; }
-  #measures div { font-variant-numeric: tabular-nums; }
-  #hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 12px; background: #0d1520cc; padding: 4px 10px; border-radius: 6px; }
-  #status { color: var(--accent); font-size: 12px; }
+  a { color: var(--cyan); } #files a { display: inline-block; margin: 2px 8px 2px 0; font-size: 12px; }
+  #hud { position: fixed; right: 12px; bottom: 12px; font: 11px ui-monospace, monospace; color: var(--muted); background: #0b1118cc; padding: 4px 8px; border-radius: 6px; }
+  #hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 12px; background: #0b1118cc; padding: 4px 10px; border-radius: 6px; }
+  #status { color: var(--saffron); font-size: 12px; margin-top: 6px; }
+  #measures div { font: 12px ui-monospace, monospace; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }
@@ -33,148 +35,49 @@
 <body>
 <div id="view"></div>
 <div id="panel">
-  <h1 id="title">drone3d</h1>
+  <h1>drone<b>3d</b></h1>
   <div class="sub" id="subtitle">loading…</div>
-  <div class="row"><label>Model</label><select id="pick"></select></div>
-  <div class="row"><label>Mesh</label><button id="tMesh" class="on">on</button></div>
-  <div class="row"><label>Point cloud</label><button id="tPts">off</button></div>
-  <div class="row"><label>Camera track</label><button id="tCams" class="on">on</button></div>
-  <div class="row"><label>Point size</label><input id="pSize" type="range" min="0.5" max="6" step="0.5" value="1.5"></div>
-  <div class="row"><label>Measure</label><button id="tMeasure">off</button></div>
-  <div class="sec"><h2>Measurements</h2><div id="measures"><span class="sub">Turn on Measure, click two points.</span></div></div>
-  <div class="sec"><h2>Model</h2><table id="stats"></table></div>
-  <div class="sec"><h2>Downloads</h2><div id="files"></div></div>
+  <select id="pick"></select>
+  <h2>Layers</h2><div class="lay" id="layers"></div>
+  <h2>Navigate</h2><div class="row"><button data-nav="orbit" class="on">Orbit</button><button data-nav="fly">Fly</button><button data-nav="follow">Follow flight</button></div>
+  <h2>Render</h2><div class="row"><button data-rs="0.5">0.5×</button><button data-rs="1" class="on">1×</button><button data-rs="1.5">1.5×</button><button data-rs="2">2×</button></div>
+  <div class="row" style="margin-top:6px"><span class="sub" style="margin:0;flex:none">points</span><input id="pSize" type="range" min="0.5" max="6" step="0.5" value="1.5"></div>
+  <h2>Measure</h2><div class="row"><button id="tMeasure">Measure</button><button id="tShot">Screenshot</button></div><div id="measures"></div>
+  <h2>Model</h2><table id="stats"></table>
+  <h2>Downloads</h2><div id="files"></div>
   <div id="status"></div>
 </div>
-<div id="hint">drag: orbit · right-drag: pan · wheel: zoom · double-click: focus</div>
+<div id="hint">orbit: drag · right-drag pan · wheel zoom · fly: W A S D Q E, drag to look</div>
+<div id="hud"></div>
 <script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
-
+import { Explorer } from './explorer.js';
 const $ = (id) => document.getElementById(id);
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d1520);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-$('view').appendChild(renderer.domElement);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1e6);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-const groups = { mesh: new THREE.Group(), pts: new THREE.Group(), cams: new THREE.Group(), marks: new THREE.Group() };
-Object.values(groups).forEach((g) => scene.add(g));
-groups.pts.visible = false;
-
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
-addEventListener('resize', resize); resize();
-
+const x = new Explorer($('view'));
+x.addEventListener('status', (e) => { $('status').textContent = e.detail; });
+x.addEventListener('tick', () => { const s = x.stats(); $('hud').textContent = `${s.fps} fps · ${s.triangles.toLocaleString()} tris · ${s.splats.toLocaleString()} splats`; });
 const scn = await (await fetch('scene.json')).json();
 const all = scn.models || [scn];
-const pickIdx = Math.min(all.length - 1, Math.max(0, +(new URLSearchParams(location.search).get('m') || 0)));
-const cfg = all[pickIdx];
-$('pick').innerHTML = all.map((m, i) => `<option value="${i}" ${i === pickIdx ? 'selected' : ''}>${m.name}</option>`).join('');
-$('pick').addEventListener('change', (e) => { location.search = '?m=' + e.target.value; });
-const units = cfg.units || 'model units';
-$('title').textContent = scn.title || cfg.title || 'drone3d';
-$('subtitle').textContent = cfg.georeferenced ? `georeferenced · ${units}` : `not georeferenced · ${units} (SfM scale)`;
-if (cfg.up) camera.up.set(...cfg.up);
-
-const statsRows = Object.entries(cfg.stats || {});
-$('stats').innerHTML = statsRows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
-$('files').innerHTML = (cfg.files || []).map((f) => `<a href="${f.path}" download>${f.label}</a>`).join('') || '<span class="sub">none</span>';
-
-const box = new THREE.Box3();
-const status = (s) => { $('status').textContent = s; };
-async function loadMesh() {
-  if (!cfg.mesh) return;
-  status('loading mesh…');
-  const gltf = await new GLTFLoader().loadAsync(cfg.mesh);
-  gltf.scene.traverse((o) => { if (o.isMesh) {
-    const map = o.material && o.material.map;  // keep a baked texture; otherwise vertex colours, unlit
-    if (map) {  // triangle-soup atlas: mip levels would blend neighbouring cells into a visible grid
-      map.generateMipmaps = false; map.minFilter = THREE.LinearFilter; map.anisotropy = renderer.capabilities.getMaxAnisotropy(); map.needsUpdate = true;
-    }
-    const vc = !map && !!o.geometry.attributes.color;
-    o.material = new THREE.MeshBasicMaterial({ map: map || null, vertexColors: vc, color: map || vc ? 0xffffff : 0xbfc8d4, side: THREE.DoubleSide });
-  } });
-  groups.mesh.add(gltf.scene); box.expandByObject(gltf.scene);
-}
-let pointsObj = null;
-async function loadPoints() {
-  if (!cfg.points) return;
-  status('loading point cloud…');
-  const geo = await new PLYLoader().loadAsync(cfg.points);
-  const mat = new THREE.PointsMaterial({ size: 1.5, sizeAttenuation: false, vertexColors: !!geo.attributes.color });
-  pointsObj = new THREE.Points(geo, mat); groups.pts.add(pointsObj);
-  geo.computeBoundingBox(); if (!cfg.mesh) box.union(geo.boundingBox);
-}
-function addCameras() {
-  const c = cfg.cameras || []; if (c.length < 2) return;
-  const pts = c.map((p) => new THREE.Vector3(...p));
-  groups.cams.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xff9933 })));
-  const dots = new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts), new THREE.PointsMaterial({ color: 0xff9933, size: 5, sizeAttenuation: false }));
-  groups.cams.add(dots);
-  pts.forEach((p) => box.expandByPoint(p));
-}
-await loadMesh().catch((e) => status('load failed: ' + e));  // the point cloud loads when first shown
-addCameras();
-function frame() {
-  if (cfg.bounds && cfg.bounds.length) { box.makeEmpty(); cfg.bounds.forEach((q) => box.expandByPoint(new THREE.Vector3(...q))); }
-  if (box.isEmpty()) return;
-  const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
-  controls.target.copy(c);
-  const dir = new THREE.Vector3(0.6, -0.9, 0.7).normalize();
-  if (!cfg.up || cfg.up[2] === 0) dir.set(0.6, 0.7, 0.9).normalize();
-  camera.position.copy(c).addScaledVector(dir, r * 2.2); camera.near = r / 1000; camera.far = r * 100;
-  if (cfg.view) {  // start where the drone was, looking where it looked (pulled back a little)
-    const eye = new THREE.Vector3(...cfg.view.eye), tgt = new THREE.Vector3(...cfg.view.target);
-    const back = eye.clone().sub(tgt);
-    controls.target.copy(tgt); camera.position.copy(eye).addScaledVector(back, 0.2).addScaledVector(camera.up, 0.12 * back.length());
-  }
-  camera.updateProjectionMatrix();
-}
-frame(); status('');
-
-const toggle = (btn, group) => btn.addEventListener('click', () => { group.visible = !group.visible; btn.classList.toggle('on', group.visible); btn.textContent = group.visible ? 'on' : 'off'; });
-toggle($('tMesh'), groups.mesh); toggle($('tPts'), groups.pts); toggle($('tCams'), groups.cams);
-$('tPts').addEventListener('click', () => { if (groups.pts.visible && !pointsObj) loadPoints().then(() => status('')).catch((e) => status('load failed: ' + e)); });
-if (!cfg.mesh) { groups.pts.visible = true; $('tPts').classList.add('on'); $('tPts').textContent = 'on'; await loadPoints(); frame(); status(''); }
-$('pSize').addEventListener('input', (e) => { if (pointsObj) pointsObj.material.size = +e.target.value; });
-
-// ---- measuring: two clicks -> distance and height difference
-let measuring = false, pending = null;
-const measures = [];
-$('tMeasure').addEventListener('click', () => { measuring = !measuring; $('tMeasure').classList.toggle('on', measuring); $('tMeasure').textContent = measuring ? 'on' : 'off'; pending = null; });
-const ray = new THREE.Raycaster();
-function pick(ev) {
-  const r = renderer.domElement.getBoundingClientRect();
-  ray.setFromCamera(new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1), camera);
-  ray.params.Points.threshold = box.getSize(new THREE.Vector3()).length() / 2000;
-  const targets = [groups.mesh.visible && groups.mesh, groups.pts.visible && groups.pts].filter(Boolean);
-  const hit = ray.intersectObjects(targets, true)[0];
-  return hit ? hit.point.clone() : null;
-}
-function marker(p, color) {
-  const s = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color, depthTest: false }));
-  s.scale.setScalar(box.getSize(new THREE.Vector3()).length() / 400); s.position.copy(p); s.renderOrder = 10; groups.marks.add(s);
-}
-const upAxis = new THREE.Vector3(...(cfg.up || [0, 0, 1])).normalize();
-let down = null;
-renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener('pointerup', (ev) => {
-  if (!measuring || !down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4) return;
-  const p = pick(ev); if (!p) return;
-  if (!pending) { pending = p; marker(p, 0xff9933); return; }
-  marker(p, 0x3fb950);
-  groups.marks.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pending, p]), new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false })));
-  const d = pending.distanceTo(p), dz = p.clone().sub(pending).dot(upAxis);
-  measures.push({ d, dz }); pending = null;
-  $('measures').innerHTML = measures.map((m, i) => `<div>#${i + 1}: ${m.d.toFixed(2)} ${units} · Δh ${m.dz.toFixed(2)}</div>`).join('');
-});
-renderer.domElement.addEventListener('dblclick', (ev) => { const p = pick(ev); if (p) controls.target.copy(p); });
-
-renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+const pick = Math.min(all.length - 1, Math.max(0, +(new URLSearchParams(location.search).get('m') || 0)));
+const cfg = all[pick];
+$('pick').innerHTML = all.map((m, i) => `<option value="${i}" ${i === pick ? 'selected' : ''}>${m.name}</option>`).join('');
+$('pick').onchange = (e) => { location.search = '?m=' + e.target.value; };
+$('subtitle').textContent = `${scn.title || ''} · ${cfg.georeferenced ? 'georeferenced, metres' : 'levelled, SfM units'}`;
+$('stats').innerHTML = Object.entries(cfg.stats || {}).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+$('files').innerHTML = (cfg.files || []).map((f) => `<a href="${f.path}" download>${f.label}</a>`).join('') || '—';
+await x.setScene([cfg]);
+const LAYERS = [['mesh', 'Mesh'], ['texture', 'Texture'], ['shaded', 'Shaded'], ['wireframe', 'Wire'], ['points', 'Points'], ['splats', 'Splats'], ['cameras', 'Flight path'], ['grid', 'Grid']];
+const drawLayers = () => { $('layers').innerHTML = LAYERS.filter(([k]) => k !== 'splats' || cfg.splat).map(([k, t]) => `<button data-l="${k}" class="${x.layers[k] ? 'on' : ''}">${t}</button>`).join('');
+  $('layers').querySelectorAll('button').forEach((b) => (b.onclick = async () => { await x.setLayer(b.dataset.l, !x.layers[b.dataset.l]); drawLayers(); })); };
+drawLayers();
+const navBtns = document.querySelectorAll('[data-nav]');
+const setNav = (m) => navBtns.forEach((b) => b.classList.toggle('on', b.dataset.nav === m));
+navBtns.forEach((b) => (b.onclick = () => { b.dataset.nav === 'follow' ? x.followFlight(true) : x.setNavigation(b.dataset.nav); setNav(b.dataset.nav); x.renderer.domElement.focus(); }));
+x.addEventListener('followend', () => setNav('fly'));
+document.querySelectorAll('[data-rs]').forEach((b) => (b.onclick = () => { x.setRenderScale(+b.dataset.rs); document.querySelectorAll('[data-rs]').forEach((c) => c.classList.toggle('on', c === b)); }));
+$('pSize').oninput = (e) => x.setPointSize(+e.target.value);
+$('tMeasure').onclick = () => { x.setMeasuring(!x.measuring); $('tMeasure').classList.toggle('on', x.measuring); };
+x.addEventListener('measure', () => { $('measures').innerHTML = x.measures.map((m, i) => `<div>#${i + 1} ${m.d.toFixed(2)} ${m.units} · Δh ${m.dz.toFixed(2)}</div>`).join(''); });
+$('tShot').onclick = async () => { const b = await x.screenshot(); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'drone3d.png'; a.click(); };
 </script>
 </body>
 </html>

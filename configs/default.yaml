@@ -1,4 +1,6 @@
-# drone3d default configuration (every key optional; these are the built-in defaults).
+# Default profile: the full Gaussian-splatting pipeline -- SIFT structure from motion,
+# Marigold v2 depth priors, 3D Gaussian Splatting and a mesh from the splats. Every key
+# optional; these are the built-in defaults. Hours per clip, not the time budget.
 #
 #   uv run drone3d run --config configs/default.yaml --set ingest.video=/data/pass.mp4
 #

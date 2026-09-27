@@ -23,7 +23,7 @@ from typing import Any
 
 __all__ = ["EngineClient", "EngineError"]
 
-POISONED_EXIT = 3
+POISONED_EXIT = 3  # the engine's exit code after a sticky CUDA fault
 
 
 class EngineError(RuntimeError):
@@ -119,15 +119,20 @@ class EngineClient:
         return result
 
     def _supervise(self) -> None:
-        """Restart an engine we started when it exits for a restart (sticky CUDA fault)."""
+        """Restart the engine after a sticky CUDA fault, whether we started it or found it running.
+
+        An engine that exits for a restart leaves ``.engine_poisoned`` (and its
+        queue and warm list); one we started also reports exit code 3.
+        """
+        marker = self.outputs / ".engine_poisoned"
         while True:
             time.sleep(1.0)
             proc = self.proc
-            if proc is None or proc.poll() is None:
-                continue
-            self.last_exit = proc.returncode
-            self.proc = None
-            if proc.returncode == POISONED_EXIT:
+            if proc is not None and proc.poll() is not None:
+                self.last_exit = proc.returncode
+                self.proc = None
+            if marker.is_file() and not self.online():
+                marker.unlink(missing_ok=True)
                 self.restarts += 1
                 with contextlib.suppress(EngineError):
                     self.start(warm=None)  # the engine re-warms what it held from .engine_warm.json

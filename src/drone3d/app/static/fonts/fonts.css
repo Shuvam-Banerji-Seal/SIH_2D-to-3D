@@ -1,0 +1,15 @@
+/* Big Shoulders Display, IBM Plex Sans, IBM Plex Mono -- SIL Open Font License 1.1 (latin subset, vendored) */
+@font-face { font-family: 'Big Shoulders Display'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url(./BigShouldersDisplay-fcf93b69.woff2) format('woff2'); }
+@font-face { font-family: 'Big Shoulders Display'; font-style: normal; font-weight: 800; font-display: swap;
+  src: url(./BigShouldersDisplay-fcf93b69.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(./IBMPlexMono-e2661bcc.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url(./IBMPlexMono-0bc96cd0.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(./IBMPlexSans-d794bbfd.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url(./IBMPlexSans-d794bbfd.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url(./IBMPlexSans-d794bbfd.woff2) format('woff2'); }

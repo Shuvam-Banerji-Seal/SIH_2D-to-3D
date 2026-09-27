@@ -24,8 +24,8 @@ whether other processes shared the GPU.
 
 | Decision | Evidence (reproduce with) |
 |---|---|
-| Keyframes by measured co-visibility, not a fixed rate | Jal Mahal: 1 fps sampling registered 22/55 frames in 2 fragments; overlap-band keyframes registered 213/213 (`outputs/jal_mahal/sfm/result.json`) |
-| Chained flow for overlap, **direct** flow for the 3D test | chained RAFT error grows ~linearly (0.8 px at 24 frames) vs ~0.13 px direct (`experiments/flow_drift.py`) |
+| Keyframes by measured co-visibility, not a fixed rate | Jal Mahal: 1 fps sampling registered 40/55 frames in 2 disconnected models (largest 22); overlap-band keyframes registered 213/213 in one model per group of overlapping passes (`outputs/jal_mahal/sfm/result.json`) |
+| Chained flow for overlap, **direct** flow for the 3D test | chained RAFT error grows ~linearly (0.90 px median at 24 frames, 1.12 px at 32) vs 0.12–0.13 px direct (`experiments/flow_drift.py`) |
 | Parallax SNR decides "is it 3D?", GRIC only confirms | pure-rotation control: SNR 1.24 (degenerate) while GRIC still preferred F on 60 % of pairs (`outputs/controls/pure_rotation_run`) |
 | One focal length per pass (`radial`) | OpenCV's independent fx/fy drifted 10–20 % apart with no reprojection gain (0.761 vs 0.771 px) |
 | Letterbox crop, fade trimming | bars inflated overlap and held-out PSNR; a fade-out keyframe scored 13 dB as a held-out view |

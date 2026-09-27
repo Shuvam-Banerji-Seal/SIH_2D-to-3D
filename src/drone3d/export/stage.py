@@ -88,7 +88,7 @@ def _level(points: np.ndarray, cams: np.ndarray) -> np.ndarray:
 
 
 def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec, images: Path, *,
-                 views: int = 16, size: int = 4096):  # type: ignore[no-untyped-def]  # fmt: skip
+                 views: int = 16, size: int = 4096, gain: bool = True):  # type: ignore[no-untyped-def]  # fmt: skip
     """Keyframe texture for the mesh (model frame) -> ``(corner_uv, albedo, info)`` or ``None``."""
     import torch
     from torchvision.io import decode_jpeg, read_file
@@ -111,7 +111,7 @@ def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec
                        np.asarray(pose.rotation.matrix()), np.asarray(pose.translation), img))  # fmt: skip
     if not vs:
         return None
-    uv, albedo, info = bake_soup_texture(v, f, vs, size=size, fallback_rgb=vc)
+    uv, albedo, info = bake_soup_texture(v, f, vs, size=size, fallback_rgb=vc, gain=gain)
     del vs
     torch.cuda.empty_cache()
     return uv, albedo, info
@@ -234,7 +234,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                las: bool = True, geotiff: bool = True, raster_cell: float | None = None, viewer: bool = True,
                images: Path | None = None, texture: bool = True, texture_views: int = 16,
                texture_size: int = 4096, max_triangles: int = 600_000, splats: dict | None = None,
-               max_splats: int = 1_500_000) -> dict:  # fmt: skip
+               max_splats: int = 1_500_000, texture_gain: bool = True) -> dict:  # fmt: skip
     import open3d as o3d
     import pycolmap
 
@@ -292,7 +292,8 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         if texture and images is not None:
             try:
                 with clock("texture"):
-                    res = bake_texture(dv, df, dvc, posed, rec, images, views=texture_views, size=texture_size)
+                    res = bake_texture(dv, df, dvc, posed, rec, images, views=texture_views, size=texture_size,
+                                       gain=texture_gain)  # fmt: skip
                 if res is not None:
                     baked, tex_info = (dv, df, res[0], res[1]), res[2]
             except (RuntimeError, ValueError) as exc:  # texturing improves the mesh; never lose the mesh over it

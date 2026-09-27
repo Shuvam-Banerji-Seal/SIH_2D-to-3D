@@ -1,0 +1,55 @@
+{
+ "note": "Jal Mahal fast-profile models; mean |I_ij - I_ji| (8-bit levels) over pairs of overlapping keyframes, before and after OpenCV-style gain compensation (sigma_n 10, sigma_g 0.1).",
+ "models": [
+  {
+   "model": "outputs/cold2_jal_mahal/dataset/sparse/0",
+   "pairs": 240,
+   "disagreement_before": 2.728,
+   "disagreement_after": 1.51,
+   "gain_range": [
+    0.988,
+    1.108
+   ]
+  },
+  {
+   "model": "outputs/cold2_jal_mahal/dataset/sparse/1",
+   "pairs": 240,
+   "disagreement_before": 2.977,
+   "disagreement_after": 2.29,
+   "gain_range": [
+    0.975,
+    1.03
+   ]
+  },
+  {
+   "model": "outputs/cold2_jal_mahal/dataset/sparse/2",
+   "pairs": 240,
+   "disagreement_before": 2.322,
+   "disagreement_after": 1.508,
+   "gain_range": [
+    0.976,
+    1.026
+   ]
+  },
+  {
+   "model": "outputs/cold2_jal_mahal/dataset/sparse/3",
+   "pairs": 128,
+   "disagreement_before": 6.969,
+   "disagreement_after": 4.261,
+   "gain_range": [
+    0.898,
+    1.048
+   ]
+  },
+  {
+   "model": "outputs/cold2_jal_mahal/dataset/sparse/4",
+   "pairs": 90,
+   "disagreement_before": 1.091,
+   "disagreement_after": 0.752,
+   "gain_range": [
+    0.985,
+    1.01
+   ]
+  }
+ ]
+}

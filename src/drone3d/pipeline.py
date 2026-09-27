@@ -436,6 +436,7 @@ class Pipeline:
             trunc_voxels=cfg.trunc_voxels,
             tsdf_memory_gb=cfg.tsdf_memory_gb,
             isolate_fusion=cfg.isolate_fusion,
+            refine=cfg.refine,
         )
         _write_json(self._stage_dir("dense") / "result.json", payload)
         ok = [m for m in payload["models"] if m.get("status") == "ok"]
@@ -477,6 +478,7 @@ class Pipeline:
             max_triangles=cfg.max_triangles,
             splats=self._stage_result("splat") if cfg.splats else None,
             max_splats=cfg.max_splats,
+            texture_gain=cfg.texture_gain,
         )
         _write_json(self._stage_dir("export") / "result.json", payload)
         n_files = sum(len(m["files"]) for m in payload["models"])

@@ -1,0 +1,62 @@
+[
+ {
+  "run": "cold2_jal_mahal",
+  "model": 0,
+  "keyframes": 41,
+  "method": "none",
+  "refine_s": 0.0,
+  "completeness": 0.9502,
+  "depth_err": 0.0159,
+  "triangles": 674622
+ },
+ {
+  "run": "cold2_jal_mahal",
+  "model": 0,
+  "keyframes": 41,
+  "method": "guided",
+  "refine_s": 0.45,
+  "completeness": 0.9587,
+  "depth_err": 0.01753,
+  "triangles": 741762
+ },
+ {
+  "run": "cold2_jal_mahal",
+  "model": 0,
+  "keyframes": 41,
+  "method": "fgs",
+  "refine_s": 0.23,
+  "completeness": 0.9603,
+  "depth_err": 0.01905,
+  "triangles": 693983
+ },
+ {
+  "run": "cold2_jal_mahal",
+  "model": 1,
+  "keyframes": 39,
+  "method": "none",
+  "refine_s": 0.0,
+  "completeness": 0.8297,
+  "depth_err": 0.00586,
+  "triangles": 735962
+ },
+ {
+  "run": "cold2_jal_mahal",
+  "model": 1,
+  "keyframes": 39,
+  "method": "guided",
+  "refine_s": 0.43,
+  "completeness": 0.7189,
+  "depth_err": 0.00562,
+  "triangles": 683599
+ },
+ {
+  "run": "cold2_jal_mahal",
+  "model": 1,
+  "keyframes": 39,
+  "method": "fgs",
+  "refine_s": 0.16,
+  "completeness": 0.661,
+  "depth_err": 0.00578,
+  "triangles": 633168
+ }
+]

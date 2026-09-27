@@ -153,7 +153,7 @@ def mesh_depth_error(vertices: np.ndarray, triangles: np.ndarray, cams: list[Cam
 
 
 def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int, gaps: tuple[int, ...],
-                   keyframe_stride: int, min_angle_deg: float, rel_tol: float) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+                   keyframe_stride: int, min_angle_deg: float, rel_tol: float, refine: str = "none") -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Per-reference depth maps of one model: flow triangulation, then the monocular fill.
 
     Returns a dict with ``ims, cams, frames`` (uint8 on the GPU), ``depths``, ``sky``,
@@ -209,6 +209,12 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
         fill_info = {"model": mono.name, "filled_images": len(filled),
                      "in_sample_abs_rel_median": round(float(np.median([x["in_sample_abs_rel"] for x in filled])), 4) if filled else None}  # fmt: skip
         timing["mono"] = time.perf_counter() - t0
+    if refine != "none":  # edge-aware (OpenCV ximgproc); measured, not the default: see fastsfm.refine
+        from drone3d.fastsfm.refine import refine_depths
+
+        t0 = time.perf_counter()
+        depths = refine_depths(depths, frames.cpu().numpy(), tri_depths, method=refine)
+        timing["refine"] = time.perf_counter() - t0
     return {"ims": ims, "cams": cams, "frames": frames, "depths": depths, "tri_depths": tri_depths, "sky": sky,
             "used_stride": used_stride,
             "tri_cov": tri_cov, "fill_info": fill_info, "timing": timing}  # fmt: skip
@@ -216,12 +222,13 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
 
 def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, long_side: int,
                  gaps: tuple[int, ...], keyframe_stride: int, min_angle_deg: float, rel_tol: float,
-                 voxel_px: float, trunc_voxels: float = 12.0, tsdf_memory_gb: float = 8.0, fusion=None) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+                 voxel_px: float, trunc_voxels: float = 12.0, tsdf_memory_gb: float = 8.0, fusion=None,
+                 refine: str = "none") -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Depth, fusion and mesh for one SfM model -> its result record."""
     import open3d as o3d
 
     r = compute_depths(model_dir, images, raft, mono, long_side=long_side, gaps=gaps, keyframe_stride=keyframe_stride,
-                       min_angle_deg=min_angle_deg, rel_tol=rel_tol)  # fmt: skip
+                       min_angle_deg=min_angle_deg, rel_tol=rel_tol, refine=refine)  # fmt: skip
     cams, frames, depths, sky, timing = r["cams"], r["frames"], r["depths"], r["sky"], r["timing"]
     used_stride, tri_cov, fill_info = r["used_stride"], r["tri_cov"], r["fill_info"]
     n, h, w, _ = frames.shape
@@ -295,6 +302,7 @@ def run_dense(
     trunc_voxels: float = 12.0,
     tsdf_memory_gb: float = 8.0,
     isolate_fusion: str = "auto",
+    refine: str = "none",
 ) -> dict:
     import torch
 
@@ -317,7 +325,7 @@ def run_dense(
             results.append(_dense_model(model_dir, images, out_dir, raft, mono, long_side=long_side, gaps=gaps,
                                         keyframe_stride=keyframe_stride, min_angle_deg=min_angle_deg, rel_tol=rel_tol,
                                         voxel_px=voxel_px, trunc_voxels=trunc_voxels,
-                                        tsdf_memory_gb=tsdf_memory_gb, fusion=fusion))  # fmt: skip
+                                        tsdf_memory_gb=tsdf_memory_gb, fusion=fusion, refine=refine))  # fmt: skip
         except RuntimeError as exc:  # a CUDA / Open3D failure on one model must not lose the others (FusionError too)
             log.warning("dense %s failed: %s", model_dir.name, str(exc)[:300])
             results.append({"model": str(model_dir), "status": "failed", "error": str(exc)[:300]})

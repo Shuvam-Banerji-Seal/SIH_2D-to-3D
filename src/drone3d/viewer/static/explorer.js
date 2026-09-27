@@ -323,6 +323,17 @@ export class Explorer extends EventTarget {
     if (this.layers.grid) this._grid(true);
   }
 
+  zoom(factor) { // < 1 closer, > 1 further
+    if (this.nav === 'orbit') {
+      const t = this.orbit.target, off = this.camera.position.clone().sub(t).multiplyScalar(factor);
+      this.camera.position.copy(t).add(off);
+    } else {
+      this.camera.position.addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), this.flySpeed * 2 * (factor < 1 ? 1 : -1));
+    }
+  }
+
+  showAll() { this.models.forEach((_, i) => this.showModel(i, true)); this.follow = null; this.setNavigation('orbit'); this.frame(); }
+
   setNavigation(mode) {
     this.nav = mode;
     this.orbit.enabled = mode === 'orbit';

@@ -117,3 +117,24 @@ def test_engine_offline_status_and_cold_fallback(client: TestClient) -> None:
 def test_gpu_endpoint_shape(client: TestClient) -> None:
     g = client.get("/api/gpu?since=0").json()
     assert set(g) == {"now", "latest", "series"}
+
+
+def test_upload_a_video_then_it_is_listed(client: TestClient, tmp_path: Path) -> None:
+    import subprocess
+
+    from drone3d.io.nvdec import ffmpeg_bin
+
+    clip = tmp_path / "my flight.mp4"
+    subprocess.run([ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                    "testsrc2=size=320x180:rate=30:duration=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip)], check=True)  # fmt: skip
+    with clip.open("rb") as fh:
+        r = client.post("/api/upload", files={"file": ("my flight.mp4", fh, "video/mp4")})
+    assert r.status_code == 200, r.text
+    assert r.json()["path"] == "uploads/my flight.mp4"
+    listed = {v["name"]: v for v in client.get("/api/videos").json()}
+    assert listed["my flight.mp4"]["origin"] == "upload" and listed["my flight.mp4"]["width"] == 320
+
+
+def test_upload_rejects_other_files(client: TestClient) -> None:
+    r = client.post("/api/upload", files={"file": ("notes.exe", b"MZ", "application/octet-stream")})
+    assert r.status_code == 400

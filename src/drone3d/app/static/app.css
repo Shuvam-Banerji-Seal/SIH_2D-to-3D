@@ -284,3 +284,10 @@ h2 select { width: auto; padding: 5px 8px; }
 .xp .pip video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
 .xp .pipbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; font: 11px var(--mono); color: var(--muted); }
 .xp .layers .lay:nth-last-child(1):nth-child(odd) { grid-column: span 2; }
+.compare { position: relative; width: 100%; max-width: 1280px; margin: 0 auto; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); cursor: ew-resize; user-select: none; background: #000; touch-action: none; }
+.compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.compare .clip { position: absolute; inset: 0; clip-path: inset(0 50% 0 0); }
+.compare .handle { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: var(--saffron); box-shadow: 0 0 12px #ff9f1caa; }
+.compare .handle::after { content: "⟷"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--saffron); color: #1a1003; border-radius: 99px; padding: 2px 8px; font-weight: 700; }
+.xp .zoom { position: absolute; right: 12px; top: 56px; display: flex; flex-direction: column; gap: 4px; z-index: 3; }
+.xp .zoom .btn { width: 34px; justify-content: center; padding: 6px 0; font-weight: 700; }

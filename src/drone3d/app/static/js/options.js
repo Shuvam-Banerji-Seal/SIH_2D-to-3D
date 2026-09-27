@@ -145,7 +145,7 @@ export function renderOptions(el, o) {
 export function renderProfiles(el, o, onPick) {
   el.innerHTML = o.profiles.map((p) => `<div class="choice ${p.name === o.profile ? 'sel' : ''}" data-n="${esc(p.name)}">
     <div class="prof-name">${esc(p.name)}</div><div class="d">${esc((p.description || '').slice(0, 190))}${(p.description || '').length > 190 ? '…' : ''}</div></div>`).join('');
-  $$('.choice', el).forEach((d) => d.addEventListener('click', () => { o.setProfile(d.dataset.n); onPick(); }));
+  $$('.choice', el).forEach((d) => d.addEventListener('click', () => { o.setProfile(d.dataset.n); o.onProfile?.(); onPick(); }));
 }
 
 export function renderResolution(el, o, onPick) {

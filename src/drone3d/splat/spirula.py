@@ -286,14 +286,37 @@ class MeshResult:
         }
 
 
+def _finished_mesh(run_dir: Path, log_path: Path, formats: Sequence[str]) -> MeshResult | None:
+    """The mesh an earlier ``spirula mesh`` made from the current splat, if complete."""
+    done = re.search(r"\[meshing\] done:.*\(total ([\d.]+)s\)", log_path.read_text()) if log_path.is_file() else None
+    splats = list(run_dir.rglob("splat.ply"))
+    if done is None or not splats:
+        return None
+    newest_splat = max(p.stat().st_mtime for p in splats)
+    files = sorted(p for p in run_dir.rglob("mesh*") if p.is_file() and p.stat().st_mtime > newest_splat)
+    if not files or any(not any(f.suffix == f".{fmt}" for f in files) for fmt in formats):
+        return None
+    return MeshResult(files=files, seconds=float(done.group(1)), log_path=log_path)
+
+
 def run_mesh(
     run_dir: Path,
     *,
     formats: Sequence[str] = ("ply", "glb", "obj"),
     colors: Sequence[str] = ("vertex", "texture"),
     flags: dict[str, object] | None = None,
+    reuse: bool = True,
 ) -> MeshResult:
-    """``spirula mesh`` on a finished training run; outputs land beside its splat.ply."""
+    """``spirula mesh`` on a finished training run; outputs land beside its splat.ply.
+
+    With ``reuse``, a mesh already produced from the current splat (its log
+    reports completion and every requested format is newer than splat.ply) is
+    returned instead of meshing again, which takes ~40 min for a 3M-splat model.
+    """
+    log_path = run_dir.parent / f"{run_dir.name}_mesh.log"
+    if reuse and (done := _finished_mesh(run_dir, log_path, formats)) is not None:
+        log.info("reusing the mesh of %s (%d files)", run_dir.name, len(done.files))
+        return done
     binary = spirula_binary()
     before = {p: p.stat().st_mtime for p in run_dir.rglob("mesh*")}
     cmd: list[str | Path] = [
@@ -307,7 +330,6 @@ def run_mesh(
     ]
     for key, value in (flags or {}).items():
         cmd += [f"--{key.replace('_', '-')}", str(value)]
-    log_path = run_dir.parent / f"{run_dir.name}_mesh.log"
     code, _, seconds = _run(cmd, log_path)
     if code != 0:
         raise ReconstructionError(f"spirula mesh failed (exit {code}); see {log_path}")

@@ -184,7 +184,7 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
 
 def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, long_side: int,
                  gaps: tuple[int, ...], keyframe_stride: int, min_angle_deg: float, rel_tol: float,
-                 voxel_px: float, trunc_voxels: float = 12.0) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+                 voxel_px: float, trunc_voxels: float = 12.0, tsdf_memory_gb: float = 8.0) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Depth, fusion and mesh for one SfM model -> its result record."""
     import open3d as o3d
     import torch
@@ -203,7 +203,8 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     t0 = time.perf_counter()
     rgb = frames.cpu().numpy()
     vbg, voxel = tsdf_fuse([(depths[i], rgb[i], cams[i]) for i in range(n)], voxel=voxel,
-                           depth_max=float(np.percentile(valid, 99.5)), trunc_voxels=trunc_voxels)  # fmt: skip
+                           depth_max=float(np.percentile(valid, 99.5)), trunc_voxels=trunc_voxels,
+                           memory_gb=tsdf_memory_gb)  # fmt: skip
     mesh = vbg.extract_triangle_mesh().to_legacy()
     pcd = vbg.extract_point_cloud().to_legacy()
     timing["tsdf"] = time.perf_counter() - t0
@@ -244,6 +245,7 @@ def run_dense(
     mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf",
     voxel_px: float = 3.0,
     trunc_voxels: float = 12.0,
+    tsdf_memory_gb: float = 8.0,
 ) -> dict:
     import torch
 
@@ -262,7 +264,8 @@ def run_dense(
         try:
             results.append(_dense_model(model_dir, images, out_dir, raft, mono, long_side=long_side, gaps=gaps,
                                         keyframe_stride=keyframe_stride, min_angle_deg=min_angle_deg, rel_tol=rel_tol,
-                                        voxel_px=voxel_px, trunc_voxels=trunc_voxels))  # fmt: skip
+                                        voxel_px=voxel_px, trunc_voxels=trunc_voxels,
+                                        tsdf_memory_gb=tsdf_memory_gb))  # fmt: skip
         except RuntimeError as exc:  # a CUDA / Open3D failure on one model must not lose the others
             log.warning("dense %s failed: %s", model_dir.name, str(exc)[:300])
             results.append({"model": str(model_dir), "status": "failed", "error": str(exc)[:300]})

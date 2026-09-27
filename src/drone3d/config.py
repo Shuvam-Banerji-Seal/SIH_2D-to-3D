@@ -116,6 +116,7 @@ class DenseConfig:
     # fewer triangles.
     voxel_px: float = 3.0  # TSDF voxel in pixel footprints at the median depth
     trunc_voxels: float = 12.0
+    tsdf_memory_gb: float = 8.0  # GPU memory for the TSDF hash map; the voxel grows if the scene needs more
     min_model_images: int = 3
 
 

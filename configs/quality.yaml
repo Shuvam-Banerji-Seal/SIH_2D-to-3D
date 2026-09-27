@@ -1,0 +1,24 @@
+# Quality profile: the fast profile's method with a free GPU's worth of work.
+#
+#   uv run drone3d run --config configs/quality.yaml --set ingest.video=/data/pass.mp4
+#
+# Analysis at a fixed 12 fps (denser keyframes: completeness 0.82 vs 0.78 on Jal
+# Mahal, 0.81 vs 0.75 on Qutub Minar), depth at 960 px for every keyframe, a
+# larger TSDF budget so voxels stay small. Slower than the budget on long videos.
+
+run_name: quality
+stages: [ingest, keyframes, sfm, dense, georef, export, metrics, report]
+keyframes:
+  output_long_side: 1920
+  adaptive_rate: false
+sfm:
+  backend: flow
+  mapper: global
+dense:
+  backend: flow
+  long_side: 960
+  keyframe_stride: 1
+  tsdf_memory_gb: 24.0
+  mono_model: depth-anything/Depth-Anything-V2-Large-hf
+export:
+  max_triangles: 1000000

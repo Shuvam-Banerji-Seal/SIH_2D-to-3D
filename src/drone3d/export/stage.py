@@ -202,6 +202,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             if baked is not None:
                 baked = (t.apply(baked[0]), *baked[1:])
             units, frame = "m", "ENU"
+            to_export = {"scale": float(t.scale), "rotation": np.asarray(t.rotation).tolist(), "translation": np.asarray(t.translation).tolist()}
         else:
             rot = _level(p, cams)
             v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
@@ -209,6 +210,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             if baked is not None:
                 baked = (baked[0] @ rot.T, *baked[1:])
             units, frame = "model units", "SfM (levelled, not georeferenced)"
+            to_export = {"scale": 1.0, "rotation": rot.tolist(), "translation": [0.0, 0.0, 0.0]}
+        # SfM frame -> this model's export frame, for renderers that follow the keyframe cameras
+        (mdir / "frame.json").write_text(json.dumps({**to_export, "frame": frame, "units": units}, indent=1))
         # OBJ has no standard vertex colour: with a texture, OBJ is written textured only
         plain = [x for x in mesh_formats if x != "fbx" and not (x == "obj" and baked is not None)]
         files = write_mesh(v, f, vc, mdir / "mesh", tuple(x for x in plain if x == "ply"))

@@ -57,6 +57,7 @@ def bake_soup_texture(
     size: int = 4096,
     zbuf: int = 256,
     fallback_rgb: np.ndarray | None = None,
+    blend: int = 3,
     device: str = "cuda",
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """-> ``(corner_uv [F, 3, 2] in OBJ convention (v up), albedo uint8 [size, size, 3], info)``.
@@ -74,9 +75,8 @@ def bake_soup_texture(
     nrm = torch.linalg.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     nrm = nrm / nrm.norm(dim=-1, keepdim=True).clamp_min(1e-12)
 
-    # ---- best view per triangle: frontal, close, inside the frame, not occluded
-    best_score = torch.full((n_f,), -1.0, device=dev)
-    best_view = torch.full((n_f,), -1, dtype=torch.long, device=dev)
+    # ---- view scores per triangle: frontal, close, inside the frame, not occluded
+    scores = torch.full((len(views), n_f), -1.0, device=dev)
     for k, v in enumerate(views):
         h, w = v.image.shape[:2]
         u, y, z = _project(cen, v)
@@ -93,10 +93,13 @@ def bake_soup_texture(
         zmin = torch.full((zh * zw,), float("inf"), device=dev)
         zmin.scatter_reduce_(0, cell[inside], z[inside], reduce="amin")
         visible = inside & (z <= zmin[cell] * 1.03)
-        score = torch.where(visible, facing / dist, torch.full_like(dist, -1.0))
-        better = score > best_score
-        best_score = torch.where(better, score, best_score)
-        best_view = torch.where(better, torch.full_like(best_view, k), best_view)
+        scores[k] = torch.where(visible, facing / dist, torch.full_like(dist, -1.0))
+    # Blend the best ``blend`` views (weights by score, only views scoring >= half the best):
+    # one view per triangle made water and other view-dependent surfaces a patchwork.
+    top_s, top_v = scores.topk(min(blend, len(views)), dim=0)  # [k, F]
+    best_view = torch.where(top_s[0] > 0, top_v[0], torch.full_like(top_v[0], -1))
+    top_w = torch.where((top_s > 0) & (top_s >= 0.5 * top_s[:1]), top_s, torch.zeros_like(top_s))
+    top_w = top_w / top_w.sum(0, keepdim=True).clamp_min(1e-12)
 
     # ---- layout: two triangles per square cell
     cells = math.ceil(n_f / 2)
@@ -142,15 +145,18 @@ def bake_soup_texture(
     view_of = best_view[t_of]
     flat_idx = (py.long() * size + px.long())
     col = torch.zeros(len(pts), 3, device=dev)
-    for k, v in enumerate(views):
-        sel = ok & (view_of == k)
-        if not bool(sel.any()):
-            continue
-        h, w = v.image.shape[:2]
-        u, y, _ = _project(pts[sel], v)
-        g = torch.stack([2 * u / (w - 1) - 1, 2 * y / (h - 1) - 1], -1)[None, None]
-        img = v.image.permute(2, 0, 1)[None].float()
-        col[sel] = F.grid_sample(img, g, mode="bilinear", align_corners=True, padding_mode="border")[0, :, 0].T
+    for rank in range(top_v.shape[0]):
+        v_r, w_r = top_v[rank][t_of], top_w[rank][t_of]
+        for k, v in enumerate(views):
+            sel = ok & (v_r == k) & (w_r > 0)
+            if not bool(sel.any()):
+                continue
+            h, w = v.image.shape[:2]
+            u, y, _ = _project(pts[sel], v)
+            g = torch.stack([2 * u / (w - 1) - 1, 2 * y / (h - 1) - 1], -1)[None, None]
+            img = v.image.permute(2, 0, 1)[None].float()
+            sample = F.grid_sample(img, g, mode="bilinear", align_corners=True, padding_mode="border")[0, :, 0].T
+            col[sel] += w_r[sel, None] * sample
     unseen = ok & (view_of < 0)
     if fallback_rgb is not None and bool(unseen.any()):
         fb = torch.as_tensor(fallback_rgb, dtype=torch.float32, device=dev)

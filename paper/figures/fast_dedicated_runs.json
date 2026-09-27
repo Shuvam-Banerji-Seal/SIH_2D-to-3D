@@ -1,0 +1,477 @@
+{
+ "ded_above_clouds": {
+  "video": "Above clouds - PNB Merdeka 118 \uff5c Cinematic Aerial Shots [ucpkDTp1Th4]",
+  "resolution": [
+   2560,
+   1440
+  ],
+  "processing": {
+   "seconds": 108.0,
+   "per_stage_s": {
+    "keyframes": 42.22,
+    "sfm": 44.12,
+    "dense": 16.87,
+    "export": 4.74
+   },
+   "video_seconds": 115.441,
+   "budget_seconds": 173.2,
+   "within_budget": true
+  },
+  "passes": 3,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d"
+  ],
+  "keyframes": 156,
+  "registered": 143,
+  "models": 3,
+  "triangles": 384534,
+  "view_completeness": null
+ },
+ "ded_angkor": {
+  "video": "ANGKOR WAT Breathtaking \u2022 Cinematic Aerial Adventure in 4K [by8H_fLpJpg]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 159.4,
+   "per_stage_s": {
+    "keyframes": 51.88,
+    "sfm": 44.95,
+    "dense": 23.65,
+    "export": 38.88
+   },
+   "video_seconds": 193.291,
+   "budget_seconds": 289.9,
+   "within_budget": true
+  },
+  "passes": 8,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "weak-3d",
+   "3d"
+  ],
+  "keyframes": 115,
+  "registered": 115,
+  "models": 8,
+  "triangles": 3261138,
+  "view_completeness": null
+ },
+ "ded_colosseum": {
+  "video": "Colosseum like never before\uff1a 4K drone aerial view [wcl0k1WPat0]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 99.9,
+   "per_stage_s": {
+    "keyframes": 46.54,
+    "sfm": 26.57,
+    "dense": 13.25,
+    "export": 13.55
+   },
+   "video_seconds": 135.361,
+   "budget_seconds": 203.0,
+   "within_budget": true
+  },
+  "passes": 11,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d"
+  ],
+  "keyframes": 75,
+  "registered": 75,
+  "models": 11,
+  "triangles": 1455272,
+  "view_completeness": null
+ },
+ "ded_eiffel": {
+  "video": "Eiffel Tower Drone 4k [Qx_c1X3zfEc]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 231.8,
+   "per_stage_s": {
+    "keyframes": 82.82,
+    "sfm": 95.16,
+    "dense": 26.35,
+    "export": 27.48
+   },
+   "video_seconds": 306.281,
+   "budget_seconds": 459.4,
+   "within_budget": true
+  },
+  "passes": 10,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d"
+  ],
+  "keyframes": 193,
+  "registered": 193,
+  "models": 10,
+  "triangles": 1938768,
+  "view_completeness": null
+ },
+ "ded_hagia_sophia": {
+  "video": "HAGIA SOPHIA 4K \uff5c Vibes of Istanbul [mTlqTdui6Zo]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 83.0,
+   "per_stage_s": {
+    "keyframes": 38.93,
+    "sfm": 23.46,
+    "dense": 12.77,
+    "export": 7.87
+   },
+   "video_seconds": 85.481,
+   "budget_seconds": 128.2,
+   "within_budget": true
+  },
+  "passes": 9,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d"
+  ],
+  "keyframes": 69,
+  "registered": 69,
+  "models": 9,
+  "triangles": 440809,
+  "view_completeness": null
+ },
+ "ded_hanoi": {
+  "video": "Breathtaking Aerial Views of Hanoi Opera House - Stunning Drone Footage in HD [rkk1QxjYBb4]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 163.4,
+   "per_stage_s": {
+    "keyframes": 43.65,
+    "sfm": 110.26,
+    "dense": 7.23,
+    "export": 2.25
+   },
+   "video_seconds": 102.821,
+   "budget_seconds": 154.2,
+   "within_budget": false
+  },
+  "passes": 1,
+  "verdicts": [
+   "3d"
+  ],
+  "keyframes": 74,
+  "registered": 43,
+  "models": 1,
+  "triangles": 133067,
+  "view_completeness": null
+ },
+ "ded_iceland": {
+  "video": "FPV Drone Flight through Beautiful Iceland Canyon [kcfs1-ryKWE]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 604.6,
+   "per_stage_s": {
+    "keyframes": 64.5,
+    "sfm": 344.22,
+    "dense": 77.3,
+    "export": 118.58
+   },
+   "video_seconds": 67.201,
+   "budget_seconds": 100.8,
+   "within_budget": false
+  },
+  "passes": 6,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d"
+  ],
+  "keyframes": 603,
+  "registered": 603,
+  "models": 6,
+  "triangles": 8760015,
+  "view_completeness": null
+ },
+ "ded_jal_mahal": {
+  "video": "Jal Mahal, Jaipur, India, Drone Cinematic [l8rXEYoVxDY]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 138.9,
+   "per_stage_s": {
+    "keyframes": 35.09,
+    "sfm": 58.41,
+    "dense": 20.33,
+    "export": 25.05
+   },
+   "video_seconds": 54.861,
+   "budget_seconds": 82.3,
+   "within_budget": false
+  },
+  "passes": 6,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d"
+  ],
+  "keyframes": 128,
+  "registered": 128,
+  "models": 6,
+  "triangles": 1658232,
+  "view_completeness": null
+ },
+ "ded_messiah": {
+  "video": "The Messiah \uff5c Cristo Redentor 4K Drone Footage [OO4cuHmkm3k]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 100.8,
+   "per_stage_s": {
+    "keyframes": 47.76,
+    "sfm": 33.99,
+    "dense": 13.65,
+    "export": 5.41
+   },
+   "video_seconds": 94.041,
+   "budget_seconds": 141.1,
+   "within_budget": true
+  },
+  "passes": 8,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d"
+  ],
+  "keyframes": 110,
+  "registered": 110,
+  "models": 8,
+  "triangles": 264444,
+  "view_completeness": null
+ },
+ "ded_notre_dame": {
+  "video": "Notre Dame Drone Paris 4k [4V1ZGEKQE2A]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 134.0,
+   "per_stage_s": {
+    "keyframes": 65.21,
+    "sfm": 34.92,
+    "dense": 22.3,
+    "export": 11.58
+   },
+   "video_seconds": 214.314,
+   "budget_seconds": 321.5,
+   "within_budget": true
+  },
+  "passes": 6,
+  "verdicts": [
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d"
+  ],
+  "keyframes": 107,
+  "registered": 107,
+  "models": 6,
+  "triangles": 1251151,
+  "view_completeness": null
+ },
+ "ded_petronas": {
+  "video": "Petronas Twin Tower in FPV drone - 4K - Niche Films [p9jSKslwZWo]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 300.3,
+   "per_stage_s": {
+    "keyframes": 130.22,
+    "sfm": 111.11,
+    "dense": 42.09,
+    "export": 16.88
+   },
+   "video_seconds": 35.401,
+   "budget_seconds": 53.1,
+   "within_budget": false
+  },
+  "passes": 7,
+  "verdicts": [
+   "3d",
+   "weak-3d",
+   "degenerate",
+   "weak-3d",
+   "3d",
+   "weak-3d",
+   "weak-3d"
+  ],
+  "keyframes": 251,
+  "registered": 251,
+  "models": 6,
+  "triangles": 1496727,
+  "view_completeness": null
+ },
+ "ded_qutub": {
+  "video": "Qutub Minar, New Delhi, India 4K Drone Video \uff5c UNESCO World Heritage Site [47YrmPhMeho]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 168.8,
+   "per_stage_s": {
+    "keyframes": 72.38,
+    "sfm": 42.77,
+    "dense": 20.22,
+    "export": 33.38
+   },
+   "video_seconds": 187.454,
+   "budget_seconds": 281.2,
+   "within_budget": true
+  },
+  "passes": 12,
+  "verdicts": [
+   "weak-3d",
+   "3d",
+   "3d",
+   "degenerate",
+   "3d",
+   "3d",
+   "weak-3d",
+   "degenerate",
+   "degenerate",
+   "3d",
+   "3d",
+   "weak-3d"
+  ],
+  "keyframes": 113,
+  "registered": 106,
+  "models": 8,
+  "triangles": 2684061,
+  "view_completeness": null
+ },
+ "ded_reichstag": {
+  "video": "Reichstag Berlin \ud83c\udde9\ud83c\uddea in 4K \uff5c Stunning Drone Views of Germany\u2019s Parliament [wXWNsayEP90]",
+  "resolution": [
+   3840,
+   2160
+  ],
+  "processing": {
+   "seconds": 121.8,
+   "per_stage_s": {
+    "keyframes": 58.55,
+    "sfm": 25.7,
+    "dense": 16.65,
+    "export": 20.93
+   },
+   "video_seconds": 130.201,
+   "budget_seconds": 195.3,
+   "within_budget": true
+  },
+  "passes": 9,
+  "verdicts": [
+   "3d",
+   "weak-3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "3d",
+   "degenerate"
+  ],
+  "keyframes": 70,
+  "registered": 70,
+  "models": 8,
+  "triangles": 1294073,
+  "view_completeness": null
+ },
+ "ded_rural": {
+  "video": "Aerial Views of Rural Riches\uff1a Drone Shot of Farmland \ud83c\udf3e\ud83d\ude81 [p8eRmxosalI]",
+  "resolution": [
+   2560,
+   1440
+  ],
+  "processing": {
+   "seconds": 55.8,
+   "per_stage_s": {
+    "keyframes": 18.35,
+    "sfm": 6.84,
+    "dense": 20.0,
+    "export": 10.58
+   },
+   "video_seconds": 19.081,
+   "budget_seconds": 28.6,
+   "within_budget": false
+  },
+  "passes": 1,
+  "verdicts": [
+   "3d"
+  ],
+  "keyframes": 21,
+  "registered": 21,
+  "models": 1,
+  "triangles": 753560,
+  "view_completeness": null
+ }
+}

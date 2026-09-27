@@ -207,7 +207,7 @@ def fast_section(macros: dict[str, str]) -> list[str]:
             p = r["processing"]
             ok = p["seconds"] <= p["budget_seconds"]
             ok_n += ok
-            name = re.split(r"[｜|：:]| - |\\[", r["video"])[0].strip()[:30]
+            name = re.split(r"[｜|：:]| - |\[", r["video"])[0].strip()[:30]
             rows.append([tex(name), f"{p['video_seconds']:.0f}", fmt(r["keyframes"]), f"{r['registered']}/{r['keyframes']}",
                          fmt(r["models"]), fmt(r["view_completeness"], 2), f"{p['seconds']:.0f}", f"{p['budget_seconds']:.0f}",
                          f"{p['seconds'] / p['video_seconds']:.2f}" + (" \\checkmark" if ok else "")])  # fmt: skip
@@ -249,6 +249,101 @@ def fast_section(macros: dict[str, str]) -> list[str]:
                            "RMSE of the cameras, and median mesh error by distance from the flight track.",
                            "tab:geoe2e", ["Model", "Fit", "Rot. ($^\\circ$)", "Scale (\\%)", "LOO (m)", "$<$100\\,m", "100--300\\,m", "$>$300\\,m"],
                            rows, "llrrrrrr", wide=True))  # fmt: skip
+    return parts
+
+
+def system_section(macros: dict[str, str]) -> list[str]:
+    """Speed-ups, splats on the fast poses, every video with every layer, and live footage."""
+    parts: list[str] = []
+    sp = load(FIG / "system_speedups.json")
+    if sp:
+        b, a = sp["before"], sp["after"]
+        macros.update(SpeedBefore=f"{b['seconds']:.0f}", SpeedAfter=f"{a['seconds']:.0f}", SpeedBudget=f"{a['budget_seconds']:.0f}",
+                      SfmBefore=f"{sp['sfm_steps_s']['sequential']:.1f}", SfmAfter=f"{sp['sfm_steps_s']['in_full_run']:.1f}",
+                      ExportBefore=f"{sp['export_steps_s']['before']:.1f}", ExportAfter=f"{sp['export_steps_s']['after']:.1f}",
+                      WarmSeconds=f"{sp['warm_engine_before_speedups']['seconds']:.1f}")  # fmt: skip
+        rows = [[tex(k), fmt(b["per_stage_s"].get(k), 1), fmt(a["per_stage_s"].get(k), 1)] for k in ("keyframes", "sfm", "dense", "export")]
+        rows.append(["total", fmt(b["seconds"], 1), fmt(a["seconds"], 1) + " \\checkmark"])
+        parts.append("\\subsection{Doing in parallel what does not depend on each other}\\label{sec:speed}\n"
+                     "The passes of a video are independent. The global mapper releases Python's interpreter lock, so each pass is "
+                     "mapped on a thread while the GPU tracks the next, largest pass first so that its long mapping overlaps the "
+                     f"tracking of all the others: SfM on Jal Mahal fell from {macros['SfmBefore']}\\,s to {macros['SfmAfter']}\\,s with "
+                     "the same 128/128 keyframes registered. Export writes the textured GLB/OBJ, FBX and Blender files in the "
+                     "background while the GPU bakes the next model, and no longer decimates meshes within 25\\,\\% of the viewer "
+                     f"cap ({macros['ExportBefore']}\\,s $\\to$ {macros['ExportAfter']}\\,s). The per-stage GPU telemetry thread had "
+                     "been finding the run's child processes by reading every \\texttt{/proc/*/stat} twice a second, holding the "
+                     "interpreter lock against the stage it measured; it now walks \\texttt{/proc/<pid>/task/*/children}. Together "
+                     f"the 55\\,s Jal Mahal edit went from {macros['SpeedBefore']}\\,s to {macros['SpeedAfter']}\\,s, inside its "
+                     f"{macros['SpeedBudget']}\\,s budget for the first time (Table~\\ref{{tab:speed}}).\n")
+        parts.append(table("Jal Mahal, fast profile, idle A100, same conditions: seconds per stage before and after overlapping "
+                           "independent work.", "tab:speed", ["Stage", "Before (s)", "After (s)"], rows, "lrr"))  # fmt: skip
+    si = load(FIG / "splat_init.json")
+    if si:
+        rows = [[tex(r["init"]), r["quality"], fmt(r["splats"]), fmt(r["train_s"], 1), fmt(r["psnr"], 2), fmt(r["cc_psnr"], 2),
+                 fmt(r["ssim"], 3)] for r in si["rows"]]  # fmt: skip
+        macros.update(SplatSparsePsnr=f"{si['rows'][0]['psnr']:.1f}", SplatDensePsnr=f"{si['rows'][1]['psnr']:.1f}",
+                      SplatDenseSeconds=f"{si['rows'][1]['train_s']:.0f}", SplatWebMB=f"{si['web']['bytes'] / 1e6:.0f}",
+                      SplatPlyMB=f"{si['web']['ply_bytes'] / 1e6:.0f}")  # fmt: skip
+        parts.append("\\subsection{Gaussian splats on the fast profile's poses}\\label{sec:fastsplat}\n"
+                     "Flow SfM keeps about twelve tracks per image, too few points for 3DGS to densify from in a few thousand steps. "
+                     "Starting instead from the dense TSDF cloud --- a copy of the SfM model whose points are the fused surface --- "
+                     f"raises held-out PSNR from {macros['SplatSparsePsnr']} to {macros['SplatDensePsnr']}\\,dB in "
+                     f"{macros['SplatDenseSeconds']}\\,s of training (Table~\\ref{{tab:splatinit}}). The trained splats are "
+                     "converted to the 32-byte web layout (importance-sorted, opacity-pruned) in the model's export frame, the "
+                     f"trainer's own scene transform undone: {macros['SplatPlyMB']}\\,MB of PLY become {macros['SplatWebMB']}\\,MB that "
+                     "a browser renders together with the mesh.\n")
+        parts.append(table("Splat initialisation on Jal Mahal's largest model (41 keyframes), 7000 steps, held-out views: "
+                           "splats, training time, PSNR, colour-corrected PSNR, SSIM.", "tab:splatinit",
+                           ["Start", "Quality", "Splats", "Train (s)", "PSNR", "cc-PSNR", "SSIM"], rows, "llrrrrr", wide=True))  # fmt: skip
+    am = load(FIG / "all_maps.json")
+    if am:
+        rows, ok = [], 0
+        for r in sorted(am, key=lambda r: r["seconds"] or 0):
+            name = re.split(r"[｜|：:]| - |\[", r["video"])[0].strip()[:28]
+            ok += r["fast_within_budget"]
+            rows.append([tex(name), f"{r['seconds']:.0f}", fmt(r["keyframes"]), fmt(r["models"]), fmt(r["completeness"], 2),
+                         fmt(r["triangles"]), f"{r['fast_s']:.0f}", f"{r['budget_s']:.0f}" + (" \\checkmark" if r["fast_within_budget"] else ""),
+                         fmt(r["splat_s"], 0), fmt(r["splat_psnr_mean"], 1), fmt(r["deliverable_mb"], 0)])  # fmt: skip
+        macros.update(AllMapsN=str(len(am)), AllMapsWithin=str(ok))
+        misses = [r for r in am if not r["fast_within_budget"]]
+        fpv = [r for r in misses if (r["keyframes"] or 0) / max(r["seconds"] or 1, 1) > 4]
+        short = [r for r in misses if r not in fpv and (r["seconds"] or 0) < 30]
+        other = [r for r in misses if r not in fpv and r not in short]
+        short_name = lambda r: tex(re.split(r"[｜|：:]| - |\[", r["video"])[0].strip()[:28])  # noqa: E731
+        why = []
+        if fpv:
+            why.append(f"{len(fpv)} fast FPV clip{'s' if len(fpv) > 1 else ''} ({', '.join(short_name(r) for r in fpv)}), whose speed needs "
+                       + ", ".join(f"{r['keyframes'] / r['seconds']:.0f}" for r in fpv) + " keyframes per second")
+        if short:
+            why.append(f"{len(short)} clip{'s' if len(short) > 1 else ''} under 30\\,s ({', '.join(short_name(r) for r in short)}), "
+                       "where per-run costs the budget scales down with length dominate")
+        if other:
+            why.append(f"{', '.join(short_name(r) for r in other)}")
+        parts.append("\\subsection{Every sample video, every layer}\\label{sec:allmaps}\n"
+                     f"All {macros['AllMapsN']} sample videos were queued on the warm engine with splats trained for every model "
+                     f"(Table~\\ref{{tab:allmaps}}). The mesh-and-cloud stages met the budget on {macros['AllMapsWithin']} of them; "
+                     "splat training is reported separately because the problem statement asks for a mesh or point cloud."
+                     + (f" The misses: {'; '.join(why)}." if why else "") + "\n")
+        parts.append(table("Every sample video on the warm engine (fast profile + splats per model): length, keyframes, models, "
+                           "view completeness, triangles, mesh-and-cloud time against the budget, splat training time and mean "
+                           "held-out PSNR, deliverables on disk.", "tab:allmaps",
+                           ["Video", "s", "KF", "Mod.", "Compl.", "Tris", "Mesh (s)", "Budget (s)", "Splat (s)", "PSNR", "MB"],
+                           rows, "lrrrrrrrrrr", wide=True))  # fmt: skip
+    tl = load(FIG / "tsdf_limits.json")
+    if tl:
+        ok = max(r["active"] for r in tl["active_block_probe"] if r["ok"])
+        bad = min(r["active"] for r in tl["active_block_probe"] if not r["ok"])
+        macros.update(TsdfOkBlocks=f"{ok:,}".replace(",", "{,}"), TsdfBadBlocks=f"{bad:,}".replace(",", "{,}"))
+    lv = load(FIG / "live_qutub.json")
+    if lv:
+        done = [g for g in lv["segments"] if g["status"] == "done"]
+        lat = [g["latency_s"] for g in done]
+        macros.update(LiveSegments=str(len(lv["segments"])), LiveModelled=str(len(done)),
+                      LiveLatency=f"{min(lat):.0f}--{max(lat):.0f}" if lat else DASH)  # fmt: skip
+        parts.append("\\subsection{Live footage}\\label{sec:live-results}\n"
+                     f"Qutub Minar was replayed at its frame rate into 30\\,s segments: of {macros['LiveSegments']} segments, "
+                     f"{macros['LiveModelled']} held parallax and were modelled {macros['LiveLatency']}\\,s after they closed; the others "
+                     "were refused by the parallax test, as a camera that only turns should be.\n")
     return parts
 
 
@@ -504,6 +599,7 @@ def main() -> None:
                        "tab:gpu", ["Run", "Stage", "s", "Util.\\%", "W", "Own GPU (GB)", "Host (GB)", "Shared"], gpu_rows, "llrrrrrl", wide=True))  # fmt: skip
 
     parts += fast_section(macros)
+    parts += system_section(macros)
     (OUT / "results.tex").write_text("\n".join(parts))
     (OUT / "macros.tex").write_text(
         "\n".join(f"\\newcommand{{\\{k}}}{{{v}}}" for k, v in sorted(macros.items()))

@@ -17,6 +17,7 @@ The prediction is only defined up to ``log d = a * pred + b`` per image;
 
 from __future__ import annotations
 
+import gc
 import importlib
 import os
 import sys
@@ -249,3 +250,19 @@ class MarigoldDepth:
         if self.modality == "normals":
             return F.normalize(pixel, dim=1)
         return pixel.mean(dim=1, keepdim=True)
+
+    def close(self) -> None:
+        """Release the networks' GPU memory.
+
+        Upstream keeps the loaded VAE and transformer in its module-level
+        ``REGISTRY``, so dropping this object alone frees nothing; a pipeline
+        that goes on to other stages would hold ~14 GB for the rest of the run.
+        """
+        from marigoldv2.core.registry import REGISTRY
+
+        for name in ("VAE", "Diffuser"):
+            REGISTRY["network_components"].pop(name, None)
+        self._encode = self._step = self._decode = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()

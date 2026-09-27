@@ -21,7 +21,7 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["DepthStageResult", "aggregate", "configure_bitsandbytes", "run_depth"]
+__all__ = ["DepthStageResult", "aggregate", "configure_bitsandbytes", "recalibrate", "run_depth", "supervision_mask"]
 
 log = get_logger(__name__)
 
@@ -53,6 +53,22 @@ def aggregate(per_image: dict[str, dict]) -> dict[str, dict]:
                 summary[f"cv_{kind}_{metric}"] = round(float(np.median(vals)), 4) if vals else None
         out[model] = summary
     return out
+
+
+def supervision_mask(
+    pred: np.ndarray, depth: np.ndarray, p_at: np.ndarray, z: np.ndarray, far_factor: float, margin: float = 0.05
+) -> np.ndarray:
+    """Pixels whose depth the SfM calibration actually constrains.
+
+    The calibration is fitted where tie points exist; outside the range of
+    predictions they cover (sky, featureless far field) its output is pure
+    extrapolation. Those pixels, and anything beyond ``far_factor`` x the
+    99th-percentile tie-point depth, get no supervision: an invented depth
+    for the sky would ask the trainer to put splats there.
+    """
+    lo, hi = np.quantile(p_at, [0.005, 0.995])
+    pad = margin * max(hi - lo, 1e-6)
+    return (pred >= lo - pad) & (pred <= hi + pad) & (depth < far_factor * float(np.quantile(z, 0.99)))
 
 
 def configure_bitsandbytes() -> None:
@@ -196,8 +212,7 @@ def run_depth(
             ]
             log_depth = calib(up) if calib is not None else fit.a * up + fit.b
             depth = torch.exp(log_depth).cpu().numpy()
-            limit = far_factor * float(np.quantile(obs.z, 0.99))
-            valid = depth < limit
+            valid = supervision_mask(up.cpu().numpy(), depth, p_at, obs.z, far_factor)
             record["valid_fraction"] = round(float(valid.mean()), 4)
             write_depth_png(depth_dir / f"{stem}.png", depth, valid)
             result.per_image[obs.name] = record
@@ -205,6 +220,58 @@ def run_depth(
     result.per_model = aggregate(result.per_image)
     result.seconds = time.perf_counter() - started
     result.seconds_inference = infer_time
-    del net
-    torch.cuda.empty_cache()
+    net.close()
     return result
+
+
+def recalibrate(
+    dataset: Path,
+    depth_result: dict,
+    *,
+    out_dir: str = "depths_v2",
+    far_factor: float = 3.0,
+    out_long_side: int | None = 1920,
+) -> dict[str, float]:
+    """Rewrite depth maps from the stored predictions (no network), current rules.
+
+    Uses ``depth_raw/`` and the SfM models recorded per image, the monotone
+    calibration and :func:`supervision_mask`. Returns per-image valid fractions.
+    """
+    import torch
+    import torch.nn.functional as F
+
+    from drone3d.depth.align import (
+        MonotoneMap,
+        fit_log_affine,
+        sample_at,
+        sfm_depth_observations,
+        write_depth_png,
+    )
+    from drone3d.depth.marigold import processing_size
+
+    fractions: dict[str, float] = {}
+    obs_by_model: dict[str, dict] = {}
+    for name, rec in depth_result["per_image"].items():
+        if "abs_rel" not in rec:
+            continue
+        model = rec["model"]
+        if model not in obs_by_model:
+            obs_by_model[model] = sfm_depth_observations(model)
+        obs = obs_by_model[model][name]
+        stem = Path(name).with_suffix("")
+        pred = torch.from_numpy(np.load(dataset / "depth_raw" / f"{stem}.npz")["pred"].astype(np.float32))[None]
+        p_at = sample_at(pred, obs.uv, obs.width, obs.height)
+        fit = fit_log_affine(p_at, obs.z)
+        if fit is None or fit.a <= 0:
+            continue
+        calib = MonotoneMap(p_at, obs.z, slope=fit.a)
+        if out_long_side and out_long_side < max(obs.width, obs.height):
+            ow, oh = processing_size(obs.width, obs.height, out_long_side)
+        else:
+            ow, oh = obs.width, obs.height
+        up = F.interpolate(pred[None], size=(oh, ow), mode="bilinear", align_corners=False)[0, 0]
+        depth = torch.exp(calib(up)).numpy()
+        valid = supervision_mask(up.numpy(), depth, p_at, obs.z, far_factor)
+        write_depth_png(dataset / out_dir / f"{stem}.png", depth, valid)
+        fractions[name] = float(valid.mean())
+    return fractions

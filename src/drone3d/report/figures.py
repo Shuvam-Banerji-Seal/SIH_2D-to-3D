@@ -127,14 +127,24 @@ def depth_panel(
         import torch
 
         p_at = sample_at(torch.from_numpy(pred)[None], obs.uv, obs.width, obs.height)
-        d_at = np.exp(rec["a"] * p_at + rec["b"])
+        from drone3d.depth.align import MonotoneMap
+
+        mono = MonotoneMap(p_at, obs.z, slope=rec["a"])
+        d_aff = np.exp(rec["a"] * p_at + rec["b"])
+        d_mono = np.exp(mono(p_at))
+        depth = np.exp(mono(pred))
         row[0].imshow(rgb)
         row[0].set_title(Path(name).parent.name + "/" + Path(name).name, fontsize=8)
         lim = np.quantile(depth, [0.02, 0.98])
         row[1].imshow(np.log(np.clip(depth, *lim)), cmap="Spectral")
-        row[1].set_title(f"Marigold v2 (aligned), AbsRel {rec['abs_rel_median']:.3f}", fontsize=8)
+        cv = rec.get("cv", {})
+        title = "Marigold v2, calibrated to SfM"
+        if cv:
+            title += f" (held-out AbsRel {cv['affine']['abs_rel_median']:.3f} affine, {cv['monotone']['abs_rel_median']:.3f} monotone)"
+        row[1].set_title(title, fontsize=7)
         z = obs.z
-        row[2].scatter(z, d_at, s=1, alpha=0.25, color="#1565c0", rasterized=True)
+        row[2].scatter(z, d_aff, s=1, alpha=0.2, color="#9e9e9e", rasterized=True, label="affine")
+        row[2].scatter(z, d_mono, s=1, alpha=0.25, color="#1565c0", rasterized=True, label="monotone")
         hi = float(np.quantile(z, 0.99)) * 1.1
         row[2].plot([0, hi], [0, hi], color="#c62828", lw=0.8)
         row[2].set_xlim(0, hi)
@@ -142,7 +152,8 @@ def depth_panel(
         row[2].set_xlabel("SfM depth", fontsize=7)
         row[2].set_ylabel("prior depth", fontsize=7)
         row[2].tick_params(labelsize=6)
-        row[2].set_title(f"{len(z)} tie points, $\\delta_1$ {rec['delta1']:.2f}", fontsize=8)
+        row[2].legend(fontsize=6, markerscale=6, frameon=False, loc="upper left")
+        row[2].set_title(f"{len(z)} tie points (in-sample)", fontsize=8)
         for ax in row[:2]:
             ax.axis("off")
     fig.tight_layout()

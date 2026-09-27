@@ -34,6 +34,14 @@ class DynamicMasker:
     A per-pixel mixture-of-Gaussians model is used as a fast, dependency-light
     approximation; the optional :class:`YoloMasker` provides semantic masks
     when the ``ai`` extra is installed.
+
+    Caveat (F24): background subtraction assumes a *static* camera. On a
+    translating UAV the whole scene moves, so MOG2 flags static terrain as
+    foreground — measured at 67–74 % of the frame on the bundled clip. Such a
+    mask is not "dynamic objects"; it is camera motion, and discarding it would
+    delete most of the scene from SfM. ``max_dynamic_fraction`` therefore
+    treats an implausibly large mask as a failed detection and returns an empty
+    one, keeping the frame intact.
     """
 
     def __init__(
@@ -43,9 +51,11 @@ class DynamicMasker:
         var_threshold: float = 24.0,
         min_area: float = 400.0,
         dilate_iterations: int = 2,
+        max_dynamic_fraction: float = 0.5,
     ) -> None:
         self.min_area = min_area
         self.dilate_iterations = dilate_iterations
+        self.max_dynamic_fraction = max_dynamic_fraction
         self._model = cv2.createBackgroundSubtractorMOG2(
             history=history,
             varThreshold=var_threshold,
@@ -60,6 +70,15 @@ class DynamicMasker:
         mask = denoise_mask(foreground, min_area=self.min_area)
         if self.dilate_iterations:
             mask = cv2.dilate(mask, self._kernel, iterations=self.dilate_iterations)
+        if self.max_dynamic_fraction > 0:
+            fraction = float(np.count_nonzero(mask)) / float(mask.size)
+            if fraction > self.max_dynamic_fraction:
+                log.debug(
+                    "dynamic mask covers %.0f%% of the frame -- treating as camera "
+                    "motion, not movers; emitting empty mask",
+                    fraction * 100,
+                )
+                return np.zeros_like(mask)
         return mask
 
     def moving_ratio(self, frame: np.ndarray) -> float:

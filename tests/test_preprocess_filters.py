@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 import pytest
@@ -180,3 +182,47 @@ def test_denoise_mask_preserves_large_regions() -> None:
 
     assert cleaned[50, 50] == 255
     assert cleaned.sum() > 0
+
+
+def test_dynamic_masker_rejects_scene_wide_detection(tmp_path: Path) -> None:
+    """F24: a mask covering most of the frame is camera motion, not movers.
+
+    Background subtraction assumes a static camera. On a translating UAV the
+    whole scene moves and MOG2 flags static terrain as foreground (measured at
+    67-74% on the bundled clip), which would delete most of the scene from SfM.
+    """
+    rng = np.random.default_rng(24)
+    base = rng.integers(0, 255, size=(120, 160, 3), dtype=np.uint8)
+
+    guarded = DynamicMasker()
+    unguarded = DynamicMasker(max_dynamic_fraction=0.0)
+
+    # Feed a translating scene: every frame is the base shifted, so MOG2 sees
+    # the entire frame as changed.
+    g = np.zeros_like(base[:, :, 0])
+    u = np.ones_like(base[:, :, 0]) * 255
+    for i in range(6):
+        moved = np.roll(base, 40 * i, axis=1)
+        g = guarded.mask(moved)
+        u = unguarded.mask(moved)
+
+    # unguarded reproduces the bug (huge mask); guarded refuses it
+    assert np.count_nonzero(u) > 0.5 * u.size
+    assert np.count_nonzero(g) == 0
+
+
+def test_dynamic_masker_keeps_plausible_detections() -> None:
+    """The guard must not blunt genuine small-scale motion detection."""
+    rng = np.random.default_rng(25)
+    background = rng.integers(90, 110, size=(120, 160, 3), dtype=np.uint8)
+    masker = DynamicMasker(max_dynamic_fraction=0.5)
+
+    for _ in range(6):
+        masker.mask(background)
+
+    moved = background.copy()
+    moved[40:70, 40:70] = 255  # a compact object appears
+    mask = masker.mask(moved)
+
+    assert 0 < np.count_nonzero(mask) <= 0.5 * mask.size
+    assert mask[55, 55] == 255  # the object is still marked

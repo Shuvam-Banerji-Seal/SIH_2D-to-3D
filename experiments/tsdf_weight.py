@@ -7,7 +7,8 @@ maps that saw it -- is greater than ``weight_threshold`` (default 3, i.e. four
 views). That removes floaters but also every surface fewer keyframes saw: the
 edges of each model's coverage, and small models entirely. Same depth maps, same
 grid, at least 2 / 3 / 4 views: view completeness, the mesh's median depth error
-against the triangulated depth, triangles.
+against the triangulated depth, triangles, and the mean number of surfaces a
+keyframe's ray crosses where it hits (stacked layers raise it above one).
 """
 
 from __future__ import annotations
@@ -53,15 +54,36 @@ def main() -> None:
             wt = views - 0.5
             mesh = vbg.extract_triangle_mesh(weight_threshold=wt).to_legacy()
             v, t = np.asarray(mesh.vertices), np.asarray(mesh.triangles)
+            layers = _layers(v, t, cams, (w, h)) if len(t) else None
             row = {"run": run.name, "model": k, "keyframes": n, "min_views": views, "triangles": len(t),
                    "completeness": round(view_coverage(v, t, cams, (w, h), sky), 4) if len(t) else 0.0,
-                   "depth_err": round(mesh_depth_error(v, t, cams, (w, h), r["tri_depths"]), 5) if len(t) else None}  # fmt: skip
+                   "depth_err": round(mesh_depth_error(v, t, cams, (w, h), r["tri_depths"]), 5) if len(t) else None,
+                   "surfaces_per_ray": round(layers, 3) if layers else None}  # fmt: skip
             rows.append(row)
             print(row, flush=True)
         del vbg
     out = ROOT / "paper" / "figures" / "tsdf_weight.json"
     old = json.loads(out.read_text()) if out.is_file() else []
     out.write_text(json.dumps([x for x in old if x["run"] != run.name] + rows, indent=1))
+
+
+def _layers(v: np.ndarray, t: np.ndarray, cams: list, size: tuple[int, int]) -> float:
+    """Mean surfaces crossed by the rays of six keyframes that hit the mesh at all."""
+    import open3d as o3d
+    import open3d.core as o3c
+
+    w, h = size
+    scene = o3d.t.geometry.RaycastingScene()
+    scene.add_triangles(o3c.Tensor(np.ascontiguousarray(v, dtype=np.float32)), o3c.Tensor(np.ascontiguousarray(t, dtype=np.uint32)))
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    out = []
+    for c in cams[:: max(1, len(cams) // 6)]:
+        d = np.stack([(xs + 0.5 - c.cx) / c.f, (ys + 0.5 - c.cy) / c.f, np.ones_like(xs)], -1).reshape(-1, 3) @ np.asarray(c.rotation, np.float32)
+        o = np.broadcast_to(np.asarray(c.centre, np.float32), d.shape)
+        n = scene.count_intersections(o3c.Tensor(np.ascontiguousarray(np.concatenate([o, d], 1), dtype=np.float32))).numpy()
+        if (n > 0).any():
+            out.append(float(n[n > 0].mean()))
+    return float(np.mean(out)) if out else 0.0
 
 
 if __name__ == "__main__":

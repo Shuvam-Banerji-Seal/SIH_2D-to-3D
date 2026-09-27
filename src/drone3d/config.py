@@ -175,6 +175,7 @@ class SplatConfig:
     init: str = "dense"  # dense | sparse: start from the dense TSDF cloud (when the dense stage ran) or the SfM points
     init_points: int = 400_000  # dense starting points per model (random subset)
     min_model_images: int = 8  # smaller SfM models are not trained
+    parallel: int = 1  # models trained at once (a trainer needs ~0.5 GB; see experiments/splat_parallel.py)
     cache_images: str = "disk"  # disk | cpu: cpu is faster but holds every decoded image in RAM
     flags: dict[str, object] = field(default_factory=dict)  # extra spirula train flags (key: value)
 

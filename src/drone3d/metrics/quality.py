@@ -193,3 +193,21 @@ def load_cloud(path: str | Path, *, target_epsg: int | None = None) -> np.ndarra
     import open3d as o3d
 
     return np.asarray(o3d.io.read_point_cloud(str(path)).points, dtype=np.float64)
+
+
+def scene_view_completeness(sfm: dict, dense: dict) -> float | None:
+    """The share of all registered keyframes' non-sky pixels the meshes cover.
+
+    Each SfM model counts with its registered images, whether or not the dense
+    stage made a mesh of it: a model without one (too few views, no depth)
+    contributes zeros, not nothing. Its own view completeness is measured on the
+    keyframes dense used (every second one for large models), which stand for
+    all of the model's views. ``sfm``/``dense`` are the stages' ``result.json``.
+    """
+    reg = {str(m["path"]).rstrip("/").rsplit("/", 1)[-1]: m["images"] for m in sfm.get("models", [])}
+    total = sum(reg.values())
+    if not total:
+        return None
+    got = {str(m["model"]).rstrip("/").rsplit("/", 1)[-1]: m["view_completeness"] for m in dense.get("models", [])
+           if m.get("status") == "ok" and m.get("view_completeness") is not None}  # fmt: skip
+    return round(sum(reg[k] * c for k, c in got.items() if k in reg) / total, 4)

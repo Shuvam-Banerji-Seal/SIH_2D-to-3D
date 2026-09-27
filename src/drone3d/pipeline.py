@@ -1026,6 +1026,9 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
             for m in dense["models"]
             if m.get("status") == "ok"
         ]  # fmt: skip
+        from drone3d.metrics.quality import scene_view_completeness
+
+        out["view_completeness"] = scene_view_completeness(_read_json(run_dir / "sfm" / "result.json") or {}, dense)
     export = _read_json(run_dir / "export" / "result.json")
     if export:
         out["export"] = {

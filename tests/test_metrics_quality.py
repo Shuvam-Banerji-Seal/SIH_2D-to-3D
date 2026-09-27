@@ -288,3 +288,15 @@ def test_metrics_stage_compares_models_with_a_reference(tmp_path: Path) -> None:
     (row,) = Pipeline(cfg, run_dir)._cloud_metrics()
     assert row["reference"].startswith("not compared")
     assert "accuracy_vs_reference" not in row
+
+
+def test_scene_view_completeness_counts_models_without_a_mesh_as_uncovered() -> None:
+    from drone3d.metrics.quality import scene_view_completeness
+
+    sfm = {"models": [{"path": "/r/dataset/sparse/0", "images": 52}, {"path": "/r/dataset/sparse/1", "images": 13},
+                      {"path": "/r/dataset/sparse/2", "images": 5}]}  # fmt: skip
+    dense = {"models": [{"model": "/r/dataset/sparse/0", "keyframes": 26, "status": "ok", "view_completeness": 0.5},
+                        {"model": "/r/dataset/sparse/1", "keyframes": 13, "status": "ok", "view_completeness": 0.8},
+                        {"model": "/r/dataset/sparse/2", "keyframes": 5, "status": "empty", "view_completeness": None}]}  # fmt: skip
+    assert scene_view_completeness(sfm, dense) == round((52 * 0.5 + 13 * 0.8) / 70, 4)  # by registered images, not strided keyframes
+    assert scene_view_completeness({"models": []}, dense) is None

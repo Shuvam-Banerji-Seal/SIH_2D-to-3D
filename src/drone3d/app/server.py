@@ -96,7 +96,9 @@ def _host() -> dict:
             "mem_available_gb": round(mem.get("MemAvailable", 0) / 1e9, 1)}  # fmt: skip
 
 
-def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 8770, engine_slots: int = 1):  # type: ignore[no-untyped-def]
+def create_app(
+    repo: Path, outputs: Path | None = None, *, engine_port: int = 8770, engine_slots: int = 1
+):  # type: ignore[no-untyped-def]
     from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
     from fastapi.responses import FileResponse, Response
     from fastapi.staticfiles import StaticFiles
@@ -350,12 +352,16 @@ def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 87
         run_dir = (outputs / rel).resolve()
         if not run_dir.is_relative_to(outputs.resolve()) or not run_dir.is_dir():
             raise HTTPException(404, "no such run")
-        path = Path(((_read(run_dir / "ingest" / "result.json") or {}).get("video") or {}).get("path") or "")
+        path = Path(
+            ((_read(run_dir / "ingest" / "result.json") or {}).get("video") or {}).get("path") or ""
+        )
         if not path.is_absolute():
             path = repo / path
         if not path.is_file():
             raise HTTPException(404, "the run's video is not on this machine")
-        kind = {".webm": "video/webm", ".mkv": "video/x-matroska", ".mov": "video/quicktime"}.get(path.suffix.lower(), "video/mp4")
+        kind = {".webm": "video/webm", ".mkv": "video/x-matroska", ".mov": "video/quicktime"}.get(
+            path.suffix.lower(), "video/mp4"
+        )
         return FileResponse(path, media_type=kind)
 
     # --------------------------------------------------------------- live
@@ -412,6 +418,14 @@ def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 87
     def engine_stop(req: dict = Body(default={})) -> dict:  # noqa: B008
         try:
             return engine.stop(force=bool(req.get("force")))
+        except EngineError as exc:
+            raise fail(exc) from exc
+
+    @app.post("/api/engine/restart")
+    def engine_restart(req: dict = Body(default={})) -> dict:  # noqa: B008
+        """Drain, keep the queue, and come back with new code or a new slot count."""
+        try:
+            return engine.restart(slots=req.get("slots"))
         except EngineError as exc:
             raise fail(exc) from exc
 

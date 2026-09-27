@@ -151,6 +151,9 @@ class Engine:
         self.live: dict[str, LiveSession] = {}
         self._stop = threading.Event()
         self.poisoned: str | None = None
+        self.draining: dict[str, Any] | None = (
+            None  # set by restart(): take no new job, then hand over
+        )
         root = logging.getLogger()
         if root.getEffectiveLevel() > logging.INFO:  # runs log at INFO into their own files
             root.setLevel(logging.INFO)
@@ -256,7 +259,7 @@ class Engine:
 
     def _next(self) -> Job | None:
         with self._lock:
-            if not self.queue or len(self.running) >= self.slots:
+            if self.draining is not None or not self.queue or len(self.running) >= self.slots:
                 return None
             if any(self._exclusive(j) for j in self.running.values()):
                 return None
@@ -358,6 +361,31 @@ class Engine:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
+    def restart(self, **settings: Any) -> None:
+        """Finish the running jobs, keep the queue, and exit for a supervisor to start a fresh engine.
+
+        ``settings`` (e.g. ``slots``) go into ``.engine_restart`` for the next engine; new code is
+        picked up too, which is the point of restarting a resident process.
+        """
+        with self._lock:
+            if self.draining is not None:
+                return
+            self.draining = settings
+
+        def hand_over() -> None:
+            while True:
+                with self._lock:
+                    if not self.running:
+                        break
+                time.sleep(0.5)
+            self._save_queue()
+            self._write_warm_list()
+            (self.outputs / ".engine_restart").write_text(json.dumps(settings))
+            log.info("engine: drained; restarting with %s", settings or "the same settings")
+            os._exit(0)
+
+        threading.Thread(target=hand_over, name="engine-restart", daemon=True).start()
+
     # --------------------------------------------------------------- models
     def warm(self, keys: list[str]) -> dict[str, str]:
         try:
@@ -421,6 +449,7 @@ class Engine:
                 "current": self.current.public() if self.current else None,
                 "running": [j.public() for j in self.running.values()],
                 "slots": self.slots,
+                "draining": self.draining,
                 "queue": [j.public() for j in self.queue],
                 "history": [j.public() for j in list(self.history)[:20]],
                 "live": {n: s.status() for n, s in self.live.items()},
@@ -626,6 +655,12 @@ def create_engine_app(engine: Engine):  # type: ignore[no-untyped-def]
         if not engine.stop_live(name):
             raise HTTPException(404, f"no live session {name!r}")
         return {"ok": True}
+
+    @app.post("/restart")
+    def restart(body: dict | None = None) -> dict:
+        settings = {k: v for k, v in (body or {}).items() if k == "slots" and v is not None}
+        engine.restart(**settings)
+        return {"ok": True, "draining": list(engine.running), "queued": len(engine.queue)}
 
     @app.post("/shutdown")
     def shutdown(body: dict | None = None) -> dict:

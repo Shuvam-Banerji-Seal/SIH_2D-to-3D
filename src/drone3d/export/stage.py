@@ -170,7 +170,8 @@ def _write_rows(fh, fmt: str, rows: np.ndarray, chunk: int = 200_000) -> None:  
 def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, mesh_formats: list[str],
                las: bool = True, geotiff: bool = True, raster_cell: float | None = None, viewer: bool = True,
                images: Path | None = None, texture: bool = True, texture_views: int = 16,
-               texture_size: int = 4096, max_triangles: int = 600_000) -> dict:  # fmt: skip
+               texture_size: int = 4096, max_triangles: int = 600_000, splats: dict | None = None,
+               max_splats: int = 1_500_000) -> dict:  # fmt: skip
     import open3d as o3d
     import pycolmap
 
@@ -178,6 +179,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
 
     out_dir.mkdir(parents=True, exist_ok=True)
     geo_by_model = {m["model"]: m for m in (georef or {}).get("models", [])}
+    splat_by_model = {m["model"]: m for m in (splats or {}).get("models", []) if m.get("splat_ply")}
     origin = (georef or {}).get("origin")
     scene_models, rows = [], []
     from concurrent.futures import ThreadPoolExecutor
@@ -250,6 +252,16 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             to_export = {"scale": 1.0, "rotation": rot.tolist(), "translation": [0.0, 0.0, 0.0]}
         # SfM frame -> this model's export frame, for renderers that follow the keyframe cameras
         (mdir / "frame.json").write_text(json.dumps({**to_export, "frame": frame, "units": units}, indent=1))
+        splat_file, splat_info = None, None
+        trained = splat_by_model.get(m["model"])
+        if trained is not None and Path(trained["splat_ply"]).is_file():
+            from drone3d.export.splats import compose, export_splat, train_from_world
+
+            with clock("splats"):
+                tf = compose((to_export["scale"], np.asarray(to_export["rotation"]), np.asarray(to_export["translation"])),
+                             train_from_world(Path(trained["run_dir"]) / "scene_transform.json"))  # fmt: skip
+                splat_file = mdir / "splats.splat"
+                splat_info = export_splat(trained["splat_ply"], splat_file, transform=tf, max_splats=max_splats)
         # OBJ has no standard vertex colour: with a texture, OBJ is written textured only
         plain = [x for x in mesh_formats if x != "fbx" and not (x == "obj" and baked is not None)]
         with clock("mesh_files"):
@@ -280,14 +292,17 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 if ortho is not None:
                     files.append(write_geotiff(ortho, mdir / "ortho.tif", origin=org, cell=cell, epsg=epsg,
                                                nodata=None))  # fmt: skip
+        if splat_file is not None:
+            files.append(splat_file)
         rel = [str(x.relative_to(out_dir)) for x in files if x]
         rows.append({"model": m["model"], "frame": frame, "units": units, "epsg": epsg, "files": rel,
                      "vertices": len(v), "triangles": len(f), "viewer_triangles": len(df), "points": len(p),
-                     "texture": tex_info})  # fmt: skip
+                     "texture": tex_info, "splats": splat_info})  # fmt: skip
         scene_models.append({
             "name": f"model {name}",
             "mesh": f"model_{name}/mesh_textured.glb" if baked is not None else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),
-            "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units,
+            "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units, "dir": f"model_{name}",
+            "splat": f"model_{name}/splats.splat" if splat_file is not None else None,
             "georeferenced": geo is not None, "up": [0, 0, 1],
             # frame the view on the bulk of the model, not on stray far-field fragments
             "view": {"eye": view[0].round(4).tolist(), "target": view[1].round(4).tolist()},

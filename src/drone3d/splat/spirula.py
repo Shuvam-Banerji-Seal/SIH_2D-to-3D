@@ -18,6 +18,8 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import numpy as np
+
 from drone3d.exceptions import BackendUnavailable, ReconstructionError
 from drone3d.logging_utils import get_logger
 
@@ -214,6 +216,34 @@ class TrainResult:
             "eval_metrics": self.eval_metrics,
             "log_path": str(self.log_path),
         }
+
+
+def dense_init_model(model_dir: Path, points_ply: Path, out_dir: Path, *, max_points: int = 400_000) -> Path:
+    """A copy of an SfM model whose 3D points are the dense cloud, as the splats' starting points.
+
+    Flow SfM keeps ~12 tracks per image (Jal Mahal's largest pass: ~1000
+    points), which 7k steps cannot densify into a full scene; the TSDF cloud
+    covers every surface the depth maps saw. Cameras and images are copied
+    unchanged; the points carry colour and no tracks.
+    """
+    import open3d as o3d
+    import pycolmap
+
+    rec = pycolmap.Reconstruction(str(model_dir))
+    for pid in list(rec.points3D.keys()):
+        rec.delete_point3D(pid)
+    cloud = o3d.io.read_point_cloud(str(points_ply))
+    xyz = np.asarray(cloud.points, dtype=np.float64)
+    rgb = (np.asarray(cloud.colors) * 255).round().astype(np.uint8) if cloud.has_colors() else np.full((len(xyz), 3), 128, np.uint8)
+    if len(xyz) > max_points:
+        keep = np.random.default_rng(0).choice(len(xyz), max_points, replace=False)
+        xyz, rgb = xyz[keep], rgb[keep]
+    track = pycolmap.Track()
+    for p, c in zip(xyz, rgb, strict=True):
+        rec.add_point3D(p, track, c)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rec.write(str(out_dir))
+    return out_dir
 
 
 def run_train(

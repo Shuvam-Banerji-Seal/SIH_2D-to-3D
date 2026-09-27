@@ -55,6 +55,30 @@ def main() -> None:
         timing[run] = {"processing": m.get("processing"), "rate_probe": (k.get("analysis") or {}).get("rate_probe"),
                        "passes": len(k.get("passes", [])), "keyframes": k.get("num_keyframes")}  # fmt: skip
     (FIG / "fast_timing.json").write_text(json.dumps(timing, indent=1))
+    # every sample video through the fast profile on the idle GPU (outputs/ded_*)
+    comp = load(FIG / "dedicated_completeness.json") or {}
+    ded = {}
+    for run in sorted(OUT.glob("ded_*")):
+        m = load(run / "metrics" / "metrics.json") or {}
+        s = load(run / "sfm" / "result.json") or {}
+        k = load(run / "keyframes" / "result.json") or {}
+        d = load(run / "dense" / "result.json") or {}
+        ing = load(run / "ingest" / "result.json") or {}
+        if not m.get("processing"):
+            continue
+        ded[run.name] = {
+            "video": Path((ing.get("video") or {}).get("path", run.name)).stem,
+            "resolution": [(ing.get("video") or {}).get("width"), (ing.get("video") or {}).get("height")],
+            "processing": m["processing"],
+            "passes": len(k.get("passes", [])),
+            "verdicts": [p["verdict"] for p in k.get("passes", [])],
+            "keyframes": s.get("input_images"),
+            "registered": s.get("registered_images"),
+            "models": len(s.get("models", [])),
+            "triangles": sum(x.get("mesh_triangles") or 0 for x in d.get("models", []) if x.get("status") == "ok"),
+            "view_completeness": (comp.get(run.name) or {}).get("view_completeness"),
+        }
+    (FIG / "fast_dedicated_runs.json").write_text(json.dumps(ded, indent=1))
     print("wrote", sorted(p.name for p in FIG.glob("fast_*.json")))
 
 

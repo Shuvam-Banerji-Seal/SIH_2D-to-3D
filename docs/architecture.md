@@ -52,7 +52,7 @@ outputs/<run_name>_<UTC timestamp>/
 | `drone3d.sfm` | SfM backends + feature/frame-graph diagnostics | COLMAP; OpenCV |
 | `drone3d.dense` | Dense MVS and monocular depth | COLMAP; optional torch/transformers |
 | `drone3d.mesh` | Poisson/Delaunay meshing, texturing, export | COLMAP; optional Open3D/Trimesh |
-| `drone3d.geo` | WGS84↔ECEF↔ENU, similarity georeferencing, camera geometry | NumPy; optional pyproj |
+| `drone3d.geo` | WGS84↔ECEF↔ENU, similarity georeferencing, camera geometry | NumPy |
 | `drone3d.metrics` | Cloud bounds, density, Chamfer/completeness, scale check | NumPy |
 | `drone3d.report` | Contact sheet + standalone HTML report | OpenCV |
 | `drone3d.pipeline` | Stage orchestration, artifact contracts, manifest | - |
@@ -82,7 +82,7 @@ outputs/<run_name>_<UTC timestamp>/
 | `ai` | Monocular depth (Depth Anything V2), YOLO dynamic masks | `uv sync --extra ai` |
 | `sfm` | pycolmap in-process backend | `uv sync --extra sfm` |
 | `mesh` | Open3D Poisson meshing, Trimesh export/decimation | `uv sync --extra mesh` |
-| `geo` | pyproj EPSG transforms, rasterio/laspy I/O | `uv sync --extra geo` |
+| `geo` | pyproj/rasterio/laspy declared but not yet used by the code | `uv sync --extra geo` |
 | `api` | FastAPI service layer (planned) | `uv sync --extra api` |
 
 External binaries: COLMAP (`colmap`) for SfM/MVS/meshing. Check with

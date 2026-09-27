@@ -182,7 +182,8 @@ class Pipeline:
         t0 = time.perf_counter()
         flow_model = RaftFlow(cfg.flow_model, batch=cfg.flow_batch)
         chunks = stream_analysis_chunks(info, size, stride=stride, hwaccel=cfg.hwaccel)
-        flow, indices, thumbs = ConsecutiveFlow.compute(chunks, flow_model)
+        capacity = -(-info.num_frames // stride)  # ceil: analysis frames expected
+        flow, indices, thumbs = ConsecutiveFlow.compute(chunks, flow_model, capacity=capacity)
         t1 = time.perf_counter()
         selector = SelectorConfig(
             overlap_target=cfg.overlap_target,
@@ -202,6 +203,18 @@ class Pipeline:
             and not (cfg.skip_degenerate and p.verdict in ("degenerate", "too-short"))
         ]
         keyframes = [k for k in selection.keyframes if k.pass_id in kept_passes]
+        analysis = {
+            "frames": int(flow.num_frames),
+            "stride": stride,
+            "size": list(size),
+            "flow_model": cfg.flow_model,
+            "flows": 2 * (flow.num_frames - 1),
+            "flows_per_second": round(2 * (flow.num_frames - 1) / max(t1 - t0, 1e-9), 1),
+        }
+        # Release the analysis state (flows, frames, CUDA-graph pools) before
+        # decoding 4K keyframes, which needs the memory.
+        del flow, flow_model, chunks
+        torch.cuda.empty_cache()
         if not keyframes:
             raise Drone3DError(
                 "no pass with recoverable 3D structure (see keyframes/selection.json)"
@@ -236,14 +249,7 @@ class Pipeline:
             log.warning("keyframe figure failed: %s", exc)
         passes = [p.__dict__ for p in selection.passes]
         payload = {
-            "analysis": {
-                "frames": int(flow.num_frames),
-                "stride": stride,
-                "size": list(size),
-                "flow_model": cfg.flow_model,
-                "flows": 2 * (flow.num_frames - 1),
-                "flows_per_second": round(2 * (flow.num_frames - 1) / max(t1 - t0, 1e-9), 1),
-            },
+            "analysis": analysis,
             "timing_s": {
                 "decode_and_flow": round(t1 - t0, 2),
                 "selection": round(t2 - t1, 2),
@@ -257,8 +263,6 @@ class Pipeline:
             "figures": figures,
         }
         _write_json(stage_dir / "result.json", payload)
-        del flow, flow_model
-        torch.cuda.empty_cache()
         verdicts = ", ".join(f"pass {p.pass_id}: {p.verdict}" for p in selection.passes)
         return StageReport(
             "keyframes",

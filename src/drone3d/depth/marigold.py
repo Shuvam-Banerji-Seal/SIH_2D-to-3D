@@ -66,6 +66,47 @@ _LORA_TARGETS = [
 ]  # fmt: skip  (upstream evaluation/config/inference_depth.yaml)
 
 
+def _quantized_cache(qwen: Path, cache_root: Path, quantization: str) -> Path:
+    """Directory holding a pre-quantized copy of the base transformer, built on first use.
+
+    The bf16 checkpoint is ~39 GB and is re-quantized on every load; the NF4
+    copy is ~11 GB, so later loads read about a quarter of the bytes. The
+    quantization settings are upstream's (``component_loader.py``), so the
+    cached weights are the ones a fresh load would produce.
+    """
+    import torch
+    from diffusers import BitsAndBytesConfig, QwenImageTransformer2DModel
+
+    root = cache_root / f"Qwen-Image-Edit-2509-{quantization}"
+    if (root / "transformer" / "config.json").is_file():
+        return root
+    log.info("building quantized transformer cache at %s (one-time)", root)
+    if quantization == "4bit":
+        qconfig = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            llm_int8_skip_modules=["transformer_blocks.0.img_mod"],
+        )
+    else:
+        qconfig = BitsAndBytesConfig(
+            load_in_8bit=True, llm_int8_skip_modules=["transformer_blocks.0.img_mod"]
+        )
+    model = QwenImageTransformer2DModel.from_pretrained(
+        str(qwen),
+        subfolder="transformer",
+        local_files_only=True,
+        torch_dtype=torch.bfloat16,
+        quantization_config=qconfig,
+    )
+    tmp = root.with_name(root.name + ".tmp")
+    model.save_pretrained(str(tmp / "transformer"))
+    del model
+    torch.cuda.empty_cache()
+    tmp.rename(root)  # atomic publish: a crash mid-save leaves no half cache
+    return root
+
+
 def processing_size(width: int, height: int, long_side: int) -> tuple[int, int]:
     """Aspect-preserving size with the given long side, both sides multiples of 16."""
     scale = long_side / max(width, height)
@@ -91,6 +132,7 @@ class MarigoldDepth:
         quantization: str = "4bit",
         device: str = "cuda",
         seed: int = 2025,
+        cache: bool = True,
     ) -> None:
         assets = Path(assets_dir or os.environ.get("DEPTH_ASSETS_DIR", _DEFAULT_ASSETS))
         qwen = assets / "checkpoints" / "Qwen-Image-Edit-2509"
@@ -114,10 +156,14 @@ class MarigoldDepth:
             ) from exc
 
         modality = "normals" if checkpoint.startswith("normals") else "depth"
+        transformer_root = qwen
+        if cache and quantization in ("4bit", "8bit"):
+            transformer_root = _quantized_cache(qwen, assets / "cache", quantization)
         cfg = OmegaConf.create(
             {
                 "paths": {
                     "ckpt_qwen_image_edit": str(qwen),
+                    "ckpt_qwen_image_edit_transformer": str(transformer_root),
                     "embed_dir": str(marigold / "qwen_text_embeddings"),
                 },
                 "optimization": {
@@ -176,9 +222,12 @@ class MarigoldDepth:
         x = (x / 127.5 - 1.0).clamp(-1.0, 1.0)
         torch.manual_seed(self.seed)
         batch = {"rgb_norm": x, "out": {}}
-        self._encode(batch)
-        self._step(batch)
-        self._decode(batch)
+        # Upstream runs inference under bf16 autocast (validate_steps.py): peft's
+        # k-bit preparation keeps some layers in fp32.
+        with torch.amp.autocast(self.device.type, dtype=torch.bfloat16):
+            self._encode(batch)
+            self._step(batch)
+            self._decode(batch)
         pixel = batch["out"]["pixel_pred"].float()
         if self.modality == "normals":
             return F.normalize(pixel, dim=1)

@@ -189,28 +189,44 @@ def _ffmpeg_cmd(
             "-f", "rawvideo", "-pix_fmt", "nv12", "pipe:1"]  # fmt: skip
 
 
-def nv12_to_rgb(nv12, height: int, width: int, *, bt709: bool = True, full_range: bool = False):  # type: ignore[no-untyped-def]
-    """``uint8 [B, H*3/2, W]`` NV12 (torch, any device) -> ``uint8 [B, H, W, 3]`` RGB."""
+def nv12_to_rgb(
+    nv12,
+    height: int,
+    width: int,
+    *,
+    bt709: bool = True,
+    full_range: bool = False,
+    max_batch: int = 8,
+):  # type: ignore[no-untyped-def]
+    """``uint8 [B, H*3/2, W]`` NV12 (torch, any device) -> ``uint8 [B, H, W, 3]`` RGB.
+
+    Converts ``max_batch`` frames at a time: float intermediates of a 4K frame
+    are ~250 MB, so a whole extraction group at once would need gigabytes.
+    """
     import torch
     import torch.nn.functional as F
 
-    y = nv12[:, :height].float()
-    uv = nv12[:, height:].reshape(-1, height // 2, width // 2, 2).permute(0, 3, 1, 2).float()
-    uv = F.interpolate(uv, size=(height, width), mode="bilinear", align_corners=False)
+    out = torch.empty((nv12.shape[0], height, width, 3), dtype=torch.uint8, device=nv12.device)
     if full_range:
-        cb, cr = uv[:, 0] - 128.0, uv[:, 1] - 128.0
+        ys, yo, cs = 1.0, 0.0, 1.0
     else:
-        y = (y - 16.0) * (255.0 / 219.0)
-        cb, cr = (uv[:, 0] - 128.0) * (255.0 / 224.0), (uv[:, 1] - 128.0) * (255.0 / 224.0)
+        ys, yo, cs = 255.0 / 219.0, 16.0, 255.0 / 224.0
     if bt709:
-        r = y + 1.5748 * cr
-        g = y - 0.187324 * cb - 0.468124 * cr
-        b = y + 1.8556 * cb
+        kr, kgb, kgr, kb = 1.5748, 0.187324, 0.468124, 1.8556
     else:
-        r = y + 1.402 * cr
-        g = y - 0.344136 * cb - 0.714136 * cr
-        b = y + 1.772 * cb
-    return torch.stack([r, g, b], dim=-1).round_().clamp_(0, 255).to(torch.uint8)
+        kr, kgb, kgr, kb = 1.402, 0.344136, 0.714136, 1.772
+    for s in range(0, nv12.shape[0], max_batch):
+        chunk = nv12[s : s + max_batch]
+        y = (chunk[:, :height].float() - yo) * ys
+        uv = chunk[:, height:].reshape(-1, height // 2, width // 2, 2).permute(0, 3, 1, 2).float()
+        uv = F.interpolate(uv, size=(height, width), mode="bilinear", align_corners=False)
+        uv = (uv - 128.0) * cs
+        cb, cr = uv[:, 0], uv[:, 1]
+        dst = out[s : s + max_batch]
+        dst[..., 0] = (y + kr * cr).round_().clamp_(0, 255)
+        dst[..., 1] = (y - kgb * cb - kgr * cr).round_().clamp_(0, 255)
+        dst[..., 2] = (y + kb * cb).round_().clamp_(0, 255)
+    return out
 
 
 def _color_args(info: StreamInfo) -> dict[str, bool]:

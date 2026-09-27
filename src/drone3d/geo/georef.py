@@ -288,13 +288,18 @@ def solve_georef(
     *,
     mode: str = "auto",
     min_linearity: float = 0.15,
+    min_slope_deg: float = 5.0,
 ) -> tuple[SimilarityTransform, dict[str, Any]]:
     """Georeference a model from camera centres and GPS, robust to straight tracks.
 
-    ``auto`` uses the full similarity only when the GPS track spans two
-    dimensions (``linearity >= min_linearity``) *and* the similarity's implied
-    vertical agrees with the model's ground plane within 10 deg; otherwise it
-    levels on the ground plane and fits yaw, scale and translation.
+    ``auto`` levels the model on its ground plane and fits yaw, scale and
+    translation -- unless GPS shows, significantly, that the ground is sloped.
+    That test needs a track spanning two dimensions (``linearity >=
+    min_linearity``): the full similarity's tilt between its vertical and the
+    ground normal must exceed ``min_slope_deg`` by three jackknife standard
+    errors. On flat ground the levelled fit wins even on curved tracks,
+    because vertical GPS noise (typically twice the horizontal) tilts the
+    unconstrained similarity.
     """
     src = np.asarray(model_centers, dtype=np.float64)
     dst = np.asarray(gps_enu, dtype=np.float64)
@@ -311,11 +316,23 @@ def solve_georef(
     chosen = mode
     if mode == "auto":
         chosen = "yaw-scale"
-        if shape["linearity"] >= min_linearity and len(src) >= 3:
-            sim = solve_similarity(src, dst, with_scale=True)
-            tilt = float(np.degrees(np.arccos(np.clip((sim.rotation @ up)[2], -1.0, 1.0))))
+        if shape["linearity"] >= min_linearity and len(src) >= 6:
+
+            def tilt_of(t: SimilarityTransform) -> float:
+                return float(np.degrees(np.arccos(np.clip((t.rotation @ up)[2], -1.0, 1.0))))
+
+            tilt = tilt_of(solve_similarity(src, dst, with_scale=True))
+            n = len(src)
+            loo = np.array(
+                [
+                    tilt_of(solve_similarity(src[np.arange(n) != i], dst[np.arange(n) != i]))
+                    for i in range(min(n, 200))
+                ]
+            )
+            tilt_se = float(np.sqrt((len(loo) - 1) / len(loo) * np.sum((loo - loo.mean()) ** 2)))
             info["similarity_tilt_vs_ground_deg"] = tilt
-            if tilt <= 10.0:
+            info["similarity_tilt_se_deg"] = tilt_se
+            if tilt - 3.0 * tilt_se > min_slope_deg:
                 chosen = "similarity"
     if chosen == "similarity":
         solver = sim_solver

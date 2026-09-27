@@ -47,7 +47,7 @@ export class Explorer extends EventTarget {
     this.models = [];
     this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false };
     this.pointSize = 1.5;
-    this.imageScale = 1;
+    this.imageScale = 2.5; // keyframe photo / depth planes: big enough to read at the model's framing
     this.nav = 'orbit';
     this.keys = new Set();
     this.flySpeed = 1;

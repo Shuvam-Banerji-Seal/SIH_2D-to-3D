@@ -107,6 +107,23 @@ def _quantized_cache(qwen: Path, cache_root: Path, quantization: str) -> Path:
     return root
 
 
+def _release_host_memory() -> None:
+    """Return freed host allocations to the OS after loading weights.
+
+    Loading reads multi-GB safetensors shards through host buffers; CPython and
+    glibc keep the freed arenas, so without a trim the process holds several GB
+    of RAM it no longer uses while inference runs for many minutes.
+    """
+    import ctypes
+    import gc
+
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except OSError:  # not glibc
+        pass
+
+
 def processing_size(width: int, height: int, long_side: int) -> tuple[int, int]:
     """Aspect-preserving size with the given long side, both sides multiples of 16."""
     scale = long_side / max(width, height)
@@ -200,6 +217,7 @@ class MarigoldDepth:
         self._decode = graph.QwenImageDecode(
             {"input_key": "lat_encoding", "output_key": "pixel_pred"}
         )
+        _release_host_memory()
         self.device = torch.device(device)
         self.seed = seed
         self.modality = modality

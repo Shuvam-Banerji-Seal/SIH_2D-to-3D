@@ -199,9 +199,14 @@ class LiveSession:
         if job.live != self.name:
             return
         with self._lock:
+            no_3d = any(
+                "no pass with recoverable 3D" in (st.get("message") or "") for st in job.stages
+            )
             for seg in self.segments:
                 if seg["run"] == job.name:
-                    seg.update(status=job.status, processing_s=job.seconds, ready_at=job.finished,
+                    # a segment where the camera only turned has no parallax: a verdict, not a failure
+                    seg.update(status="no-3d" if job.status == "failed" and no_3d else job.status,
+                               processing_s=job.seconds, ready_at=job.finished,
                                latency_s=round((job.finished or time.time()) - seg["closed_at"], 2),
                                realtime_factor=round((job.seconds or 0) / max(seg["duration_s"], 1e-3), 3))  # fmt: skip
         self._write()

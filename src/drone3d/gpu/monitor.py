@@ -145,25 +145,28 @@ def _rss_bytes(pid: int) -> int:
 
 
 def _descendants(pid: int) -> set[int]:
-    """PIDs of every descendant of ``pid`` (Linux /proc)."""
+    """PIDs of every descendant of ``pid``, from ``/proc/<pid>/task/*/children`` (Linux).
+
+    Walking down from our own process costs a few reads; the previous scan of
+    every ``/proc/*/stat`` read ~700 files twice a second on a busy host and
+    held the GIL against the stage it was measuring.
+    """
     out: set[int] = set()
-    try:
-        children: dict[int, list[int]] = {}
-        for entry in Path("/proc").iterdir():
-            if not entry.name.isdigit():
-                continue
+    stack = [pid]
+    while stack:
+        parent = stack.pop()
+        try:
+            tasks = list(Path(f"/proc/{parent}/task").iterdir())
+        except OSError:
+            continue
+        for task in tasks:
             try:
-                stat = (entry / "stat").read_text(encoding="utf-8")
-                ppid = int(stat.rsplit(")", 1)[1].split()[1])
-            except (OSError, ValueError, IndexError):
+                kids = (task / "children").read_text().split()
+            except OSError:
                 continue
-            children.setdefault(ppid, []).append(int(entry.name))
-        stack = [pid]
-        while stack:
-            for child in children.get(stack.pop(), []):
+            for k in kids:
+                child = int(k)
                 if child not in out:
                     out.add(child)
                     stack.append(child)
-    except OSError:
-        pass
     return out

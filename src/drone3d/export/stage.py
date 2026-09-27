@@ -10,8 +10,11 @@ self-contained web viewer (``index.html`` + vendored three.js) whose
 
 from __future__ import annotations
 
+import collections
+import contextlib
 import json
 import shutil
+import time
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +48,24 @@ def _enu_to_utm(p: np.ndarray, origin: dict, epsg: int) -> np.ndarray:
     to_utm = pyproj.Transformer.from_crs("EPSG:4978", f"EPSG:{epsg}", always_xy=True)
     e, n, h = to_utm.transform(ecef[:, 0], ecef[:, 1], ecef[:, 2])
     return np.stack([e, n, h], 1)
+
+
+class _Clock:
+    """Seconds per named step, summed over models: ``with clock("texture"): ...``."""
+
+    def __init__(self) -> None:
+        self.seconds: dict[str, float] = collections.defaultdict(float)
+
+    @contextlib.contextmanager
+    def __call__(self, key: str):  # type: ignore[no-untyped-def]
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.seconds[key] += time.perf_counter() - t0
+
+    def rounded(self) -> dict[str, float]:
+        return {k: round(v, 2) for k, v in self.seconds.items()}
 
 
 def _level(points: np.ndarray, cams: np.ndarray) -> np.ndarray:
@@ -125,6 +146,17 @@ def _write_textured(v: np.ndarray, f: np.ndarray, uv: np.ndarray, albedo: np.nda
     return [glb, obj, mtl, tex]
 
 
+def _textured_and_fbx(baked: tuple | None, mdir: Path, fbx_src: Path | None, fbx: bool) -> list[Path]:
+    """Background half of a model's export: textured GLB/OBJ, then the FBX (from the textured GLB)."""
+    out = _write_textured(*baked, mdir / "mesh_textured") if baked is not None else []
+    src = out[0] if out else fbx_src
+    if fbx and src is not None:
+        converted = write_fbx(src, mdir / "mesh.fbx")
+        if converted is not None:
+            out.append(converted)
+    return out
+
+
 def _write_rows(fh, fmt: str, rows: np.ndarray, chunk: int = 200_000) -> None:  # type: ignore[no-untyped-def]
     """Text rows via one C-level ``%`` per chunk: ``np.savetxt`` formats row by row in
     Python and took 22 s for four ~1M-row OBJ files."""
@@ -151,7 +183,8 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
     from concurrent.futures import ThreadPoolExecutor
 
     pool = ThreadPoolExecutor(max_workers=2)
-    fbx_jobs: list = []
+    bg_jobs: list = []
+    clock = _Clock()
     for m in dense.get("models", []):
         if m.get("status") != "ok":
             continue
@@ -160,8 +193,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         if mdir.exists():  # our own output: stale files from an earlier export would be listed as current
             shutil.rmtree(mdir)
         mdir.mkdir(parents=True)
-        mesh = o3d.io.read_triangle_mesh(m["mesh"])
-        pcd = o3d.io.read_point_cloud(m["points"])
+        with clock("read"):
+            mesh = o3d.io.read_triangle_mesh(m["mesh"])
+            pcd = o3d.io.read_point_cloud(m["points"])
         v, f = np.asarray(mesh.vertices), np.asarray(mesh.triangles)
         vc = (np.asarray(mesh.vertex_colors) * 255).astype(np.uint8) if mesh.has_vertex_colors() else None
         p = np.asarray(pcd.points)
@@ -181,14 +215,16 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         # (GLB, textured OBJ/GLB, FBX) are capped: a 1.5M-triangle model made a 120 MB
         # GLB that browsers load slowly and a 4096^2 soup atlas cannot texture finely.
         dv, df, dvc = v, f, vc
-        if len(f) > max_triangles:
-            small = mesh.simplify_quadric_decimation(target_number_of_triangles=max_triangles)
+        if len(f) > 1.25 * max_triangles:  # 630k -> 600k cost 2.3 s per model for nothing a viewer notices
+            with clock("decimate"):
+                small = mesh.simplify_quadric_decimation(target_number_of_triangles=max_triangles)
             dv, df = np.asarray(small.vertices), np.asarray(small.triangles)
             dvc = (np.asarray(small.vertex_colors) * 255).astype(np.uint8) if small.has_vertex_colors() else None
         baked, tex_info = None, None
         if texture and images is not None:
             try:
-                res = bake_texture(dv, df, dvc, posed, rec, images, views=texture_views, size=texture_size)
+                with clock("texture"):
+                    res = bake_texture(dv, df, dvc, posed, rec, images, views=texture_views, size=texture_size)
                 if res is not None:
                     baked, tex_info = (dv, df, res[0], res[1]), res[2]
             except (RuntimeError, ValueError) as exc:  # texturing improves the mesh; never lose the mesh over it
@@ -204,7 +240,8 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             units, frame = "m", "ENU"
             to_export = {"scale": float(t.scale), "rotation": np.asarray(t.rotation).tolist(), "translation": np.asarray(t.translation).tolist()}
         else:
-            rot = _level(p, cams)
+            with clock("level"):
+                rot = _level(p, cams)
             v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
             dv = dv @ rot.T
             if baked is not None:
@@ -215,38 +252,41 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         (mdir / "frame.json").write_text(json.dumps({**to_export, "frame": frame, "units": units}, indent=1))
         # OBJ has no standard vertex colour: with a texture, OBJ is written textured only
         plain = [x for x in mesh_formats if x != "fbx" and not (x == "obj" and baked is not None)]
-        files = write_mesh(v, f, vc, mdir / "mesh", tuple(x for x in plain if x == "ply"))
-        files += write_mesh(dv, df, dvc, mdir / "mesh", tuple(x for x in plain if x != "ply"))
-        textured = _write_textured(*baked, mdir / "mesh_textured") if baked is not None else []
-        files += textured
-        if "fbx" in mesh_formats:  # converted in the background while the next model exports
-            src = textured[0] if textured else (mdir / "mesh.glb" if (mdir / "mesh.glb").is_file() else files[0])
-            fbx_jobs.append((pool.submit(write_fbx, src, mdir / "mesh.fbx"), len(rows)))
+        with clock("mesh_files"):
+            files = write_mesh(v, f, vc, mdir / "mesh", tuple(x for x in plain if x == "ply"))
+            files += write_mesh(dv, df, dvc, mdir / "mesh", tuple(x for x in plain if x != "ply"))
+        # textured files and the FBX are written in the background while the GPU bakes the next model
+        fbx_src = mdir / "mesh.glb" if (mdir / "mesh.glb").is_file() else (files[0] if files else None)
+        bg_jobs.append((pool.submit(_textured_and_fbx, baked, mdir, fbx_src, "fbx" in mesh_formats), len(rows)))
         pts_ply = mdir / "points.ply"
         cloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(p))
         if pc is not None:
             cloud.colors = o3d.utility.Vector3dVector(pc / 255.0)
-        o3d.io.write_point_cloud(str(pts_ply), cloud)
+        with clock("points_ply"):
+            o3d.io.write_point_cloud(str(pts_ply), cloud)
         files.append(pts_ply)
         epsg, p_proj = None, p
         if geo is not None and origin:
             epsg = utm_epsg(origin["lat0"], origin["lon0"])
             p_proj = _enu_to_utm(p, origin, epsg)
         if las:
-            files.append(write_las(p_proj, pc, mdir / "points.las", epsg=epsg))
+            with clock("las"):
+                files.append(write_las(p_proj, pc, mdir / "points.las", epsg=epsg))
         if geotiff and len(p_proj):
-            cell = raster_cell or 2.0 * m.get("voxel", 0.0) * scale or float(np.ptp(p_proj[:, :2], 0).max() / 1000)
-            dsm, ortho, org = rasterize_top(p_proj, pc, cell)
-            files.append(write_geotiff(dsm, mdir / "dsm.tif", origin=org, cell=cell, epsg=epsg))
-            if ortho is not None:
-                files.append(write_geotiff(ortho, mdir / "ortho.tif", origin=org, cell=cell, epsg=epsg, nodata=None))
+            with clock("geotiff"):
+                cell = raster_cell or 2.0 * m.get("voxel", 0.0) * scale or float(np.ptp(p_proj[:, :2], 0).max() / 1000)
+                dsm, ortho, org = rasterize_top(p_proj, pc, cell)
+                files.append(write_geotiff(dsm, mdir / "dsm.tif", origin=org, cell=cell, epsg=epsg))
+                if ortho is not None:
+                    files.append(write_geotiff(ortho, mdir / "ortho.tif", origin=org, cell=cell, epsg=epsg,
+                                               nodata=None))  # fmt: skip
         rel = [str(x.relative_to(out_dir)) for x in files if x]
         rows.append({"model": m["model"], "frame": frame, "units": units, "epsg": epsg, "files": rel,
                      "vertices": len(v), "triangles": len(f), "viewer_triangles": len(df), "points": len(p),
                      "texture": tex_info})  # fmt: skip
         scene_models.append({
             "name": f"model {name}",
-            "mesh": f"model_{name}/mesh_textured.glb" if textured else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),
+            "mesh": f"model_{name}/mesh_textured.glb" if baked is not None else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),
             "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units,
             "georeferenced": geo is not None, "up": [0, 0, 1],
             # frame the view on the bulk of the model, not on stray far-field fragments
@@ -256,12 +296,13 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             "stats": {"keyframes": m.get("keyframes"), "triangles": f"{len(f):,}", "points": f"{len(p):,}",
                       "depth coverage": f"{100 * m.get('coverage', 0):.0f} %", "frame": frame, **({"EPSG": epsg} if epsg else {})},
         })  # fmt: skip
-    for fut, k in fbx_jobs:  # attach the FBX files to their models' rows and download lists
-        fbx = fut.result()
-        if fbx is not None:
-            rel = str(fbx.relative_to(out_dir))
+    for fut, k in bg_jobs:  # attach the background files to their models' rows and download lists
+        with clock("background_wait"):
+            written = fut.result()
+        for path in written:
+            rel = str(path.relative_to(out_dir))
             rows[k]["files"].append(rel)
-            scene_models[k]["files"].append({"label": fbx.name, "path": rel})
+            scene_models[k]["files"].append({"label": path.name, "path": rel})
     pool.shutdown()
     if viewer and scene_models:
         for item in ("index.html", "vendor"):
@@ -270,5 +311,6 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 shutil.rmtree(dst) if dst.is_dir() else dst.unlink()
             shutil.copytree(src, dst) if src.is_dir() else shutil.copy2(src, dst)
         (out_dir / "scene.json").write_text(json.dumps({"title": title, "models": scene_models}, indent=1))
-    return {"models": rows, "viewer": str(out_dir / "index.html") if viewer and scene_models else None}
+    return {"models": rows, "viewer": str(out_dir / "index.html") if viewer and scene_models else None,
+            "timing_s": clock.rounded()}  # fmt: skip
 

@@ -111,6 +111,7 @@ uv run drone3d run --config configs/fast.yaml \
     --set ingest.video=/data/pass.mp4 \
     --set ingest.telemetry=/data/pass.SRT      # optional: DJI SRT, CSV, GPX or JSON
 uv run drone3d view outputs/fast               # http://127.0.0.1:8765
+uv run drone3d ui                              # or everything from the browser: http://127.0.0.1:8080
 ```
 
 RAFT and Depth Anything V2 weights download on first use (set `HF_HUB_CACHE` /
@@ -118,6 +119,43 @@ RAFT and Depth Anything V2 weights download on first use (set `HF_HUB_CACHE` /
 `--set section.key=value`; any stage re-run on an existing run directory with
 `--run-dir R --stages dense,export`. Sample footage: `tools/fetch_datasets.sh`
 downloads the fifteen public clips listed in [`resources.md`](resources.md).
+
+## The console, the warm engine and live footage
+
+```bash
+uv run drone3d ui                 # http://127.0.0.1:8080 -- starts and supervises the engine on demand
+uv run drone3d engine --warm raft_large,depth_anything_v2_large   # or run the engine yourself
+```
+
+- **Console** — the engine and every model it holds (load / unload / warm for a
+  profile), NVML gauges and ten-minute charts, the processes on the GPU with
+  ours marked, a capability check of the machine (CUDA, NVDEC/NVENC, nvJPEG,
+  Open3D CUDA, GLOMAP, splat trainer, FBX writer, weights), work in flight.
+- **Build** — a video from the library or an upload, a flight log, a profile,
+  a resolution preset (draft / high / ultra), module switches (depth fill,
+  photo texture, Gaussian splats, georeference, LAS, GeoTIFF, FBX) and every
+  option of the configuration, generated from the config dataclasses.
+- **Live** — an RTSP / RTMP / SRT / UDP / HLS / HTTP stream, a V4L2 camera, or
+  a recorded flight replayed at its frame rate. ffmpeg cuts it into segments at
+  keyframes without re-encoding; each closed segment becomes a run on the warm
+  engine, ahead of other work (Qutub Minar replayed in 30 s segments: a model
+  26–38 s after each segment closed). With a flight log every segment is
+  georeferenced into one ENU frame.
+- **Explorer** — textured mesh, dense cloud and Gaussian splats in one scene;
+  orbit, fly (<kbd>W A S D Q E</kbd>) or *follow flight* along the drone's own
+  path and view; click a keyframe to look through it with its photo over the
+  model; texture / shaded / wireframe; 0.5–2× render resolution; measuring;
+  screenshots. The same explorer ships with every export (`export/index.html`).
+
+The **engine** (`drone3d engine`) is a resident GPU process: RAFT and Depth
+Anything stay loaded and RAFT's CUDA graphs are captured once. It loads a model
+only if the GPU has its footprint plus a reserve free at that moment (other
+users' processes included), never unloads one a run is using, fits
+memory-hungry settings (TSDF budget, flow batch, texture size) to the free
+memory before each run, and after a sticky CUDA fault saves its queue and
+exits so the console restarts it with the same models warm. Warm runs save
+~5 s per video (Jal Mahal: 106 s warm vs 109 s cold, same conditions); the
+point is an always-ready engine and low latency for live segments.
 
 ## Outputs (fast profile)
 
@@ -131,7 +169,9 @@ outputs/<run>/
 │       ├── mesh_textured.{glb,obj,mtl}   textured from the keyframes (+ _albedo.jpg)
 │       ├── mesh.fbx                      textured, via assimp
 │       ├── points.{ply,las}              dense point cloud (LAS in UTM + EPSG when georeferenced)
+│       ├── splats.splat                  Gaussian splats for the web (with the splat stage)
 │       └── dsm.tif, ortho.tif            GeoTIFF surface model and orthophoto
+├── dense/model_N/depth/*.jpg             fused depth per keyframe (turbo; black = no depth / sky)
 ├── dataset/images/pass_NN/*.jpg          keyframes (1920 px)
 ├── dataset/sparse/N/                     COLMAP models, one per pass
 ├── georef/                               transforms, ENU sparse clouds, camera_track.geojson
@@ -158,16 +198,18 @@ src/drone3d/
 ├── io/telemetry.py     CSV / DJI SRT / GPX / JSON flight logs
 ├── keyframes/          RAFT flow (CUDA Graphs), pass segmentation, overlap-band selection, 3D verdict
 ├── fastsfm/            flow tracks, pycolmap mapping, flow triangulation, mono fill, TSDF (fast profile)
-├── export/             OBJ/PLY/GLB/FBX/LAS/GeoTIFF writers, GPU texture baking
-├── viewer/static/      three.js viewer (vendored, MIT)
+├── export/             OBJ/PLY/GLB/FBX/LAS/GeoTIFF writers, GPU texture baking, web splats
+├── engine/             warm engine: model cache, job queue, live segments, HTTP control API
+├── app/                the console: FastAPI server, engine supervisor, static front end (js/, fonts/)
+├── viewer/static/      explorer.js + standalone viewer; three.js and Spark (vendored, MIT)
 ├── depth/, splat/      Marigold v2 and spirula-studio wrappers (accurate profile)
 ├── geo/                WGS84/ENU, Umeyama, ground-levelled 4-DoF georeferencing
-├── gpu/monitor.py      NVML sampler (records GPU sharing)
+├── gpu/               NVML sampler per stage (records GPU sharing) and snapshots for the console
 ├── pipeline.py, config.py, cli.py
 experiments/            scripts behind every number above and in the paper
 paper/, promo/          LaTeX paper; code-drawn promo film + compositor
 third_party/            spirula-studio, marigold-v2, javascript-animation-skills (submodules)
-tools/                  dataset download, synthetic control clip, FBX converter
+tools/                  dataset download, synthetic control clip, FBX converter, record_ui (console tour)
 ```
 
 ## Limitations
@@ -176,7 +218,9 @@ Timings are from a shared GPU; Jal Mahal (an edited clip with five camera moves
 and a lake that defeats optical flow) is 1.8× over its budget. Completeness is
 ~0.75 of what the camera saw: surfaces the single pass never faced cannot be
 reconstructed, and flow fails on water and sky. Georeferencing is verified with
-synthetic GPS only. Dynamic objects are not masked.
+synthetic GPS only. Dynamic objects are not masked. Fast FPV footage needs
+~10 keyframes per second (GoPro waterfall: 179 keyframes for 18 s) and is far
+over its budget. Live segments cut a camera move at their boundary.
 
 ## Licences
 

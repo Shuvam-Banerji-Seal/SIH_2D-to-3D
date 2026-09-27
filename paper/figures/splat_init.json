@@ -1,0 +1,48 @@
+{
+ "note": "Jal Mahal model 0 (41 keyframes, pass 5) from the fast profile's flow SfM; spirula 3dgs preset, 7000 steps, no depth loss; held-out every 8th keyframe; idle A100; 2026-09-28.",
+ "rows": [
+  {
+   "init": "SfM points (~1000)",
+   "quality": "high",
+   "splats": 20000,
+   "train_s": 22.2,
+   "psnr": 27.46,
+   "cc_psnr": 31.06,
+   "ssim": 0.886
+  },
+  {
+   "init": "dense TSDF cloud (400k)",
+   "quality": "low",
+   "splats": 200000,
+   "train_s": 34.6,
+   "psnr": 29.01,
+   "cc_psnr": 35.59,
+   "ssim": 0.948
+  },
+  {
+   "init": "dense TSDF cloud (400k)",
+   "quality": "medium",
+   "splats": 1000000,
+   "train_s": 75.4,
+   "psnr": 29.79,
+   "cc_psnr": 36.47,
+   "ssim": 0.951
+  },
+  {
+   "init": "dense TSDF cloud (400k)",
+   "quality": "high",
+   "splats": 3000000,
+   "train_s": 122.7,
+   "psnr": 29.47,
+   "cc_psnr": 36.38,
+   "ssim": 0.95
+  }
+ ],
+ "web": {
+  "trained": 999425,
+  "kept": 624957,
+  "bytes": 19998624,
+  "ply_bytes": 742513284,
+  "convert_s": 0.57
+ }
+}

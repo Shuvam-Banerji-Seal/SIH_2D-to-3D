@@ -258,6 +258,8 @@ def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 87
 
     def scene_of(run_dir: Path, url: str, label: str = "") -> list[dict]:
         scn = _read(run_dir / "export" / "scene.json") or {}
+        rel = run_dir.relative_to(outputs)
+        video = (_read(run_dir / "ingest" / "result.json") or {}).get("video") or {}
         out = []
         for m in scn.get("models", []):
             m = dict(m)
@@ -273,6 +275,12 @@ def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 87
             m["frame"] = frame
             m["name"] = f"{label}{m.get('name', 'model')}"
             m["run"] = run_dir.name
+            if m.get("frames"):
+                for key in ("photo_dir", "depth_dir"):
+                    m["frames"][key] = f"{url}/export/{m['frames'][key]}"
+            # older exports have no frame previews: the console serves them from the run itself
+            m.update(base=url, thumb=f"/api/thumb/{rel}", fps=video.get("fps"),
+                     video=f"/api/video/{rel}" if video.get("path") else None)  # fmt: skip
             out.append(m)
         return out
 
@@ -335,6 +343,20 @@ def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 87
         return FileResponse(
             cache, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"}
         )
+
+    @app.get("/api/video/{rel:path}")
+    def source_video(rel: str) -> FileResponse:
+        """The video a run was made from (only that file: its path comes from the run's ingest result)."""
+        run_dir = (outputs / rel).resolve()
+        if not run_dir.is_relative_to(outputs.resolve()) or not run_dir.is_dir():
+            raise HTTPException(404, "no such run")
+        path = Path(((_read(run_dir / "ingest" / "result.json") or {}).get("video") or {}).get("path") or "")
+        if not path.is_absolute():
+            path = repo / path
+        if not path.is_file():
+            raise HTTPException(404, "the run's video is not on this machine")
+        kind = {".webm": "video/webm", ".mkv": "video/x-matroska", ".mov": "video/quicktime"}.get(path.suffix.lower(), "video/mp4")
+        return FileResponse(path, media_type=kind)
 
     # --------------------------------------------------------------- live
     @app.post("/api/live")

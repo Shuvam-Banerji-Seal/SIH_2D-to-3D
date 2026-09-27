@@ -41,8 +41,9 @@ export class Explorer extends EventTarget {
     this.marks = new THREE.Group();
     this.scene.add(this.root, this.marks);
     this.models = [];
-    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, grid: false };
+    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false };
     this.pointSize = 1.5;
+    this.imageScale = 1;
     this.nav = 'orbit';
     this.keys = new Set();
     this.flySpeed = 1;
@@ -83,7 +84,7 @@ export class Explorer extends EventTarget {
 
   async addModel(m, { visible = true, frame = false } = {}) {
     const entry = { spec: m, group: new THREE.Group(), meshObj: null, pointsObj: null, splatObj: null, camObj: null, box: new THREE.Box3(),
-      visible, triangles: 0, points: 0, splats: 0 };
+      photoObj: null, depthObj: null, frustum: 1, visible, triangles: 0, points: 0, splats: 0 };
     entry.group.visible = visible;
     this.root.add(entry.group);
     this.models.push(entry);
@@ -101,6 +102,7 @@ export class Explorer extends EventTarget {
   async _loadMesh(entry) {
     this.status(`loading ${entry.spec.name} mesh…`);
     const gltf = await new GLTFLoader().loadAsync(entry.spec.mesh);
+    if (entry.spec.gltf_up === 'y') { gltf.scene.rotation.x = Math.PI / 2; gltf.scene.updateMatrixWorld(true); } // glTF y-up -> survey z-up
     gltf.scene.traverse((o) => {
       if (!o.isMesh) return;
       const map = o.material?.map || null;
@@ -158,6 +160,7 @@ export class Explorer extends EventTarget {
     const rots = entry.spec.camera_rotations;
     const box = new THREE.Box3().setFromPoints(pts);
     const size = Math.max(box.getSize(new THREE.Vector3()).length() / 60, 1e-3);
+    entry.frustum = size;
     if (rots && rots.length === c.length && entry.spec.intrinsics) { // small frusta: where the drone looked
       const { f, width, height } = entry.spec.intrinsics;
       const hw = (width / 2 / f) * size, hh = (height / 2 / f) * size;
@@ -177,11 +180,47 @@ export class Explorer extends EventTarget {
     pts.forEach((p) => entry.box.expandByPoint(p));
   }
 
+  // Keyframe images in the scene: each photo (or its fused depth) where the drone took it, facing back at it.
+  _imageUrl(spec, name, kind) {
+    const stem = name.split('/').pop().replace(/\.[^.]+$/, '');
+    const fr = spec.frames;
+    if (fr && fr.names?.includes(name)) return fr[kind] ? `${fr[kind === 'photo' ? 'photo_dir' : 'depth_dir']}/${stem}.jpg` : null;
+    if (kind === 'photo' && spec.thumb) return `${spec.thumb}/dataset/images/${name}?w=320`;
+    if (kind === 'depth' && spec.base && spec.dir) return `${spec.base}/dense/${spec.dir}/depth/${stem}.jpg`;
+    return null;
+  }
+
+  _imagePlanes(entry, kind) {
+    const m = entry.spec, rots = m.camera_rotations, K = m.intrinsics;
+    if (!m.images || !rots || !K) return null;
+    const names = m.frames?.names?.length ? m.frames.names : m.images.filter((_, i) => i % Math.max(1, Math.ceil(m.images.length / 36)) === 0);
+    const size = entry.frustum * 1.6, hw = (K.width / 2 / K.f) * size, hh = (K.height / 2 / K.f) * size;
+    const g = new THREE.Group(), loader = new THREE.TextureLoader(), geo = new THREE.PlaneGeometry(2 * hw, 2 * hh);
+    for (const name of names) {
+      const i = m.images.indexOf(name), url = this._imageUrl(m, name, kind);
+      if (i < 0 || !url) continue;
+      const R = rots[i], c = new THREE.Vector3(...m.cameras[i]);
+      const tex = loader.load(url, () => { tex.needsUpdate = true; });
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const plane = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.92, depthWrite: false }));
+      plane.quaternion.setFromRotationMatrix(new THREE.Matrix4().set(R[0], -R[1], -R[2], 0, R[3], -R[4], -R[5], 0, R[6], -R[7], -R[8], 0, 0, 0, 0, 1));
+      const axis = new THREE.Vector3(R[2], R[5], R[8]);
+      plane.position.copy(c).addScaledVector(axis, size * this.imageScale); // along the optical axis
+      plane.scale.setScalar(this.imageScale);
+      plane.userData = { keyframe: name, center: c, axis, size };
+      g.add(plane);
+    }
+    entry.group.add(g);
+    return g;
+  }
+
   // ----------------------------------------------------------------- layers
   async setLayer(name, on) {
     this.layers[name] = on;
     if (name === 'points' && on) for (const m of this.models) if (m.visible) await this._loadPoints(m).catch((e) => this.status(`points failed: ${e}`));
     if (name === 'splats' && on) for (const m of this.models) if (m.visible) await this._loadSplat(m).catch((e) => this.status(`splats failed: ${e.message || e}`));
+    if (name === 'photos' && on) for (const m of this.models) if (!m.photoObj) m.photoObj = this._imagePlanes(m, 'photo');
+    if (name === 'depth' && on) for (const m of this.models) if (!m.depthObj) m.depthObj = this._imagePlanes(m, 'depth');
     this.models.forEach((m) => this._apply(m));
     if (name === 'grid') this._grid(on);
     this.dispatchEvent(new CustomEvent('layers'));
@@ -198,15 +237,31 @@ export class Explorer extends EventTarget {
         const params = { map, vertexColors: !map && o.userData.vc && L.texture, color: map || vc ? 0xffffff : CLAY, side: THREE.DoubleSide, wireframe: L.wireframe };
         const want = L.shaded ? 'std' : 'basic';
         if (o.userData.kind !== want) { o.material?.dispose?.(); o.material = want === 'std' ? new THREE.MeshStandardMaterial({ ...params, roughness: 0.9, metalness: 0 }) : new THREE.MeshBasicMaterial(params); o.userData.kind = want; }
-        else { Object.assign(o.material, params); o.material.needsUpdate = true; }
+        else { o.material.setValues(params); o.material.needsUpdate = true; } // setValues: colours stay THREE.Color
       });
     }
     if (entry.pointsObj) { entry.pointsObj.visible = L.points; entry.pointsObj.material.size = this.pointSize; }
     if (entry.splatObj) entry.splatObj.visible = L.splats;
     if (entry.camObj) entry.camObj.visible = L.cameras;
+    if (entry.photoObj) entry.photoObj.visible = L.photos;
+    if (entry.depthObj) entry.depthObj.visible = L.depth;
+  }
+
+  layerAvailable(name) {
+    const v = this.models.map((m) => m.spec);
+    return { mesh: v.some((m) => m.mesh), texture: v.some((m) => m.mesh), points: v.some((m) => m.points), splats: v.some((m) => m.splat),
+      cameras: v.some((m) => (m.cameras || []).length > 1), photos: v.some((m) => m.images && m.camera_rotations && (m.frames?.photo || m.thumb)),
+      depth: v.some((m) => m.images && m.camera_rotations && (m.frames?.depth || m.base)) }[name] ?? true;
   }
 
   setPointSize(s) { this.pointSize = s; this.models.forEach((m) => this._apply(m)); }
+
+  setImageScale(k) { // keyframe photo / depth planes: bigger, and further out along each camera's axis
+    this.imageScale = k;
+    for (const m of this.models) for (const g of [m.photoObj, m.depthObj]) g?.children.forEach((p) => {
+      const u = p.userData; p.scale.setScalar(k); p.position.copy(u.center).addScaledVector(u.axis, u.size * k);
+    });
+  }
 
   setRenderScale(s) { this.renderScale = s; this.resize(); }
 
@@ -314,7 +369,7 @@ export class Explorer extends EventTarget {
     const quats = rots ? rots.map((R) => { const q = new THREE.Quaternion(); q.setFromRotationMatrix(new THREE.Matrix4().set(R[0], -R[1], -R[2], 0, R[3], -R[4], -R[5], 0, R[6], -R[7], -R[8], 0, 0, 0, 0, 1)); return q; }) : null;
     if (m.spec.intrinsics) this._matchPhoto(m.spec.intrinsics);
     this.orbit.enabled = false;
-    this.follow = { curve, quats, t: 0, n: pts.length, speed, seconds: Math.max(8, pts.length * 0.35) };
+    this.follow = { curve, quats, t: 0, n: pts.length, speed, seconds: Math.max(8, pts.length * 0.35), model: m, images: m.spec.images || [] };
     this.dispatchEvent(new CustomEvent('nav'));
   }
 
@@ -400,8 +455,10 @@ export class Explorer extends EventTarget {
       const f = this.follow;
       f.t = Math.min(1, f.t + (dt * f.speed) / f.seconds);
       this.camera.position.copy(f.curve.getPointAt(f.t));
-      if (f.quats) { const x = f.t * (f.n - 1), i = Math.min(f.n - 2, Math.floor(x)); this.camera.quaternion.slerpQuaternions(f.quats[i], f.quats[i + 1], x - i); }
+      const x = f.t * (f.n - 1), i = Math.min(f.n - 2, Math.floor(x));
+      if (f.quats) this.camera.quaternion.slerpQuaternions(f.quats[i], f.quats[i + 1], x - i);
       else this.camera.lookAt(f.curve.getPointAt(Math.min(1, f.t + 0.02)));
+      this.dispatchEvent(new CustomEvent('follow', { detail: { model: f.model, index: x, images: f.images } }));
       if (f.t >= 1) { this.follow = null; this.setNavigation('fly'); this.dispatchEvent(new CustomEvent('followend')); }
     } else if (this.nav === 'fly') {
       const k = this.keys, v = new THREE.Vector3();

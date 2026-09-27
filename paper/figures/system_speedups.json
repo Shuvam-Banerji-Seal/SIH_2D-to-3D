@@ -1,0 +1,70 @@
+{
+ "note": "Jal Mahal (55 s, 3840x2160 VP9), fast profile, idle A100 except ~6 GB of other users' memory; 2026-09-28.",
+ "before": {
+  "run": "cold_jal_mahal",
+  "seconds": 108.9,
+  "per_stage_s": {
+   "keyframes": 27.15,
+   "sfm": 47.59,
+   "dense": 17.66,
+   "export": 16.52
+  },
+  "video_seconds": 54.861,
+  "budget_seconds": 82.3,
+  "within_budget": false
+ },
+ "warm_engine_before_speedups": {
+  "run": "eng_jal_mahal",
+  "seconds": 106.3,
+  "per_stage_s": {
+   "keyframes": 25.5,
+   "sfm": 49.84,
+   "dense": 15.97,
+   "export": 14.98
+  },
+  "video_seconds": 54.861,
+  "budget_seconds": 82.3,
+  "within_budget": false
+ },
+ "after": {
+  "run": "cold2_jal_mahal",
+  "seconds": 75.9,
+  "per_stage_s": {
+   "keyframes": 26.9,
+   "sfm": 22.53,
+   "dense": 15.97,
+   "export": 10.54
+  },
+  "video_seconds": 54.861,
+  "budget_seconds": 82.3,
+  "within_budget": true
+ },
+ "sfm_steps_s": {
+  "sequential": 47.52,
+  "overlapped": 33.19,
+  "overlapped_largest_first": 24.25,
+  "in_full_run": 22.53,
+  "mapping_cpu_s": 17.85,
+  "tracks_gpu_s": 17.48,
+  "mapping_wait_s": {
+   "sequential": null,
+   "overlapped": 7.7,
+   "largest_first": 1.12
+  }
+ },
+ "export_steps_s": {
+  "before": 16.52,
+  "before_breakdown": {
+   "decimate": 4.56,
+   "texture": 3.75,
+   "textured_files": 6.48,
+   "level": 0.61
+  },
+  "after": 10.54
+ },
+ "ransac_ms_per_model": {
+  "before": 840,
+  "after": 141
+ },
+ "monitor": "descendant lookup: every /proc/*/stat (~700 files) twice a second -> /proc/<pid>/task/*/children, 1 ms"
+}

@@ -2,9 +2,10 @@
 
 \paragraph{Setup.} One NVIDIA A100 80\,GB PCIe, shared with other users' jobs throughout (each stage's record states the GPU's occupancy); PyTorch 2.14 with CUDA 13.2, Python 3.14, ffmpeg 9.0 (NVDEC/NVENC), spirula-studio 2026.9.24 (Vulkan backend). Data: fifteen public drone videos (Table~\ref{tab:data}); they carry no flight logs.
 
-\begin{table}[t]
+\begin{table}[htbp]
 \centering\small
 \caption{Sample footage (public YouTube re-encodes, VP9).}\label{tab:data}
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lrrr}
 \toprule
 Video & Resolution & fps & s \\
@@ -26,73 +27,134 @@ Reichstag Berlin  in 4K & 3840$\times$2160 & 30.00 & 130 \\
 The Messiah & 3840$\times$2160 & 29.97 & 94 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 
 \subsection{Passes, keyframes and the 3D verdict}
 
-\begin{table*}[t]
+\begin{table*}[htbp]
 \centering\small
 \caption{Pass segmentation and keyframes per run. Overlap: mean co-visibility with the previous keyframe; views: measured views per point; SNR: median direct-flow parallax SNR (1 = none).}\label{tab:keyframes}
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llrrrrrl}
 \toprule
 Run & Pass & Time (s) & KF & Overlap & Views & SNR & Verdict \\
 \midrule
-\multicolumn{8}{c}{no data} \\
+jal\_mahal & 0 & 0.0--7.4 & 30 & 0.77 & 6.9 & 22.4 & 3d \\
+jal\_mahal & 1 & 8.0--14.1 & 14 & 0.79 & 5.2 & 3.6 & 3d \\
+jal\_mahal & 2 & 14.2--23.8 & 59 & 0.77 & 7.7 & 6.0 & 3d \\
+jal\_mahal & 3 & 23.8--36.0 & 97 & 0.74 & 7.4 & 16.3 & 3d \\
+jal\_mahal & 4 & 37.2--54.0 & 13 & 0.86 & 8.2 & 3.2 & 3d \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table*}
 
-\paragraph{Negative control.} A synthetic clip of a camera rotating about its centre over one real 4K frame (\texttt{tools/make\_degenerate\_clip.py}) has no parallax by construction. It yields SNR 1.95 (median residual 0.09$^\circ$) and the verdict \emph{weak-3d}; GRIC nonetheless preferred $F$ on 100\% of its pairs, which is why GRIC only confirms the SNR decision.
+On Jal Mahal the flow signal splits the edit into 5 passes at its cuts and fades, and the band selects 213 keyframes; the mean overlap with the previous keyframe lies in 0.74--0.86, inside or just above the target band, and every pass is judged \emph{3d} (Table~\ref{tab:keyframes}). Decoding and flow for the 658 analysis frames took 37\,s, selection 12\,s and 4K extraction 45\,s.
+
+\paragraph{Negative control.} A synthetic clip of a camera rotating about its centre over one real 4K frame (\texttt{tools/make\_degenerate\_clip.py}) has no parallax by construction. It yields SNR 1.24 (median residual 0.02$^\circ$) and the verdict \emph{degenerate}; GRIC nonetheless preferred $F$ on 60\% of its pairs, which is why GRIC only confirms the SNR decision.
+
+\begin{figure}[t]\centering\includegraphics[width=\linewidth]{flow_drift.pdf}\caption{Correspondence error against exact ground truth on the rotation control. Chained consecutive flow drifts almost linearly (1.12\,px median at 32 frames); direct pairwise flow stays at 0.13\,px.}\label{fig:drift}\end{figure}
 
 \subsection{Structure from motion}
 
-\begin{table}[t]
+With the same SfM settings, 1\,fps sampling registers 40 of 55 frames in 2 disconnected models (the largest 22), and uniform sampling at the selector's budget of 241 frames registers 237 but splits into 4 models (largest 98). The overlap band registers all 241 (largest 155); after cropping the letterbox and trimming fades the canonical run registers 213 of 213 (Table~\ref{tab:sampling}). A model per group of passes is expected: the passes of a cinematic edit are cut from different flights and need not overlap. One focal length per pass keeps the reprojection error while OpenCV's independent $f_x,f_y$ drift apart (Table~\ref{tab:camera}).
+
+\begin{table}[htbp]
 \centering\small
 \caption{Structure from motion on the selected keyframes.}\label{tab:sfm}
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lrrrrr}
 \toprule
 Run & KF & Registered & Models & Reproj. (px) & Time (s) \\
 \midrule
-\multicolumn{6}{c}{no data} \\
+jal\_mahal & 213 & 213 & 4 & 0.79 & 255 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Frame sampling on Jal Mahal (same SfM settings).}\label{tab:sampling}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lrrrrl}
+\toprule
+Sampling & Frames & Registered & Models & Largest &  \\
+\midrule
+1 fps (uniform) & 55 & 40 & 2 & 22 & no letterbox crop \\
+uniform, same budget & 241 & 237 & 4 & 98 & no letterbox crop \\
+overlap band (dev) & 241 & 241 & 4 & 155 & no letterbox crop \\
+overlap band (canonical) & 213 & 213 & 4 & 156 & cropped, fades trimmed \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Camera model on Jal Mahal: independent $f_x,f_y$ (OpenCV) against one focal (radial).}\label{tab:camera}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrr}
+\toprule
+Camera & Focal(s) per pass (px) & Reproj. (px) & Points \\
+\midrule
+OpenCV (fx, fy free) & 3112/2812, 2055/2080, 2827/3382, 2986/2754 & 0.761 & 96{,}940 \\
+radial (one focal) & 3118, 2684, 2808, 3109 & 0.771 & 96{,}598 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
 \end{table}
 
 \subsection{Monocular depth prior}
 
-\begin{table}[t]
+Table~\ref{tab:depth} scores each calibration on tie points it was not fitted to. The monotone map lowers held-out AbsRel on every model with depth; the gain is largest where the scene spans a wide depth range (Fig.~\ref{fig:depth}), which a single log-affine map cannot follow. Model~3 (30 keyframes, the far lake-side pass) has no image whose prediction correlates positively with its tie-point depths; it is trained without depth rather than with a wrong one.
+
+\begin{figure*}[t]\centering\includegraphics[width=0.92\textwidth]{depth_panel.png}\caption{Marigold~v2 on Jal Mahal keyframes (canonical run). Right: prior depth against SfM tie-point depth for the log-affine fit (grey) and the monotone calibration (blue). On the lake-facing passes the affine fit flattens the far shore and the ridge; the monotone map follows them (it also sends a few near points far). Held-out AbsRel for both is given above each depth map.}\label{fig:depth}\end{figure*}
+
+\begin{table}[htbp]
 \centering\small
-\caption{Marigold~v2 against SfM tie points, after per-image log-affine alignment. AbsRel: median over images of the per-image median relative error.}\label{tab:depth}
-\begin{tabular}{llrrrr}
+\caption{Marigold~v2 against SfM tie points, scored on held-out tie points (5-fold cross-validation per image, median over images): log-affine vs monotone calibration.}\label{tab:depth}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrrrr}
 \toprule
-Run & Model & Images & AbsRel & $\delta_1$ & Valid \\
+Run & Model & Aligned & AbsRel aff. & AbsRel mono. & $\delta_1$ aff. & $\delta_1$ mono. \\
 \midrule
-\multicolumn{6}{c}{no data} \\
+jal\_mahal & 0 & 156/156 & 0.050 & 0.027 & 0.857 & 0.886 \\
+jal\_mahal & 1 & 14/14 & 0.009 & 0.006 & 1.000 & 1.000 \\
+jal\_mahal & 2 & 13/13 & 0.075 & 0.033 & 0.945 & 0.989 \\
+jal\_mahal & 3 & 0/30 & --- & --- & --- & --- \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 
 \subsection{Gaussian splatting}
 
-\begin{table*}[t]
+\begin{table*}[htbp]
 \centering\small
 \caption{3DGS on held-out keyframes (every 8th keyframe never used in training).}\label{tab:splat}
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llrrrrr}
 \toprule
 Run & Model & Splats & PSNR & SSIM & LPIPS & Train (s) \\
 \midrule
-\multicolumn{7}{c}{no data} \\
+jal\_mahal & model\_0, depth prior (v1 mask) & 3{,}000{,}000 & 35.00 & 0.977 & --- & 3822 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table*}
 
 \subsection{Georeferencing a straight pass}
 
+None of the sample videos carries a flight log, so georeferencing is evaluated in simulation (\texttt{experiments/georef\_study.py}): a 300\,m track at 80\,m altitude over flat ground with buildings, the SfM model hidden behind a random similarity, horizontal GPS noise, and a sideways deviation of the track from a straight line of 0--60\,m; the error is measured at ground points 100\,m off the track. (Sloped ground, where the rule falls back to the similarity, is covered by the unit tests.) The levelled fit is never worse than the similarity (worst 2.1\,m) and its metric scale error stays below 0.6\,\% (Table~\ref{tab:georef}, Fig.~\ref{fig:georef}).
+
 \begin{figure*}[t]\centering\includegraphics[width=0.85\textwidth]{georef_study.pdf}\caption{Error of ground 100\,m off-track after GPS alignment (median of 20 synthetic scenes per point). The 7-DoF similarity is off by up to 221\,m on a straight pass while its in-sample RMSE (dotted) only reflects GPS noise; the ground-levelled fit stays near the GPS noise.}\label{fig:georef}\end{figure*}
 
-\begin{table*}[t]
+\begin{table*}[htbp]
 \centering\small
 \caption{Georeferencing study (medians over 20 trials): off-track error of the similarity and of our rule, in-sample RMSE of the similarity, held-out RMSE of ours, metric scale error.}\label{tab:georef}
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{rrrrrrr}
 \toprule
 GPS $\sigma$ (m) & Lateral (m) & Sim. (m) & Ours (m) & Sim. in-sample & Ours LOO & Scale err. \\
@@ -115,18 +177,23 @@ GPS $\sigma$ (m) & Lateral (m) & Sim. (m) & Ours (m) & Sim. in-sample & Ours LOO
 5.0 & 60 & 5.4 & 2.08 & 6.83 & 7.07 & 0.6\% \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table*}
 
 \subsection{Throughput and GPU use}
 
-\begin{table*}[t]
+\begin{table*}[htbp]
 \centering\small
 \caption{Per-stage wall time and GPU use (NVML, 0.5\,s samples). Own/host: peak GPU memory and host RSS of our process tree.}\label{tab:gpu}
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llrrrrrl}
 \toprule
 Run & Stage & s & Util.\% & W & Own GPU (GB) & Host (GB) & Shared \\
 \midrule
-\multicolumn{8}{c}{no data} \\
+jal\_mahal & keyframes & 109 & 83 & 256 & 10.6 & 6.3 & yes \\
+jal\_mahal & sfm & 256 & 83 & 213 & 9.9 & 4.2 & yes \\
+jal\_mahal & depth & 522 & 84 & 265 & 24.3 & 11.2 & yes \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table*}

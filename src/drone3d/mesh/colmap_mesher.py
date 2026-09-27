@@ -12,6 +12,14 @@ from drone3d.types import MeshResult
 from drone3d.utils.ply import ply_vertex_count, read_ply_header
 from drone3d.utils.shell import run_command, which
 
+try:  # optional `mesh` extra; the mesher must still work without it
+    from drone3d.mesh.texturing import has_trimesh
+except ImportError:  # pragma: no cover - texturing module is always present
+
+    def has_trimesh() -> bool:
+        return False
+
+
 __all__ = ["ColmapMesher", "ply_element_counts"]
 
 log = get_logger(__name__)
@@ -119,6 +127,19 @@ class ColmapMesher(MeshBackend):
                 )
             textured_path = candidate
 
+        # PS deliverable 3 names `mesh.obj`. COLMAP only writes PLY, so convert
+        # when Trimesh is available (the `mesh` extra). Without it the PLY still
+        # satisfies the deliverable's parenthetical alternatives.
+        obj_path: Path | None = None
+        if has_trimesh() and mesh_path.suffix.lower() == ".ply":
+            try:
+                from drone3d.mesh.texturing import convert_mesh_format
+
+                obj_path = convert_mesh_format(mesh_path, output_dir / "mesh.obj")
+            except Exception as exc:  # conversion is best-effort, mesh already exists
+                log.warning("PLY -> OBJ conversion failed (%s); keeping the PLY", exc)
+                obj_path = None
+
         log.info("mesh: %d vertices / %d faces -> %s", vertices, faces, mesh_path)
         return MeshResult(
             backend=f"colmap-{method}",
@@ -126,7 +147,10 @@ class ColmapMesher(MeshBackend):
             textured_mesh_path=textured_path,
             num_vertices=vertices,
             num_faces=faces,
-            metadata={"textured": textured_path is not None},
+            metadata={
+                "textured": textured_path is not None,
+                "obj_path": str(obj_path) if obj_path is not None else None,
+            },
         )
 
     def _mesh(

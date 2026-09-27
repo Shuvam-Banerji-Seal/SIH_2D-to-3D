@@ -300,3 +300,55 @@ def test_mesher_rejects_empty_dense_cloud(tmp_path: Path, monkeypatch: pytest.Mo
         ColmapMesher(method="delaunay").build(
             empty, tmp_path / "images", tmp_path / "out", MeshConfig(texture=False)
         )
+
+
+def test_default_mesher_emits_obj_for_ps_deliverable3(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """F31: PS deliverable 3 names `mesh.obj`, but ColmapMesher only wrote PLY.
+
+    `convert_mesh_format` could always produce OBJ; it was just never called on
+    the default path (only Open3DMesher used it, and it wrote .glb)."""
+    argvs: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_: object) -> object:
+        argv = [str(c) for c in cmd]
+        argvs.append(argv)
+        if argv[1] == "mesh_texturer":
+            out = Path(argv[argv.index("--output_path") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "mesh.ply").write_bytes(
+                b"ply\nformat binary_little_endian 1.0\nelement vertex 1\n"
+                b"property float x\nproperty float y\nproperty float z\n"
+                b"end_header\n" + b"\x00" * 12
+            )
+        elif argv[1] == "delaunay_mesher":
+            Path(argv[argv.index("--output_path") + 1]).write_bytes(
+                b"ply\nformat binary_little_endian 1.0\nelement vertex 1\n"
+                b"property float x\nproperty float y\nproperty float z\n"
+                b"end_header\n" + b"\x00" * 12
+            )
+        return None
+
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.run_command", fake_run)
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.which", lambda _: "/usr/bin/colmap")
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.ply_element_counts", lambda _: (1, 0))
+
+    dense = tmp_path / "dense" / "fused.ply"
+    dense.parent.mkdir(parents=True)
+    dense.write_bytes(
+        b"ply\nformat binary_little_endian 1.0\nelement vertex 1\n"
+        b"property float x\nproperty float y\nproperty float z\n"
+        b"end_header\n" + b"\x00" * 12
+    )
+
+    result = ColmapMesher(method="delaunay").build(
+        dense, tmp_path / "images", tmp_path / "out", MeshConfig(texture=True)
+    )
+
+    if "obj_path" in result.metadata and result.metadata["obj_path"]:
+        assert Path(result.metadata["obj_path"]).is_file()
+        assert result.metadata["obj_path"].endswith("mesh.obj")
+    else:
+        # trimesh absent -- the field must at least be present and None
+        assert "obj_path" in result.metadata

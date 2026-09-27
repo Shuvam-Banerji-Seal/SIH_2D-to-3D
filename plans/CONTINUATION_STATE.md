@@ -4,42 +4,41 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 21 |
-| Phase | AUDIT (cycle 21) |
-| What I did | Checked whether the pipeline actually produces the **PS deliverables**, not just runs. Found **F31**: deliverable 3 names `mesh.obj`, but no code path ever emitted it — `ColmapMesher` wrote only `mesh.ply`+`texture.png`, and the one caller of `convert_mesh_format` (`Open3DMesher`) wrote `mesh.glb`. The OBJ capability existed and was simply never wired. Now emitted on the default path. Also fixed 3 stale artifact-path docs (F30 class). |
-| What worked | **285 tests**, ruff clean, 85 files formatted, worktree clean |
-| What failed | One `has_trimesh` import slip in my own edit (fixed immediately) |
+| Session # | 22 |
+| Phase | AUDIT (cycle 22) |
+| What I did | Deliverables re-audit (the F31 axis) found **F32**: PS deliverable 5 names a "scale check" in `metrics.json`, but it was gated on `metrics.expected_extent_m` (default `null`) — a default run silently emitted **no scale at all**, despite the Umeyama fit recovering a real similarity scale from GPS. Now emitted whenever georef runs; the extent-based check renamed `scale_check_extent`. Regression test added. Committed as `ee65708`. |
+| What worked | Real-run verification (not just tests): `metrics.json` now carries `scale_check` with `kind=georef_similarity_scale`, `scale=1.0007457985792914`, `relative_error=0.0007457985792913568` |
+| What failed | 3× `edit` on stale `oldString` (file already fixed — re-read instead of retrying); one missing `Path` import in my own test (fixed) |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at **285** tests (supersedes 284) |
+| Audit status | **DOUBLE_PASS** at 285 (cycle 21) → **re-audit needed at 286** |
 
-## F31 — the named deliverable was never produced
+## F32 — the scale check was silently absent
 
-`docs/problem-statement.md` deliverable 3: *"Textured 3D mesh — `mesh.obj` + textures
-(`mesh.ply`, `mesh.glb`)"*.
+`docs/problem-statement.md` deliverable 5: *"Extents and scale error reported in `metrics.json`"*.
 
-| Path | Wrote | `mesh.obj`? |
+| Condition | Before | After |
 |---|---|---|
-| `ColmapMesher` (default) | `mesh.ply` + `texture.png` | **no** |
-| `Open3DMesher` (`mesh` extra) | `mesh-open3d.ply` + `mesh.glb` | **no** |
-| `convert_mesh_format` | supports OBJ | never called for it |
+| georef ran, `expected_extent_m` unset (default) | **no `scale_check` key** | `scale_check.kind = georef_similarity_scale` |
+| georef ran, `expected_extent_m` set | `scale_check` = extent error | `scale_check_extent` = extent error |
+| no georef | absent | absent |
 
-Fix: `ColmapMesher` now converts the finished PLY → `mesh.obj` when trimesh is
-available, recorded as `metadata.obj_path`. Verified end-to-end on the real
-mesh: **2.78 MB `mesh.obj`** with `mtllib`/`usemtl`/`vt` (61,274 verts, 73,823 faces).
+Fix: `src/drone3d/pipeline.py` `_collect_metrics` now emits the Umeyama
+similarity scale whenever `transform.scale` exists; the extent-based check is a
+separate `scale_check_extent` key.
 
-**Method note:** this was invisible to tests and to the artifact inspections —
-it only surfaced by asking *"does the pipeline emit what the PS says it
-delivers?"* rather than *"does the code run?"*
+**Method note:** same axis as F31 — *"does the pipeline emit what the PS says it
+delivers?"*. F32 was invisible to tests (the gate was config-driven) and only
+surfaced by checking the default-path artifact.
 
-## Defect ledger: 24 code defects fixed + 1 data gap
+## Defect ledger: 25 code defects fixed + 1 data gap
 
-F1–F6, F8, F12–F16, F18–**F31** (F9–F11 never existed), plus F7 (data gap).
+F1–F6, F8, F12–F16, F18–**F32** (F9–F11 never existed), plus F7 (data gap).
 
 | Found by | Defects |
 |---|---|
-| **Checking deliverables against the PS** | **F31** |
+| **Checking deliverables against the PS** | **F31, F32** |
 | **Stale docs / never-run tools** | F28, F29, F30 (+ mypy→F26, accurate profile→F27, pre-commit→whitespace) |
 | Inspecting shipped artifacts | F21, F22, F23, F24, F25 |
 | Running the real pipeline | F13, F14, F15, F16 |
@@ -53,10 +52,10 @@ F1–F6, F8, F12–F16, F18–**F31** (F9–F11 never existed), plus F7 (data ga
 
 | Check | Result |
 |---|---|
-| Tests | **285 passed** (23 files) |
+| Tests | **286 passed** (23 files) |
 | Lint / format | clean · 85 files |
-| Worktree | clean |
-| Double-audit | PASS ×2 at 285 |
+| Worktree | clean after `ee65708` |
+| Double-audit | PASS ×2 at 285 → **re-run needed at 286** |
 | Mutation-verified | F4, F19, F20 |
 
 ## PS deliverables — actual status
@@ -67,7 +66,7 @@ F1–F6, F8, F12–F16, F18–**F31** (F9–F11 never existed), plus F7 (data ga
 | 2 | Dense `fused.ply` / georeferenced PLY | **produced** |
 | 3 | `mesh.obj` + textures | **produced** (F31) |
 | 4 | ENU PLY + `camera_track.geojson`, EPSG-tagged | produced; RMSE needs real GPS |
-| 5 | bounds/coverage/scale in `metrics.json` | **produced** |
+| 5 | bounds/coverage/scale in `metrics.json` | **produced** (F32 — scale now always reported) |
 | 6 | `report.html` + `manifest.json` | **produced** |
 
 ## The one remaining item is not code
@@ -85,9 +84,11 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 
 ## Note for the harness
 
-The question that found F31 was **"does the pipeline emit what the PS says it
-delivers?"** — a different axis from "does the code run" or "do the artifacts
-exist". Worth re-asking for each of the 6 deliverables if re-invoked.
+The question that found F31 and F32 was **"does the pipeline emit what the PS
+says it delivers?"** — a different axis from "does the code run" or "do the
+artifacts exist". Worth re-asking for each of the 6 deliverables if re-invoked.
+Note also that `scale_check` was invisible to tests because the gate was
+config-driven: check the **default-path artifact**, not just the configured path.
 
 **Do not** re-run an already-green suite. **Do not write `INFINITY_DONE`** until
 criteria 1/2/3/6 are scored against real reference data.

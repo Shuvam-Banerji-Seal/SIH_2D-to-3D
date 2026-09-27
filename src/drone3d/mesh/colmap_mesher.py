@@ -77,20 +77,42 @@ class ColmapMesher(MeshBackend):
         if config.texture:
             textured_dir = output_dir / "textured"
             textured_dir.mkdir(parents=True, exist_ok=True)
+            # COLMAP 4.x renamed this command: it is `mesh_texturer`, not
+            # `texture_mesher` (F25). It takes the undistorter *workspace*
+            # (the directory holding `images/` and `sparse/` -- i.e. the dense
+            # workspace `dense_ply` lives in) and emits a textured PLY plus an
+            # atlas image; there is no `mesh.obj`.
             run_command(
                 [
                     resolved,
-                    "texture_mesher",
+                    "mesh_texturer",
+                    "--workspace_path",
+                    dense_ply.parent,
                     "--input_path",
                     mesh_path,
-                    "--image_path",
-                    images_dir,
                     "--output_path",
                     textured_dir,
                 ]
             )
-            candidate = textured_dir / "mesh.obj"
-            textured_path = candidate if candidate.is_file() else None
+            # Accept whichever textured artefact the tool produced.
+            candidate = next(
+                (
+                    p
+                    for p in sorted(textured_dir.iterdir())
+                    if p.suffix.lower() in {".ply", ".obj"} and "textured" in p.stem.lower()
+                ),
+                None,
+            )
+            if candidate is None:
+                candidate = next(
+                    (
+                        p
+                        for p in sorted(textured_dir.iterdir())
+                        if p.suffix.lower() in {".ply", ".obj"}
+                    ),
+                    None,
+                )
+            textured_path = candidate
 
         log.info("mesh: %d vertices / %d faces -> %s", vertices, faces, mesh_path)
         return MeshResult(

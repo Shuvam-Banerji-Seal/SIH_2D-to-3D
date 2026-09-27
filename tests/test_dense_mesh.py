@@ -9,6 +9,7 @@ import pytest
 from drone3d.config import DenseConfig, MeshConfig
 from drone3d.dense.mvs import ColmapMvsBackend
 from drone3d.exceptions import BackendUnavailable, ReconstructionError
+from drone3d.mesh.colmap_mesher import ColmapMesher
 from drone3d.mesh.texturing import (
     Open3DMesher,
     convert_mesh_format,
@@ -167,3 +168,76 @@ def test_open3d_mesher_unavailable_raises(monkeypatch: pytest.MonkeyPatch, tmp_p
         Open3DMesher().build(
             tmp_path / "cloud.ply", tmp_path / "images", tmp_path / "out", MeshConfig()
         )
+
+
+def test_texture_step_uses_mesh_texturer_not_the_old_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """F25: COLMAP 4.x renamed `texture_mesher` to `mesh_texturer`.
+
+    The old name exits "command not recognized" while the stage reported ok and
+    produced no textured mesh -- and a textured mesh is criterion 4.
+    """
+    argvs: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_: object) -> object:
+        argv = [str(c) for c in cmd]
+        argvs.append(argv)
+        if argv[1] == "mesh_texturer":
+            out = Path(argv[argv.index("--output_path") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "mesh.ply").write_bytes(b"ply")
+        elif argv[1] == "delaunay_mesher":
+            Path(argv[argv.index("--output_path") + 1]).write_bytes(b"mesh")
+        return None
+
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.run_command", fake_run)
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.which", lambda _: "/usr/bin/colmap")
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.ply_element_counts", lambda _: (3, 1))
+
+    dense = tmp_path / "dense" / "fused.ply"
+    dense.parent.mkdir(parents=True)
+    dense.write_bytes(b"ply")
+
+    result = ColmapMesher(method="delaunay", binary="colmap").build(
+        dense, tmp_path / "images", tmp_path / "out", MeshConfig(texture=True)
+    )
+
+    commands = [a[1] for a in argvs]
+    assert "mesh_texturer" in commands
+    assert "texture_mesher" not in commands
+    assert result.textured_mesh_path is not None
+    assert result.metadata["textured"] is True
+
+
+def test_texture_step_uses_the_dense_workspace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`mesh_texturer` needs the undistorter workspace, not the raw images dir."""
+    argvs: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_: object) -> object:
+        argv = [str(c) for c in cmd]
+        argvs.append(argv)
+        if argv[1] == "mesh_texturer":
+            out = Path(argv[argv.index("--output_path") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "mesh.ply").write_bytes(b"ply")
+        elif argv[1] == "delaunay_mesher":
+            Path(argv[argv.index("--output_path") + 1]).write_bytes(b"mesh")
+        return None
+
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.run_command", fake_run)
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.which", lambda _: "/usr/bin/colmap")
+    monkeypatch.setattr("drone3d.mesh.colmap_mesher.ply_element_counts", lambda _: (3, 1))
+
+    dense = tmp_path / "dense" / "fused.ply"
+    dense.parent.mkdir(parents=True)
+    dense.write_bytes(b"ply")
+
+    ColmapMesher(method="delaunay").build(
+        dense, tmp_path / "images", tmp_path / "out", MeshConfig(texture=True)
+    )
+
+    tex = next(a for a in argvs if a[1] == "mesh_texturer")
+    assert Path(tex[tex.index("--workspace_path") + 1]) == dense.parent

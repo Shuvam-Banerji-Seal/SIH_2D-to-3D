@@ -56,49 +56,77 @@ def _model_frames(model_dir: Path, images: Path, long_side: int, stride: int = 1
     return ims, cams, frames, stride
 
 
-def view_coverage(vertices: np.ndarray, cams: list[Camera], size: tuple[int, int],
-                  sky: np.ndarray | None = None, dilate: int = 2) -> float:  # fmt: skip
-    """Mean share of each reference view's non-sky pixels that the mesh covers.
+def view_coverage(vertices: np.ndarray, triangles: np.ndarray, cams: list[Camera], size: tuple[int, int],
+                  sky: np.ndarray | None = None) -> float:  # fmt: skip
+    """Mean share of each view's non-sky pixels whose ray hits the mesh.
 
-    Mesh vertices are projected into every view (GPU) and dilated by ``dilate``
-    px to close the gaps between them (vertices are ~2 px apart at the median
-    depth); the problem statement scores completeness, and this is its
-    self-consistent proxy: how much of what the camera saw was reconstructed.
+    The problem statement scores completeness; this is its self-consistent
+    proxy -- how much of what the camera saw was reconstructed. Exact per pixel:
+    one ray per pixel is cast against the mesh (Open3D / Embree), so sparse
+    vertices on near surfaces do not count as holes.
     """
-    import torch
-    import torch.nn.functional as F
+    import open3d as o3d
+    import open3d.core as o3c
 
     w, h = size
-    if not len(vertices):
+    if not len(vertices) or not len(triangles):
         return 0.0
-    pts = torch.as_tensor(vertices, dtype=torch.float32, device="cuda")
+    scene = o3d.t.geometry.RaycastingScene()
+    scene.add_triangles(o3c.Tensor(np.ascontiguousarray(vertices, dtype=np.float32)),
+                        o3c.Tensor(np.ascontiguousarray(triangles, dtype=np.uint32)))  # fmt: skip
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
     shares = []
     for i, c in enumerate(cams):
-        r = torch.as_tensor(c.rotation, dtype=torch.float32, device="cuda")
-        t = torch.as_tensor(c.translation, dtype=torch.float32, device="cuda")
-        pc = pts @ r.T + t
-        z = pc[:, 2]
-        front = z > 1e-6
-        u = (c.f * pc[front, 0] / z[front] + c.cx - 0.5).round().long()
-        v = (c.f * pc[front, 1] / z[front] + c.cy - 0.5).round().long()
-        ok = (u >= 0) & (u < w) & (v >= 0) & (v < h)
-        mask = torch.zeros(h * w, device="cuda")
-        mask[v[ok] * w + u[ok]] = 1.0
-        mask = F.max_pool2d(mask.view(1, 1, h, w), 2 * dilate + 1, stride=1, padding=dilate)[0, 0] > 0
-        valid = torch.ones(h, w, dtype=torch.bool, device="cuda")
-        if sky is not None:
-            valid = ~torch.as_tensor(sky[i], device="cuda")
-        denom = int(valid.sum())
-        if denom:
-            shares.append(float((mask & valid).sum()) / denom)
+        d_cam = np.stack([(xs + 0.5 - c.cx) / c.f, (ys + 0.5 - c.cy) / c.f, np.ones_like(xs)], -1).reshape(-1, 3)
+        d = d_cam @ np.asarray(c.rotation, dtype=np.float32)  # R^T d as rows
+        o = np.broadcast_to(np.asarray(c.centre, dtype=np.float32), d.shape)
+        rays = o3c.Tensor(np.ascontiguousarray(np.concatenate([o, d], 1), dtype=np.float32))
+        hit = np.isfinite(scene.cast_rays(rays)["t_hit"].numpy()).reshape(h, w)
+        valid = ~sky[i] if sky is not None else np.ones((h, w), bool)
+        if valid.sum():
+            shares.append(float((hit & valid).sum()) / float(valid.sum()))
     return float(np.mean(shares)) if shares else 0.0
 
 
-def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, long_side: int,
-                 gaps: tuple[int, ...], keyframe_stride: int, min_angle_deg: float, rel_tol: float,
-                 voxel_px: float) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
-    """Depth, fusion and mesh for one SfM model -> its result record."""
+def mesh_depth_error(vertices: np.ndarray, triangles: np.ndarray, cams: list[Camera], size: tuple[int, int],
+                     ref_depths: list[np.ndarray]) -> float:  # fmt: skip
+    """Median |mesh depth - reference depth| / reference depth over the reference's valid pixels.
+
+    With the triangulated (not monocular) depth maps as reference, this is how far
+    fusion moved the surface from the geometry the views actually measured.
+    """
     import open3d as o3d
+    import open3d.core as o3c
+
+    w, h = size
+    if not len(vertices) or not len(triangles):
+        return float("nan")
+    scene = o3d.t.geometry.RaycastingScene()
+    scene.add_triangles(o3c.Tensor(np.ascontiguousarray(vertices, dtype=np.float32)),
+                        o3c.Tensor(np.ascontiguousarray(triangles, dtype=np.uint32)))  # fmt: skip
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    errs = []
+    for c, ref in zip(cams, ref_depths, strict=True):
+        m = ref > 0
+        if not m.any():
+            continue
+        d_cam = np.stack([(xs[m] + 0.5 - c.cx) / c.f, (ys[m] + 0.5 - c.cy) / c.f, np.ones(int(m.sum()), np.float32)], -1)
+        d = d_cam @ np.asarray(c.rotation, dtype=np.float32)
+        o = np.broadcast_to(np.asarray(c.centre, dtype=np.float32), d.shape)
+        t = scene.cast_rays(o3c.Tensor(np.ascontiguousarray(np.concatenate([o, d], 1), dtype=np.float32)))["t_hit"].numpy()
+        ok = np.isfinite(t)
+        if ok.any():  # d has camera-frame z = 1, so t is the depth
+            errs.append(np.abs(t[ok] - ref[m][ok]) / ref[m][ok])
+    return float(np.median(np.concatenate(errs))) if errs else float("nan")
+
+
+def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int, gaps: tuple[int, ...],
+                   keyframe_stride: int, min_angle_deg: float, rel_tol: float) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+    """Per-reference depth maps of one model: flow triangulation, then the monocular fill.
+
+    Returns a dict with ``ims, cams, frames`` (uint8 on the GPU), ``depths``, ``sky``,
+    ``used_stride``, ``tri_cov``, ``fill_info`` and ``timing``.
+    """
     import torch
 
     from drone3d.fastsfm.mono import calibrate_fill
@@ -135,6 +163,7 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     torch.cuda.synchronize()
     timing["triangulate"] = time.perf_counter() - t0
     tri_cov = float(np.mean([(d > 0).mean() for d in depths]))
+    tri_depths = [d.copy() for d in depths]  # triangulated only, before the monocular fill
     fill_info, sky = None, None
     if mono is not None:
         t0 = time.perf_counter()
@@ -148,6 +177,23 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
         fill_info = {"model": mono.name, "filled_images": len(filled),
                      "in_sample_abs_rel_median": round(float(np.median([x["in_sample_abs_rel"] for x in filled])), 4) if filled else None}  # fmt: skip
         timing["mono"] = time.perf_counter() - t0
+    return {"ims": ims, "cams": cams, "frames": frames, "depths": depths, "tri_depths": tri_depths, "sky": sky,
+            "used_stride": used_stride,
+            "tri_cov": tri_cov, "fill_info": fill_info, "timing": timing}  # fmt: skip
+
+
+def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, long_side: int,
+                 gaps: tuple[int, ...], keyframe_stride: int, min_angle_deg: float, rel_tol: float,
+                 voxel_px: float, trunc_voxels: float = 12.0) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+    """Depth, fusion and mesh for one SfM model -> its result record."""
+    import open3d as o3d
+    import torch
+
+    r = compute_depths(model_dir, images, raft, mono, long_side=long_side, gaps=gaps, keyframe_stride=keyframe_stride,
+                       min_angle_deg=min_angle_deg, rel_tol=rel_tol)  # fmt: skip
+    cams, frames, depths, sky, timing = r["cams"], r["frames"], r["depths"], r["sky"], r["timing"]
+    used_stride, tri_cov, fill_info = r["used_stride"], r["tri_cov"], r["fill_info"]
+    n, h, w, _ = frames.shape
     valid = np.concatenate([d[d > 0] for d in depths]) if any((d > 0).any() for d in depths) else np.zeros(0)
     name = model_dir.name
     if not len(valid):
@@ -157,7 +203,7 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     t0 = time.perf_counter()
     rgb = frames.cpu().numpy()
     vbg, voxel = tsdf_fuse([(depths[i], rgb[i], cams[i]) for i in range(n)], voxel=voxel,
-                           depth_max=float(np.percentile(valid, 99.5)))  # fmt: skip
+                           depth_max=float(np.percentile(valid, 99.5)), trunc_voxels=trunc_voxels)  # fmt: skip
     mesh = vbg.extract_triangle_mesh().to_legacy()
     pcd = vbg.extract_point_cloud().to_legacy()
     timing["tsdf"] = time.perf_counter() - t0
@@ -166,7 +212,7 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     if not len(mesh.triangles) and not len(pcd.points):
         log.info("dense %s: %d keyframes, the TSDF produced no surface", name, n)
         return {"model": str(model_dir), "status": "empty", "keyframes": n}
-    completeness = view_coverage(np.asarray(mesh.vertices), cams, (w, h), sky)
+    completeness = view_coverage(np.asarray(mesh.vertices), np.asarray(mesh.triangles), cams, (w, h), sky)
     mdir = out_dir / f"model_{name}"
     mdir.mkdir(parents=True, exist_ok=True)
     o3d.io.write_triangle_mesh(str(mdir / "mesh.ply"), mesh)
@@ -196,7 +242,8 @@ def run_dense(
     min_angle_deg: float = 0.5,
     rel_tol: float = 0.05,
     mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf",
-    voxel_px: float = 2.0,
+    voxel_px: float = 3.0,
+    trunc_voxels: float = 12.0,
 ) -> dict:
     import torch
 
@@ -215,7 +262,7 @@ def run_dense(
         try:
             results.append(_dense_model(model_dir, images, out_dir, raft, mono, long_side=long_side, gaps=gaps,
                                         keyframe_stride=keyframe_stride, min_angle_deg=min_angle_deg, rel_tol=rel_tol,
-                                        voxel_px=voxel_px))  # fmt: skip
+                                        voxel_px=voxel_px, trunc_voxels=trunc_voxels))  # fmt: skip
         except RuntimeError as exc:  # a CUDA / Open3D failure on one model must not lose the others
             log.warning("dense %s failed: %s", model_dir.name, str(exc)[:300])
             results.append({"model": str(model_dir), "status": "failed", "error": str(exc)[:300]})

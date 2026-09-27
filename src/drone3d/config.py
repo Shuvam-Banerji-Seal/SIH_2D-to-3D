@@ -121,6 +121,9 @@ class DenseConfig:
     # auto | always | never: fuse in a child process (auto: inside the warm engine, where Open3D's CUDA state
     # accumulates over many videos; a fault then kills the child, not the engine)
     isolate_fusion: str = "auto"
+    # none | guided | fgs: edge-aware refinement of the fused depth (OpenCV ximgproc) before fusion; on Jal Mahal it
+    # cost completeness (0.83 -> 0.66-0.72 on the lake model), so it is off (experiments/depth_refine_ab.py)
+    refine: str = "none"
     min_model_images: int = 3  # SfM models with fewer registered keyframes are skipped
 
 
@@ -137,6 +140,7 @@ class ExportConfig:
     texture: bool = True  # bake an atlas from the keyframes (sharper than TSDF vertex colours)
     texture_views: int = 16  # candidate keyframes; each triangle takes its best view
     texture_size: int = 4096  # texture atlas size (px)
+    texture_gain: bool = True  # equalise the keyframes' exposure before baking (OpenCV stitching's gain compensation)
     max_triangles: int = 600_000  # viewable copies (GLB, textured, FBX); mesh.ply keeps full density
     splats: bool = True  # convert trained Gaussian splats (splat stage) for the web viewer
     max_splats: int = 1_500_000  # the most important splats kept in the web file (32 bytes each)
@@ -266,6 +270,8 @@ class PipelineConfig:
             raise ConfigError("sfm.mapper must be incremental or global")
         if self.dense.backend not in {"flow", "none"}:
             raise ConfigError("dense.backend must be flow or none")
+        if self.dense.refine not in {"none", "guided", "fgs"}:
+            raise ConfigError("dense.refine must be none, guided or fgs")
         if self.dense.isolate_fusion not in {"auto", "always", "never"}:
             raise ConfigError("dense.isolate_fusion must be auto, always or never")
         if not self.dense.gaps or min(self.dense.gaps) < 1:

@@ -48,6 +48,63 @@ def _project(pts: torch.Tensor, v: View) -> tuple[torch.Tensor, torch.Tensor, to
     return u, w, z
 
 
+def _view_gains(views: list[View], cen: torch.Tensor, scores: torch.Tensor, *, sigma_n: float = 10.0,
+                sigma_g: float = 0.1) -> tuple[torch.Tensor, dict]:  # fmt: skip
+    """Per-view, per-channel gains that equalise exposure where views overlap -> ``([V, 3], stats)``.
+
+    OpenCV's stitching ``GainCompensator`` / ``ChannelsCompensator`` objective,
+    over triangles instead of panorama pixels: with ``N_ij`` triangles seen by
+    views i and j and ``I_ij`` view i's mean colour over them, minimise
+    ``sum N_ij ((g_i I_ij - g_j I_ji)^2 / sigma_n^2 + (1 - g_i)^2 / sigma_g^2)``.
+    A drone's auto-exposure changes along a pass; the atlas blends the best
+    views of each triangle, so uncorrected gains show as blotches and seams.
+    """
+    n_v = len(views)
+    vis = scores > 0  # [V, F]
+    cols = torch.zeros(n_v, cen.shape[0], 3, device=cen.device)
+    for k, v in enumerate(views):
+        sel = vis[k]
+        if not bool(sel.any()):
+            continue
+        h, w = v.image.shape[:2]
+        u, y, _ = _project(cen[sel], v)
+        g = torch.stack([2 * u / (w - 1) - 1, 2 * y / (h - 1) - 1], -1)[None, None]
+        img = v.image.permute(2, 0, 1)[None].float()
+        cols[k, sel] = F.grid_sample(img, g, mode="bilinear", align_corners=True, padding_mode="border")[0, :, 0].T
+    visf = vis.float()
+    n_ij = visf @ visf.T  # [V, V] shared triangles
+    # [V, V, 3]: view i's colour summed over the triangles it shares with j (one [V, F] @ [F, 3] per view)
+    sums = torch.stack([(visf * visf[i]) @ cols[i] for i in range(n_v)])
+    mean = sums / n_ij.clamp_min(1)[..., None]
+    gains = torch.ones(n_v, 3, device=cen.device)
+    for c in range(3):
+        big_i = mean[..., c]
+        a = torch.zeros(n_v, n_v, device=cen.device, dtype=torch.float64)
+        b = torch.zeros(n_v, device=cen.device, dtype=torch.float64)
+        for i in range(n_v):
+            for j in range(n_v):
+                if i == j or n_ij[i, j] < 20:
+                    continue
+                nij = float(n_ij[i, j])
+                a[i, i] += nij * (float(big_i[i, j]) ** 2 / sigma_n**2 + 1 / sigma_g**2)
+                a[i, j] -= nij * float(big_i[i, j]) * float(big_i[j, i]) / sigma_n**2
+                b[i] += nij / sigma_g**2
+        live = a.diagonal() > 0
+        if bool(live.any()):
+            sol = torch.linalg.solve(a[live][:, live], b[live])
+            gains[live, c] = sol.float().clamp(0.5, 2.0)
+    # disagreement between overlapping views, before and after: mean |I_ij - I_ji| weighted by overlap
+    mask = (n_ij >= 20) & ~torch.eye(n_v, dtype=torch.bool, device=cen.device)
+    w = n_ij[mask]
+    before = (mean - mean.transpose(0, 1)).abs().mean(-1)[mask]
+    gm = mean * gains[:, None, :]
+    after = (gm - gm.transpose(0, 1)).abs().mean(-1)[mask]
+    stats = {"pairs": int(mask.sum()), "disagreement_before": round(float((before * w).sum() / w.sum().clamp_min(1)), 3) if bool(mask.any()) else None,
+             "disagreement_after": round(float((after * w).sum() / w.sum().clamp_min(1)), 3) if bool(mask.any()) else None,
+             "gain_range": [round(float(gains.min()), 3), round(float(gains.max()), 3)]}  # fmt: skip
+    return gains, stats
+
+
 @torch.inference_mode()
 def bake_soup_texture(
     vertices: np.ndarray,
@@ -59,12 +116,14 @@ def bake_soup_texture(
     fallback_rgb: np.ndarray | None = None,
     blend: int = 3,
     device: str = "cuda",
+    gain: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """-> ``(corner_uv [F, 3, 2] in OBJ convention (v up), albedo uint8 [size, size, 3], info)``.
 
     Args:
         zbuf: long side of the per-view centroid z-buffer used for occlusion.
         fallback_rgb: ``[N, 3]`` vertex colours for triangles no view sees.
+        gain: equalise the views' exposure first (OpenCV stitching's gain-compensation objective).
     """
     dev = torch.device(device)
     vt = torch.as_tensor(vertices, dtype=torch.float32, device=dev)
@@ -100,6 +159,7 @@ def bake_soup_texture(
     best_view = torch.where(top_s[0] > 0, top_v[0], torch.full_like(top_v[0], -1))
     top_w = torch.where((top_s > 0) & (top_s >= 0.5 * top_s[:1]), top_s, torch.zeros_like(top_s))
     top_w = top_w / top_w.sum(0, keepdim=True).clamp_min(1e-12)
+    gains, gain_stats = _view_gains(views, cen, scores) if gain and len(views) > 1 else (None, None)
 
     # ---- layout: two triangles per square cell
     cells = math.ceil(n_f / 2)
@@ -156,6 +216,8 @@ def bake_soup_texture(
             g = torch.stack([2 * u / (w - 1) - 1, 2 * y / (h - 1) - 1], -1)[None, None]
             img = v.image.permute(2, 0, 1)[None].float()
             sample = F.grid_sample(img, g, mode="bilinear", align_corners=True, padding_mode="border")[0, :, 0].T
+            if gains is not None:
+                sample = sample * gains[k]
             col[sel] += w_r[sel, None] * sample
     unseen = ok & (view_of < 0)
     if fallback_rgb is not None and bool(unseen.any()):
@@ -166,5 +228,5 @@ def bake_soup_texture(
                        + wc[unseen, None] * fb[ft[t_of[unseen], 2]])  # fmt: skip
     albedo[flat_idx[ok]] = col[ok].round().clamp(0, 255).to(torch.uint8)
     info = {"triangles": int(n_f), "cell_px": int(cs), "views": len(views),
-            "unseen_triangles": int((best_view < 0).sum())}  # fmt: skip
+            "unseen_triangles": int((best_view < 0).sum()), "gain": gain_stats}  # fmt: skip
     return uv_obj.cpu().numpy(), albedo.view(size, size, 3).cpu().numpy(), info

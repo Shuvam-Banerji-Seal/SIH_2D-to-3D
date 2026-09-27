@@ -58,8 +58,77 @@ def _level(points: np.ndarray, cams: np.ndarray) -> np.ndarray:
     return _rotation_between(np.asarray(up, dtype=np.float64), np.array([0.0, 0.0, 1.0]))
 
 
+def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec, images: Path, *,
+                 views: int = 16, size: int = 4096):  # type: ignore[no-untyped-def]  # fmt: skip
+    """Keyframe texture for the mesh (model frame) -> ``(corner_uv, albedo, info)`` or ``None``."""
+    import torch
+    from torchvision.io import decode_jpeg, read_file
+
+    from drone3d.export.texture_gpu import View, bake_soup_texture
+
+    if not len(f) or not torch.cuda.is_available():
+        return None
+    pick = [posed[int(round(i))] for i in np.linspace(0, len(posed) - 1, min(views, len(posed)))]
+    vs = []
+    for im in pick:
+        path = images / im.name
+        if not path.is_file():
+            continue
+        img = decode_jpeg(read_file(str(path)), device="cuda").permute(1, 2, 0).contiguous()
+        cam = rec.cameras[im.camera_id]
+        s = img.shape[1] / cam.width  # keyframes may be stored smaller than the camera
+        pose = im.cam_from_world()
+        vs.append(View(cam.params[0] * s, cam.params[1] * s, cam.params[2] * s,
+                       np.asarray(pose.rotation.matrix()), np.asarray(pose.translation), img))  # fmt: skip
+    if not vs:
+        return None
+    uv, albedo, info = bake_soup_texture(v, f, vs, size=size, fallback_rgb=vc)
+    del vs
+    torch.cuda.empty_cache()
+    return uv, albedo, info
+
+
+def _write_textured(v: np.ndarray, f: np.ndarray, uv: np.ndarray, albedo: np.ndarray, stem: Path) -> list[Path]:
+    """Textured GLB and OBJ (+ .mtl, .jpg), the atlas stored as JPEG.
+
+    PNG-encoding a 4096^2 atlas twice took 9 s per model; JPEG is ~20x faster
+    and 5x smaller. The OBJ shares vertices and indexes texture coordinates
+    separately (``f v/vt``) instead of tripling the vertex count.
+    """
+    import io
+
+    import trimesh
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.fromarray(albedo).save(buf, format="JPEG", quality=90)
+    jpg = buf.getvalue()
+    tex = stem.with_name(stem.name + "_albedo.jpg")
+    tex.write_bytes(jpg)
+    image = Image.open(io.BytesIO(jpg))  # format JPEG: trimesh embeds it as is in the GLB
+    verts = v[f].reshape(-1, 3)
+    faces = np.arange(len(verts)).reshape(-1, 3)
+    visual = trimesh.visual.TextureVisuals(uv=uv.reshape(-1, 2), image=image)
+    glb = stem.with_suffix(".glb")
+    trimesh.Trimesh(vertices=verts, faces=faces, visual=visual, process=False).export(glb)
+    obj, mtl = stem.with_suffix(".obj"), stem.with_suffix(".mtl")
+    mtl.write_text(f"newmtl albedo\nKa 1 1 1\nKd 1 1 1\nillum 1\nmap_Kd {tex.name}\n")
+    n = len(f)
+    fi = np.empty((n, 6), dtype=np.int64)
+    fi[:, 0::2] = f + 1
+    fi[:, 1::2] = np.arange(3 * n).reshape(n, 3) + 1
+    with obj.open("w") as fh:
+        fh.write(f"mtllib {mtl.name}\nusemtl albedo\n")
+        np.savetxt(fh, v, fmt="v %.5f %.5f %.5f")
+        np.savetxt(fh, uv.reshape(-1, 2), fmt="vt %.6f %.6f")
+        np.savetxt(fh, fi, fmt="f %d/%d %d/%d %d/%d")
+    return [glb, obj, mtl, tex]
+
+
 def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, mesh_formats: list[str],
-               las: bool = True, geotiff: bool = True, raster_cell: float | None = None, viewer: bool = True) -> dict:  # fmt: skip
+               las: bool = True, geotiff: bool = True, raster_cell: float | None = None, viewer: bool = True,
+               images: Path | None = None, texture: bool = True, texture_views: int = 16,
+               texture_size: int = 4096) -> dict:  # fmt: skip
     import open3d as o3d
     import pycolmap
 
@@ -74,7 +143,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             continue
         name = Path(m["model"]).name
         mdir = out_dir / f"model_{name}"
-        mdir.mkdir(parents=True, exist_ok=True)
+        if mdir.exists():  # our own output: stale files from an earlier export would be listed as current
+            shutil.rmtree(mdir)
+        mdir.mkdir(parents=True)
         mesh = o3d.io.read_triangle_mesh(m["mesh"])
         pcd = o3d.io.read_point_cloud(m["points"])
         v, f = np.asarray(mesh.vertices), np.asarray(mesh.triangles)
@@ -89,19 +160,36 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         axis = mid.cam_from_world().rotation.matrix()[2]  # optical axis in world coordinates
         depth_med = float(np.median((p - cams[len(posed) // 2]) @ axis)) if len(p) else 1.0
         view = np.array([cams[len(posed) // 2], cams[len(posed) // 2] + depth_med * axis])
+        baked, tex_info = None, None
+        if texture and images is not None:
+            try:
+                res = bake_texture(v, f, vc, posed, rec, images, views=texture_views, size=texture_size)
+                if res is not None:
+                    baked, tex_info = (v, f, res[0], res[1]), res[2]
+            except (RuntimeError, ValueError) as exc:  # texturing improves the mesh; never lose the mesh over it
+                log.warning("texture baking failed for model %s: %s", name, exc)
         geo = geo_by_model.get(m["model"])
         if geo is not None:
             tr = geo["transform"]
             t = SimilarityTransform(scale=tr["scale"], rotation=np.asarray(tr["rotation"]), translation=np.asarray(tr["translation"]))
             v, p, cams, view, scale = t.apply(v), t.apply(p), t.apply(cams), t.apply(view), float(t.scale)
+            if baked is not None:
+                baked = (t.apply(baked[0]), *baked[1:])
             units, frame = "m", "ENU"
         else:
             rot = _level(p, cams)
             v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
+            if baked is not None:
+                baked = (baked[0] @ rot.T, *baked[1:])
             units, frame = "model units", "SfM (levelled, not georeferenced)"
-        files = write_mesh(v, f, vc, mdir / "mesh", tuple(x for x in mesh_formats if x != "fbx"))
+        # OBJ has no standard vertex colour: with a texture, OBJ is written textured only
+        plain = tuple(x for x in mesh_formats if x != "fbx" and not (x == "obj" and baked is not None))
+        files = write_mesh(v, f, vc, mdir / "mesh", plain)
+        textured = _write_textured(*baked, mdir / "mesh_textured") if baked is not None else []
+        files += textured
         if "fbx" in mesh_formats:
-            fbx = write_fbx(mdir / "mesh.glb" if (mdir / "mesh.glb").is_file() else files[0], mdir / "mesh.fbx")
+            src = textured[0] if textured else (mdir / "mesh.glb" if (mdir / "mesh.glb").is_file() else files[0])
+            fbx = write_fbx(src, mdir / "mesh.fbx")
             files += [fbx] if fbx else []
         pts_ply = mdir / "points.ply"
         cloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(p))
@@ -123,9 +211,10 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 files.append(write_geotiff(ortho, mdir / "ortho.tif", origin=org, cell=cell, epsg=epsg, nodata=None))
         rel = [str(x.relative_to(out_dir)) for x in files if x]
         rows.append({"model": m["model"], "frame": frame, "units": units, "epsg": epsg, "files": rel,
-                     "vertices": len(v), "triangles": len(f), "points": len(p)})  # fmt: skip
+                     "vertices": len(v), "triangles": len(f), "points": len(p), "texture": tex_info})  # fmt: skip
         scene_models.append({
-            "name": f"model {name}", "mesh": f"model_{name}/mesh.glb" if "glb" in mesh_formats else None,
+            "name": f"model {name}",
+            "mesh": f"model_{name}/mesh_textured.glb" if textured else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),
             "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units,
             "georeferenced": geo is not None, "up": [0, 0, 1],
             # frame the view on the bulk of the model, not on stray far-field fragments
@@ -143,3 +232,4 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             shutil.copytree(src, dst) if src.is_dir() else shutil.copy2(src, dst)
         (out_dir / "scene.json").write_text(json.dumps({"title": title, "models": scene_models}, indent=1))
     return {"models": rows, "viewer": str(out_dir / "index.html") if viewer and scene_models else None}
+

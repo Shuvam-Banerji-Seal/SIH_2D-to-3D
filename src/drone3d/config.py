@@ -117,6 +117,9 @@ class ExportConfig:
     geotiff: bool = True  # DSM + orthophoto (projected UTM when georeferenced)
     raster_cell: float | None = None  # metres (or model units); default: 2 x median point spacing
     viewer: bool = True
+    texture: bool = True  # bake an atlas from the keyframes (sharper than TSDF vertex colours)
+    texture_views: int = 16  # candidate keyframes; each triangle takes its best view
+    texture_size: int = 4096
 
 
 @dataclass

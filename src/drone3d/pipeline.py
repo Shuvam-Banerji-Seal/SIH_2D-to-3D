@@ -427,6 +427,10 @@ class Pipeline:
             geotiff=cfg.geotiff,
             raster_cell=cfg.raster_cell,
             viewer=cfg.viewer,
+            images=self.dataset / "images",
+            texture=cfg.texture,
+            texture_views=cfg.texture_views,
+            texture_size=cfg.texture_size,
         )
         _write_json(self._stage_dir("export") / "result.json", payload)
         n_files = sum(len(m["files"]) for m in payload["models"])

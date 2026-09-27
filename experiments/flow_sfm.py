@@ -87,6 +87,7 @@ def main() -> None:
     ap.add_argument("--long-side", type=int, default=960)
     ap.add_argument("--span", type=int, default=3)
     ap.add_argument("--stride", type=int, default=8)
+    ap.add_argument("--iters", type=int, default=12, help="RAFT refinement iterations")
     ap.add_argument("--max-gap", type=int, default=8)
     ap.add_argument("--mappers", default="global,incremental")
     ap.add_argument("--tag", default="", help="suffix for this run's database / model / report names")
@@ -114,14 +115,15 @@ def main() -> None:
         cv2.imwrite(str(img_dir / name), cv2.cvtColor(f, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
     report["timing_s"]["load_resize_write"] = round(time.perf_counter() - t0, 2)
 
-    cache = args.out / (f"tracks_span{args.span}" + (f"_stride{args.stride}" if args.stride != 8 else "") + ".npz")
+    cache = args.out / (f"tracks_span{args.span}" + (f"_stride{args.stride}" if args.stride != 8 else "")
+                        + (f"_ls{args.long_side}" if args.long_side != 960 else "") + (f"_it{args.iters}" if args.iters != 12 else "") + ".npz")
     if cache.is_file():  # flow is the expensive part; mapping experiments reuse it
         z = np.load(cache, allow_pickle=True)
         tracks = FlowTracks(z["image"], z["track"], z["xy"], tuple(z["size"]), z["stats"].item())
         report["timing_s"]["tracks"] = tracks.stats.get("wall_s")
     else:
         t0 = time.perf_counter()
-        raft = RaftFlow("raft_large", batch=8, iters=12)
+        raft = RaftFlow("raft_large", batch=8, iters=args.iters)
         tracks = build_tracks(frames, raft, span=args.span, stride=args.stride)
         torch.cuda.synchronize()
         tracks.stats["wall_s"] = round(time.perf_counter() - t0, 2)

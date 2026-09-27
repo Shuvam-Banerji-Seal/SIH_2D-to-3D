@@ -170,6 +170,7 @@ def estimate_up(
     iterations: int = 400,
     inlier_fraction_of_extent: float = 0.01,
     seed: int = 0,
+    max_points: int = 50_000,
 ) -> tuple[np.ndarray, float]:
     """Ground-plane normal of a model, pointing towards its cameras.
 
@@ -182,6 +183,8 @@ def estimate_up(
     if len(pts) < 3:
         raise ReconstructionError("need at least 3 points to estimate the ground plane")
     rng = np.random.default_rng(seed)
+    if len(pts) > max_points:  # dense clouds: a random subset finds the same plane, 10x faster
+        pts = pts[rng.choice(len(pts), max_points, replace=False)]
     extent = float(np.linalg.norm(np.ptp(pts, axis=0))) or 1.0
     threshold = inlier_fraction_of_extent * extent
     best_normal, best_count = np.array([0.0, 0.0, 1.0]), -1

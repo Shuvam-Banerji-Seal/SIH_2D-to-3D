@@ -91,7 +91,12 @@ async function loadMesh() {
   status('loading mesh…');
   const gltf = await new GLTFLoader().loadAsync(cfg.mesh);
   gltf.scene.traverse((o) => { if (o.isMesh) {
-    o.material = new THREE.MeshBasicMaterial({ vertexColors: !!o.geometry.attributes.color, color: o.geometry.attributes.color ? 0xffffff : 0xbfc8d4, side: THREE.DoubleSide });
+    const map = o.material && o.material.map;  // keep a baked texture; otherwise vertex colours, unlit
+    if (map) {  // triangle-soup atlas: mip levels would blend neighbouring cells into a visible grid
+      map.generateMipmaps = false; map.minFilter = THREE.LinearFilter; map.anisotropy = renderer.capabilities.getMaxAnisotropy(); map.needsUpdate = true;
+    }
+    const vc = !map && !!o.geometry.attributes.color;
+    o.material = new THREE.MeshBasicMaterial({ map: map || null, vertexColors: vc, color: map || vc ? 0xffffff : 0xbfc8d4, side: THREE.DoubleSide });
   } });
   groups.mesh.add(gltf.scene); box.expandByObject(gltf.scene);
 }

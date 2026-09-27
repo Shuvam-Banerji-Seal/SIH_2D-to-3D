@@ -44,7 +44,7 @@ flowchart LR
     O --> Q[metrics + report.html]
 ```
 
-Details: [architecture](docs/architecture.md) · [data formats](docs/data-formats.md).
+Details: [architecture](docs/architecture.md) · [data formats](docs/data-formats.md) · [sample footage & links](resources.md).
 
 ## Quickstart
 

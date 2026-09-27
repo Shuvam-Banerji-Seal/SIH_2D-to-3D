@@ -251,7 +251,7 @@ const SCENES = {
     ctx.save(); ctx.strokeStyle = SAFFRON; ctx.setLineDash([14, 12]); ctx.lineWidth = 3; ctx.globalAlpha = .8; ctx.beginPath(); ctx.moveTo(-200, 300); ctx.lineTo(dx, 300 + 20 * Math.sin(dx / 300)); ctx.stroke(); ctx.restore();
     drone(dx, 300 + 20 * Math.sin(dx / 300), 1.2, lt); claim('drone', 'keep', dx - 60, 260, 120, 70);
     text('One pass.', 120, 760, { size: 96, weight: 800, p: prog(lt, .6, 1.4), id: 't1' });
-    text('One chance.', 120, 860, { size: 96, weight: 800, col: SAFFRON, p: prog(lt, 1.6, 2.4), id: 't2' });
+    text('One chance.', 120, 880, { size: 96, weight: 800, col: SAFFRON, p: prog(lt, 1.6, 2.4), id: 't2' });
   },
   2(t, lt) {   // the question; real footage in the source slot
     grid(); kicker('The problem · SIH 2026 · PS 26158', t, T(2).from);
@@ -270,8 +270,11 @@ const SCENES = {
     text(`${F('decode_fps', '—')} frames / s`, W * .5, 700, { size: 40, align: 'center', col: SAFFRON, weight: 800, p: prog(lt, 1.5, 2.2), id: 'fps' });
     caption('4K video decoded on NVDEC, never touching the CPU.', t, T(3).from + 1);
   },
-  4(t, lt) {   // passes: flow arrows, a cut
+  4(t, lt) {   // passes: flow arrows, a cut; then the real run's timeline
     grid(); kicker('2 · Find the passes', t, T(4).from);
+    if (t >= SLOTS[1].t0 - .4) { bezel(SLOTS[1], t, SLOTS[1].t0, 'REAL RUN · FLOW CONSISTENCY, PASSES, KEYFRAMES');
+      text(`${F('passes', '—')} passes`, 120, 400, { size: 54, col: SAFFRON, weight: 800, id: 'passes2' }); text('found by optical-flow', 120, 470, { size: 30, id: 'p3' }); text('consistency', 120, 510, { size: 30, id: 'p4' });
+      caption('Cuts and fades split an edit into camera moves.', t, T(4).from + 1); return; }
     const cut = b(6), split = easeOut(prog(lt, cut, cut + .5));
     for (let k = 0; k < 5; k++) { const x = 140 + k * 200 + (k >= 3 ? split * 80 : 0); thumb(x, 300, 170, 96, k < 3 ? 4 : 9, { alpha: prog(lt, 0.1 * k, .1 * k + .4), shift: (k % 3) * .05 });
       if (k < 4) { const bad = k === 2 && lt > cut; ctx.save(); ctx.strokeStyle = bad ? RED : CYAN; ctx.lineWidth = 3; ctx.globalAlpha = prog(lt, .5 + .2 * k, .9 + .2 * k);
@@ -280,8 +283,6 @@ const SCENES = {
     claim('frames', 'keep', 130, 290, 1110, 120);
     if (lt > cut) text('CUT', 140 + 3 * 200 - 20, 450, { size: 30, col: RED, weight: 800, align: 'center', alpha: prog(lt, cut, cut + .3), id: 'cut' });
     text(`${F('passes', '—')} passes found`, 120, 560, { size: 44, col: SAFFRON, weight: 800, p: prog(lt, cut + .6, cut + 1.3), id: 'passes' });
-    if (t >= SLOTS[1].t0 - .4) { grid(); kicker('2 · Find the passes', t, T(4).from); bezel(SLOTS[1], t, SLOTS[1].t0, 'REAL RUN · FLOW CONSISTENCY, PASSES, KEYFRAMES');
-      text(`${F('passes', '—')} passes`, 120, 400, { size: 54, col: SAFFRON, weight: 800, id: 'passes2' }); text('found by optical-flow', 120, 470, { size: 30, id: 'p3' }); text('consistency', 120, 510, { size: 30, id: 'p4' }); }
     caption('Cuts and fades split an edit into camera moves.', t, T(4).from + 1);
   },
   5(t, lt) {   // overlap band
@@ -312,10 +313,10 @@ const SCENES = {
     grid(); kicker('5 · Structure from motion on the GPU', t, T(7).from);
     const cam = { yaw: .35 + lt * .06, pitch: .62, dist: 16, fov: 1150, cx: W * .56, cy: 600 };
     cloud(t, cam, prog(lt, .3, 6.5) * .7, { size: 2.6 });
-    for (let k = 0; k < 9; k++) { const pos = [-8 + 2 * k, 8.5, -1];
+    for (let k = 0; k < 9; k++) { const u = -5 + 1.25 * k, pos = [u * Math.cos(.575), 8, -u * Math.sin(.575)];   // a straight flight line above the model, parallel to the screen mid-shot (stays in y 180-360)
       frustum(cam, pos, [0, 1, 0], 1.4, k % 4 ? CYAN : SAFFRON, prog(lt, .15 * k, .15 * k + .4)); }
     claim('cloud', 'keep', 380, 160, 1460, 620);
-    text(`${F('registered', '—')} keyframes registered`, 120, 800, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 3, 4), id: 'reg' });
+    text(`${F('registered', '—')} keyframes registered`, 120, 836, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 3, 4), id: 'reg' });
     caption(`Camera poses and ${F('sfm_points', '—')} tie points.`, t, T(7).from + 1.2);
   },
   8(t, lt) {   // depth
@@ -333,7 +334,7 @@ const SCENES = {
     const cam = { yaw: .2 + lt * .18, pitch: .34, dist: 20, fov: 950, cx: 560, cy: 540 };
     splats(t, cam, prog(lt, .2, 5), 1);
     claim('splats', 'keep', 120, 260, 900, 560);
-    text(`${F('splats', '—')} Gaussians`, 120, 250, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 1, 2), id: 'ng' });
+    text(`${F('splats', '—')} Gaussians`, 120, 212, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 1, 2), id: 'ng' });
     bezel(SLOTS[3], t, SLOTS[3].t0, 'REAL RUN · TRAINED MODEL');
     text(`held-out PSNR ${F('psnr', '—')} dB`, 1040, 700, { size: 32, col: WHITE, p: prog(lt, b(6), b(6) + .8), id: 'psnr' });
     caption('Trained on the GPU from the keyframes and the depth prior.', t, T(9).from + 1);

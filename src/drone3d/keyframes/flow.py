@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
@@ -132,6 +133,11 @@ class RaftFlow:
         batch: pairs per replay.
         iters: RAFT refinement iterations.
         cuda_graph: capture and replay (falls back to eager if capture fails).
+        max_graphs: captured shapes kept, least recently used dropped first. Each
+            graph holds a private memory pool (1-1.5 GB for RAFT large, 16 pairs
+            at 480 px) that ``empty_cache`` cannot return; in the warm engine,
+            where every video brings its own frame size, an unbounded cache grew
+            past 25 GB of reserved memory over a benchmark.
         net: an already loaded network of ``model`` to share (see :mod:`drone3d.engine.models`).
     """
 
@@ -143,6 +149,7 @@ class RaftFlow:
         iters: int = 12,
         device: str | torch.device = "cuda",
         cuda_graph: bool = True,
+        max_graphs: int = 3,
         net: torch.nn.Module | None = None,
     ) -> None:
         self.device = torch.device(device)
@@ -151,9 +158,10 @@ class RaftFlow:
         self.iters = iters
         self.name = model
         self.use_graph = cuda_graph and self.device.type == "cuda"
-        self._graphs: dict[
+        self.max_graphs = max(1, max_graphs)
+        self._graphs: OrderedDict[
             tuple[int, int], tuple[torch.cuda.CUDAGraph, torch.Tensor, torch.Tensor, torch.Tensor]
-        ] = {}
+        ] = OrderedDict()
 
     @staticmethod
     def _prep(frames: torch.Tensor) -> torch.Tensor:
@@ -166,7 +174,11 @@ class RaftFlow:
 
     def _graph(self, h: int, w: int):  # type: ignore[no-untyped-def]
         key = (h, w)
-        if key not in self._graphs:
+        if key in self._graphs:
+            self._graphs.move_to_end(key)
+        else:
+            while len(self._graphs) >= self.max_graphs:  # its pool returns to the allocator with it
+                self._graphs.popitem(last=False)
             sa = torch.zeros(self.batch, 3, h, w, device=self.device)
             sb = torch.zeros_like(sa)
             side = torch.cuda.Stream(self.device)

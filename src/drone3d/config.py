@@ -121,6 +121,7 @@ class MeshConfig:
     backend: str = "spirula"  # spirula | none
     formats: list[str] = field(default_factory=lambda: ["ply", "glb", "obj"])
     colors: list[str] = field(default_factory=lambda: ["vertex", "texture"])
+    num_threads: int = 12  # CPU threads for meshing (0 = all; the host may be shared)
 
 
 @dataclass

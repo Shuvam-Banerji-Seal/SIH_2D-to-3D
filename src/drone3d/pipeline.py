@@ -440,7 +440,12 @@ class Pipeline:
 
         meshes = []
         for model in splat["models"]:
-            result = run_mesh(Path(model["run_dir"]), formats=cfg.formats, colors=cfg.colors)
+            result = run_mesh(
+                Path(model["run_dir"]),
+                formats=cfg.formats,
+                colors=cfg.colors,
+                flags={"num_threads": cfg.num_threads},
+            )
             meshes.append(
                 {"run_dir": model["run_dir"], **result.to_dict(), **_mesh_stats(result.files)}
             )

@@ -96,7 +96,7 @@ def _host() -> dict:
             "mem_available_gb": round(mem.get("MemAvailable", 0) / 1e9, 1)}  # fmt: skip
 
 
-def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 8770):  # type: ignore[no-untyped-def]
+def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 8770, engine_slots: int = 1):  # type: ignore[no-untyped-def]
     from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
     from fastapi.responses import FileResponse, Response
     from fastapi.staticfiles import StaticFiles
@@ -110,7 +110,7 @@ def create_app(repo: Path, outputs: Path | None = None, *, engine_port: int = 87
     static = Path(__file__).parent / "static"
     viewer_static = Path(__file__).parent.parent / "viewer" / "static"
     jobs = JobManager(repo, outputs)
-    engine = EngineClient(repo, outputs, port=engine_port)
+    engine = EngineClient(repo, outputs, port=engine_port, slots=engine_slots)
     probe_cache: dict[str, dict] = {}
 
     def own_pids() -> set[int]:

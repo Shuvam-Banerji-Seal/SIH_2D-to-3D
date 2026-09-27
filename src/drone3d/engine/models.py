@@ -226,8 +226,10 @@ class ModelCache:
 
         with self._lock:
             net = self._use(model)
-            k = (model, batch, iters)
-            if k not in self._wrappers:  # one per batch size: its CUDA graphs are sized to it
+            k = (model, batch, iters, threading.get_ident())
+            if (
+                k not in self._wrappers
+            ):  # one per batch size and engine slot: its CUDA graphs and buffers are its own
                 self._wrappers[k] = RaftFlow(
                     model, batch=batch, iters=iters, device=self.device, net=net
                 )

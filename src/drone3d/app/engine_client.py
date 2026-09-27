@@ -33,8 +33,8 @@ class EngineError(RuntimeError):
 
 
 class EngineClient:
-    def __init__(self, repo: Path, outputs: Path, *, port: int = 8770) -> None:
-        self.repo, self.outputs, self.default_port = repo, outputs, port
+    def __init__(self, repo: Path, outputs: Path, *, port: int = 8770, slots: int = 1) -> None:
+        self.repo, self.outputs, self.default_port, self.slots = repo, outputs, port, slots
         self.proc: subprocess.Popen | None = None
         self.restarts = 0
         self.last_exit: int | None = None
@@ -89,7 +89,7 @@ class EngineClient:
             if self.online():
                 return {"started": False, "reason": "already online"}
             cmd = [str(Path(sys.executable).with_name("drone3d")), "engine", "--port", str(self.default_port),
-                   "--outputs", str(self.outputs)]  # fmt: skip
+                   "--outputs", str(self.outputs), "--slots", str(self.slots)]  # fmt: skip
             if warm is not None:
                 cmd += ["--warm", ",".join(warm)]
             env = {**os.environ}

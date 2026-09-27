@@ -133,23 +133,40 @@ class Engine:
     """Queue + warm models; :meth:`serve` exposes it over HTTP."""
 
     def __init__(self, repo: Path, outputs: Path, *, device: str = "cuda", reserve_gb: float = 2.0,
-                 release_after_job: bool = True) -> None:  # fmt: skip
+                 release_after_job: bool = True, slots: int = 1) -> None:  # fmt: skip
+        """``slots`` runs execute at once: 1 measures one video's time; 2 overlaps one run's CPU phases
+        (mapping, file writing) with another's GPU phases for throughput on a batch."""
         self.repo, self.outputs = Path(repo), Path(outputs)
         self.cache = models.ModelCache(device=device, reserve_gb=reserve_gb)
         models.activate(self.cache)
         self.release_after_job = release_after_job
+        self.slots = max(1, int(slots))
         self.started = time.time()
         self._lock = threading.RLock()
         self._wake = threading.Event()
         self.queue: collections.deque[Job] = collections.deque()
-        self.current: Job | None = None
+        self.running: dict[str, Job] = {}
+        self._job_threads: set[int] = set()
         self.history: collections.deque[Job] = collections.deque(maxlen=50)
         self.live: dict[str, LiveSession] = {}
         self._stop = threading.Event()
         self.poisoned: str | None = None
+        root = logging.getLogger()
+        if root.getEffectiveLevel() > logging.INFO:  # runs log at INFO into their own files
+            root.setLevel(logging.INFO)
         self._restore_queue()
-        self._thread = threading.Thread(target=self._loop, name="engine-jobs", daemon=True)
-        self._thread.start()
+        self._threads = [
+            threading.Thread(target=self._loop, name=f"engine-slot-{i}", daemon=True)
+            for i in range(self.slots)
+        ]
+        for t in self._threads:
+            t.start()
+
+    @property
+    def current(self) -> Job | None:
+        """The first running job (the only one with one slot)."""
+        with self._lock:
+            return next(iter(self.running.values()), None)
 
     # ------------------------------------------------------- restart safety
     @property
@@ -158,8 +175,11 @@ class Engine:
 
     def _save_queue(self) -> None:
         with self._lock:
+            jobs = [j for j in self.running.values() if j.status == "running"] + list(
+                self.queue
+            )  # running ones start over
             rows = [{"name": j.name, "run_dir": j.run_dir, "config": j.config, "kind": j.kind, "live": j.live}
-                    for j in self.queue]  # fmt: skip
+                    for j in jobs]  # fmt: skip
         self.outputs.mkdir(parents=True, exist_ok=True)
         self._queue_file.write_text(json.dumps(rows))
 
@@ -190,9 +210,7 @@ class Engine:
         _build(PipelineConfig, copy.deepcopy(config)).validate()
         run = Path(run_dir) if run_dir else self.outputs / name
         with self._lock:
-            if any(j.name == name for j in self.queue) or (
-                self.current and self.current.name == name
-            ):
+            if any(j.name == name for j in self.queue) or name in self.running:
                 raise ValueError(f"run {name!r} is already queued or running")
             job = Job(
                 name=name, run_dir=str(run), config=copy.deepcopy(config), kind=kind, live=live
@@ -215,9 +233,10 @@ class Engine:
                     self._state(job)
                     self.history.appendleft(job)
                     return True
-            if self.current and self.current.name == name:
-                self.current.cancel.set()  # stops before the next stage
-                self._state(self.current, status="stopping")
+            job = self.running.get(name)
+            if job is not None:
+                job.cancel.set()  # stops before the next stage
+                self._state(job, status="stopping")
                 return True
         return False
 
@@ -230,11 +249,28 @@ class Engine:
         with contextlib.suppress(OSError):
             path.write_text(json.dumps(state, indent=1))
 
+    @staticmethod
+    def _exclusive(job: Job) -> bool:
+        """Runs with Marigold (the depth stage) take the GPU to themselves: ~15 GB and a stateful pipeline."""
+        return "depth" in (job.config.get("stages") or [])
+
+    def _next(self) -> Job | None:
+        with self._lock:
+            if not self.queue or len(self.running) >= self.slots:
+                return None
+            if any(self._exclusive(j) for j in self.running.values()):
+                return None
+            job = self.queue[0]
+            if self._exclusive(job) and self.running:
+                return None  # waits for the others to finish, and holds the queue behind it (order is kept)
+            self.queue.popleft()
+            self.running[job.name] = job
+            self._job_threads.add(threading.get_ident())
+            return job
+
     def _loop(self) -> None:
         while not self._stop.is_set():
-            with self._lock:
-                job = self.queue.popleft() if self.queue else None
-                self.current = job
+            job = self._next()
             if job is None:
                 self._wake.wait(1.0)
                 self._wake.clear()
@@ -249,8 +285,10 @@ class Engine:
                 job.seconds = round(job.finished - (job.started or job.finished), 2)
                 self._state(job)
                 with self._lock:
-                    self.current = None
+                    self.running.pop(job.name, None)
+                    self._job_threads.discard(threading.get_ident())
                     self.history.appendleft(job)
+                self._wake.set()  # a slot is free
                 for session in list(self.live.values()):
                     session.job_finished(job)
             fault = cuda_healthy()
@@ -259,7 +297,9 @@ class Engine:
                 log.error("engine: %s; saving the queue and exiting for a restart", self.poisoned)
                 self._save_queue()
                 self._write_warm_list()
-                with contextlib.suppress(OSError):  # tells any supervisor -- even one that did not start us -- to restart
+                with contextlib.suppress(
+                    OSError
+                ):  # tells any supervisor -- even one that did not start us -- to restart
                     (self.outputs / ".engine_poisoned").write_text(self.poisoned)
                 os._exit(POISONED_EXIT)
 
@@ -268,17 +308,27 @@ class Engine:
         from drone3d.pipeline import Pipeline
 
         free = free_bytes()
-        job.adjustments = fit_to_gpu(job.config, None if free is None else free / GiB)
+        with self._lock:
+            sharing = len(
+                self.running
+            )  # this job included: the memory free now is shared with the others' growth
+        job.adjustments = fit_to_gpu(job.config, None if free is None else free / GiB / sharing)
         cfg = _build(PipelineConfig, copy.deepcopy(job.config))
         cfg.validate()
         run_dir = Path(job.run_dir)
         (run_dir / "logs").mkdir(parents=True, exist_ok=True)
         handler = logging.FileHandler(run_dir / "logs" / "run.log", encoding="utf-8")
         handler.setFormatter(logging.Formatter(_LOG_FORMAT, _DATE_FORMAT))
+        handler.setLevel(cfg.log_level)  # the run's own level, as ``drone3d run`` would set it
+        me = threading.get_ident()
+        # this run's own records; helper threads' (mapping pool, export writers) too while it runs alone
+        handler.addFilter(
+            lambda r: (
+                r.thread == me or (r.thread not in self._job_threads and len(self.running) == 1)
+            )
+        )
         root = logging.getLogger()
         root.addHandler(handler)
-        level = root.level
-        root.setLevel(cfg.log_level)  # the run's own level, as ``drone3d run`` would set it
         job.warm = [m["key"] for m in self.cache.status() if m["status"] == "loaded"]
         job.status, job.started = "running", time.time()
         self._state(job)
@@ -301,7 +351,6 @@ class Engine:
             job.status, job.error = "failed", f"{type(exc).__name__}: {exc}"
         finally:
             root.removeHandler(handler)
-            root.setLevel(level)
             handler.close()
             if self.release_after_job:  # activations and TSDF blocks, not the warm weights
                 import torch
@@ -370,6 +419,8 @@ class Engine:
                 "memory": mem,
                 "models": self.cache.status(),
                 "current": self.current.public() if self.current else None,
+                "running": [j.public() for j in self.running.values()],
+                "slots": self.slots,
                 "queue": [j.public() for j in self.queue],
                 "history": [j.public() for j in list(self.history)[:20]],
                 "live": {n: s.status() for n, s in self.live.items()},
@@ -382,9 +433,11 @@ class Engine:
             session.stop()
         self._stop.set()
         self._wake.set()
-        if self.current:
-            self.current.cancel.set()
-        self._thread.join(timeout=5)
+        with self._lock:
+            for job in self.running.values():
+                job.cancel.set()
+        for t in self._threads:
+            t.join(timeout=5)
         self.cache.unload_all()
 
 
@@ -424,11 +477,15 @@ def capabilities(repo: Path) -> dict[str, Any]:
 
         exe = ffmpeg_bin()
         if kind == "nvdec":
-            out = subprocess.run([exe, "-hide_banner", "-hwaccels"], capture_output=True, text=True, timeout=10).stdout
+            out = subprocess.run(
+                [exe, "-hide_banner", "-hwaccels"], capture_output=True, text=True, timeout=10
+            ).stdout
             if "cuda" not in out:
                 raise RuntimeError("ffmpeg has no cuda hwaccel")
             return f"{Path(exe).parent.parent.name or 'ffmpeg'}: -hwaccel cuda"
-        out = subprocess.run([exe, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=10).stdout
+        out = subprocess.run(
+            [exe, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=10
+        ).stdout
         if "h264_nvenc" not in out:
             raise RuntimeError("ffmpeg has no h264_nvenc")
         return "h264_nvenc, hevc_nvenc"
@@ -448,7 +505,11 @@ def capabilities(repo: Path) -> dict[str, Any]:
     def spirula() -> str:
         from drone3d.splat.spirula import spirula_binary
 
-        return str(spirula_binary().relative_to(repo)) if spirula_binary().is_relative_to(repo) else str(spirula_binary())
+        return (
+            str(spirula_binary().relative_to(repo))
+            if spirula_binary().is_relative_to(repo)
+            else str(spirula_binary())
+        )
 
     def meshconv() -> str:
         exe = repo / ".tools" / "bin" / "meshconv"
@@ -471,9 +532,15 @@ def capabilities(repo: Path) -> dict[str, Any]:
         "pycolmap": _check(pycolmap),
         "spirula": _check(spirula),
         "meshconv": _check(meshconv),
-        "depth_anything": _check(lambda: weights(hf / "models--depth-anything--Depth-Anything-V2-Large-hf",
-                                                 "Depth Anything V2 Large weights")),  # fmt: skip
-        "marigold": _check(lambda: weights(Path("/store/huggingface/marigold-v2"), "Marigold v2 + Qwen weights")),
+        "depth_anything": _check(
+            lambda: weights(
+                hf / "models--depth-anything--Depth-Anything-V2-Large-hf",
+                "Depth Anything V2 Large weights",
+            )
+        ),  # fmt: skip
+        "marigold": _check(
+            lambda: weights(Path("/store/huggingface/marigold-v2"), "Marigold v2 + Qwen weights")
+        ),
     }
 
 
@@ -562,8 +629,10 @@ def create_engine_app(engine: Engine):  # type: ignore[no-untyped-def]
 
     @app.post("/shutdown")
     def shutdown(body: dict | None = None) -> dict:
-        if engine.current and not (body or {}).get("force"):
-            raise HTTPException(409, f"busy with {engine.current.name}; pass force to cancel it")
+        if engine.running and not (body or {}).get("force"):
+            raise HTTPException(
+                409, f"busy with {', '.join(engine.running)}; pass force to cancel it"
+            )
         threading.Thread(
             target=lambda: (time.sleep(0.3), engine.shutdown(), os._exit(0)), daemon=True
         ).start()
@@ -573,11 +642,11 @@ def create_engine_app(engine: Engine):  # type: ignore[no-untyped-def]
 
 
 def serve(repo: Path, outputs: Path, *, host: str = "127.0.0.1", port: int = 8765, warm: list[str] | None = None,
-          reserve_gb: float = 2.0) -> None:  # fmt: skip
+          reserve_gb: float = 2.0, slots: int = 1) -> None:  # fmt: skip
     """Run an engine until killed; ``outputs/.engine.json`` tells the console where it is."""
     import uvicorn
 
-    engine = Engine(repo, outputs, reserve_gb=reserve_gb)
+    engine = Engine(repo, outputs, reserve_gb=reserve_gb, slots=slots)
     if warm is None:  # a restart: bring back what the previous engine held
         try:
             warm = json.loads((outputs / ".engine_warm.json").read_text())

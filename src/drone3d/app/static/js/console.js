@@ -79,7 +79,8 @@ async function engineTick() {
     <dl class="kv">
       ${e.online ? `<dt>process</dt><dd>pid ${e.pid} · up ${fmtS(e.uptime_s)}</dd><dt>runtime</dt><dd>torch ${esc(e.torch)} · ${esc(e.device)}</dd>
       <dt>held by engine</dt><dd>${gb(e.memory?.allocated_mb)} GB used / ${gb(e.memory?.reserved_mb)} GB reserved</dd>
-      <dt>work</dt><dd>${busy ? esc(e.current.name) : 'idle'}${e.queue?.length ? ` · ${e.queue.length} queued` : ''}</dd>` : `<dt>address</dt><dd>${esc(e.url)}</dd><dt>state</dt><dd>${esc(e.error ? 'not running' : '')}</dd>`}
+      <dt>work</dt><dd>${busy ? esc((e.running || [e.current]).map((j) => j.name).join(', ')) : 'idle'}${e.queue?.length ? ` · ${e.queue.length} queued` : ''}</dd>
+      <dt>slots</dt><dd>${e.slots ?? 1} run${(e.slots ?? 1) > 1 ? 's' : ''} at once</dd>` : `<dt>address</dt><dd>${esc(e.url)}</dd><dt>state</dt><dd>${esc(e.error ? 'not running' : '')}</dd>`}
       <dt>restarts</dt><dd>${e.restarts}${e.last_exit != null ? ` · last exit ${e.last_exit}` : ''}</dd>
     </dl>
     ${e.poisoned ? `<div class="err">${esc(e.poisoned)}</div>` : ''}

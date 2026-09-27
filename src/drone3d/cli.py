@@ -89,6 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     ui_parser = subparsers.add_parser("ui", help="Web app: configure, run and explore reconstructions")
     ui_parser.add_argument("--host", default="127.0.0.1")
     ui_parser.add_argument("--port", type=int, default=8080)
+    ui_parser.add_argument("--engine-slots", type=int, default=1, help="runs at once in an engine the console starts")
     ui_parser.set_defaults(func=cmd_ui)
 
     engine_parser = subparsers.add_parser(
@@ -100,6 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
     engine_parser.add_argument("--warm", default=None,
                                help="models to load at start, comma-separated (default: what the last engine held)")
     engine_parser.add_argument("--reserve-gb", type=float, default=2.0, help="GPU memory always left free for others")
+    engine_parser.add_argument("--slots", type=int, default=1,
+                               help="runs at once: 1 times one video; 2 overlaps CPU and GPU phases of a batch")
     engine_parser.set_defaults(func=cmd_engine)
 
     subparsers.add_parser("version", help="Print the version").set_defaults(func=cmd_version)
@@ -251,7 +254,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
         return 1
     repo = Path.cwd()
     print(f"drone3d ui: http://{args.host}:{args.port}/  (runs in {repo / 'outputs'})")
-    uvicorn.run(create_app(repo), host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(create_app(repo, engine_slots=args.engine_slots), host=args.host, port=args.port, log_level="warning")
     return 0
 
 
@@ -262,7 +265,8 @@ def cmd_engine(args: argparse.Namespace) -> int:
     setup_logging("INFO")
     warm = None if args.warm is None else [k.strip() for k in args.warm.split(",") if k.strip()]
     print(f"drone3d engine: http://{args.host}:{args.port}/status  (runs in {args.outputs.resolve()})")
-    serve(Path.cwd(), args.outputs.resolve(), host=args.host, port=args.port, warm=warm, reserve_gb=args.reserve_gb)
+    serve(Path.cwd(), args.outputs.resolve(), host=args.host, port=args.port, warm=warm, reserve_gb=args.reserve_gb,
+          slots=args.slots)
     return 0
 
 

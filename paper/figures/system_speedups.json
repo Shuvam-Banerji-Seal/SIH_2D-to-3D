@@ -66,5 +66,31 @@
   "before": 840,
   "after": 141
  },
- "monitor": "descendant lookup: every /proc/*/stat (~700 files) twice a second -> /proc/<pid>/task/*/children, 1 ms"
+ "monitor": "descendant lookup: every /proc/*/stat (~700 files) twice a second -> /proc/<pid>/task/*/children, 1 ms",
+ "sampling_s": {
+  "note": "Jal Mahal 4K VP9: letterbox test + motion probe, twelve samples each",
+  "before": {
+   "letterbox": 6.29,
+   "probe": 5.65
+  },
+  "nvdec_keyframe_snapped": {
+   "letterbox": 5.4,
+   "probe": 5.22
+  },
+  "after_cpu_one_set": 2.24
+ },
+ "decimation_s": {
+  "note": "Petronas model 5, 3.73M -> 600k triangles",
+  "open3d": 55.73,
+  "fast_simplification": 8.38,
+  "median_vertex_offset": {
+   "open3d": 0.0277,
+   "fast_simplification": 0.0237
+  }
+ },
+ "fusion_isolation": {
+  "note": "Jal Mahal dense stage, fusion in a child process: identical completeness and triangles",
+  "extra_s_first_model": 2.0,
+  "extra_s_per_model": 0.5
+ }
 }

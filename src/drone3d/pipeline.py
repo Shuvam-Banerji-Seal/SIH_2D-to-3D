@@ -175,6 +175,7 @@ class Pipeline:
             detect_letterbox,
             extract_frames,
             stream_analysis_chunks,
+            write_sidecar_jpegs,
         )
         from drone3d.keyframes.flow import ConsecutiveFlow, RaftFlow
         from drone3d.keyframes.select import SelectorConfig, select_keyframes
@@ -190,7 +191,19 @@ class Pipeline:
         crop = detect_letterbox(info, hwaccel=cfg.hwaccel) if cfg.crop_letterbox else None
         t0 = time.perf_counter()
         flow_model = RaftFlow(cfg.flow_model, batch=cfg.flow_batch)
-        chunks = stream_analysis_chunks(info, size, stride=stride, hwaccel=cfg.hwaccel, crop=crop)
+        # One decode for analysis and keyframes when the keyframes are small enough to write
+        # every analysis frame as a candidate (the default profile keeps full-size keyframes).
+        side = (
+            analysis_size(info.width, info.height, cfg.output_long_side, multiple=2)
+            if cfg.output_long_side and cfg.output_long_side <= 2048
+            else None
+        )
+        candidates = self.dataset / "candidates"
+        if candidates.exists():
+            shutil.rmtree(candidates)
+        chunks = stream_analysis_chunks(info, size, stride=stride, hwaccel=cfg.hwaccel, crop=crop, sidecar=side)
+        if side is not None:
+            chunks = write_sidecar_jpegs(chunks, candidates, quality=cfg.jpeg_quality)
         capacity = -(-info.num_frames // stride)  # ceil: analysis frames expected
         flow, indices, thumbs = ConsecutiveFlow.compute(chunks, flow_model, capacity=capacity)
         t1 = time.perf_counter()
@@ -233,15 +246,21 @@ class Pipeline:
         if images.exists():
             shutil.rmtree(images)  # a re-run must not mix in stale keyframes
         names = [f"pass_{k.pass_id:02d}/f_{k.frame_index:06d}.jpg" for k in keyframes]
-        extract_frames(
-            info,
-            [k.frame_index for k in keyframes],
-            [images / n for n in names],
-            long_side=cfg.output_long_side,
-            quality=cfg.jpeg_quality,
-            hwaccel=cfg.hwaccel,
-            crop=crop,
-        )
+        if side is not None:  # written during the analysis decode: keep the chosen ones
+            for k, n in zip(keyframes, names, strict=True):
+                (images / n).parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(candidates / f"f_{k.frame_index:06d}.jpg", images / n)
+            shutil.rmtree(candidates)
+        else:
+            extract_frames(
+                info,
+                [k.frame_index for k in keyframes],
+                [images / n for n in names],
+                long_side=cfg.output_long_side,
+                quality=cfg.jpeg_quality,
+                hwaccel=cfg.hwaccel,
+                crop=crop,
+            )
         t3 = time.perf_counter()
 
         rows = self._keyframe_rows(keyframes, names)
@@ -389,6 +408,7 @@ class Pipeline:
             self._stage_dir("dense"),
             long_side=cfg.long_side,
             gaps=tuple(cfg.gaps),
+            keyframe_stride=cfg.keyframe_stride,
             min_angle_deg=cfg.min_angle_deg,
             rel_tol=cfg.rel_tol,
             mono_model=cfg.mono_model,

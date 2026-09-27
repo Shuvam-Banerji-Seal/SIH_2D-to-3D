@@ -104,6 +104,15 @@ def map_tracks(
     if mapper == "global":
         opts = pycolmap.GlobalPipelineOptions()
         opts.num_threads = num_threads
+        # Dense flow tracks are far more than poses need, and global positioning + BA cost
+        # grows with them: on Jal Mahal pass 3 (97 keyframes, full-resolution keypoints)
+        # 2425 tracks took 26-28 s, 1200 took 10.8 s with centres 0.14 % of the extent and
+        # rotations 0.28 deg (median) from SIFT SfM. No re-triangulation. ~12 tracks per image.
+        db = pycolmap.Database.open(str(db_path))
+        n_images = db.num_images()
+        db.close()
+        opts.mapper.keep_max_num_tracks = max(1000, 12 * n_images)
+        opts.mapper.skip_retriangulation = True
         recs = pycolmap.global_mapping(str(db_path), str(image_dir), str(out_dir), opts)
     elif mapper == "incremental":
         opts = pycolmap.IncrementalPipelineOptions()

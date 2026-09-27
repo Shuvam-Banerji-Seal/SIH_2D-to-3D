@@ -196,6 +196,37 @@ def _ffmpeg_cmd(
             "-f", "rawvideo", "-pix_fmt", "nv12", "pipe:1"]  # fmt: skip
 
 
+def _ffmpeg_cmd_stacked(
+    info: StreamInfo,
+    size: tuple[int, int],
+    side: tuple[int, int],
+    pre_filters: list[str],
+    hwaccel: bool,
+) -> list[str]:
+    """One decode, two resolutions: the ``side`` frame stacked above the ``size`` frame.
+
+    Each output frame is NV12 of ``max(width) x (side_h + size_h)``; the analysis
+    frame is padded on the right. One pipe and one reader keep the two outputs in
+    lockstep with no chance of the two-pipe deadlock.
+    """
+    use_gpu = hwaccel and info.codec in _NVDEC_CODECS
+    (w1, h1), (w2, h2) = size, side
+    width = max(w1, w2)
+    pre = ",".join(pre_filters)
+    if use_gpu:
+        dec = ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-extra_hw_frames", "4"]
+        a = f"scale_cuda={w1}:{h1}:interp_algo=bilinear,hwdownload,format=nv12"
+        b = f"scale_cuda={w2}:{h2}:interp_algo=lanczos,hwdownload,format=nv12"
+    else:
+        dec = ["-threads", "0"]
+        a, b = f"scale={w1}:{h1}:flags=area,format=nv12", f"scale={w2}:{h2}:flags=lanczos,format=nv12"
+    graph = (f"[0:v]{pre + ',' if pre else ''}split=2[a][b];[a]{a},pad={width}:{h1}[aa];"
+             f"[b]{b},pad={width}:{h2}[bb];[bb][aa]vstack=inputs=2[out]")  # fmt: skip
+    return [ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", *dec, "-i", str(info.path),
+            "-filter_complex", graph, "-map", "[out]", "-fps_mode", "passthrough",
+            "-f", "rawvideo", "-pix_fmt", "nv12", "pipe:1"]  # fmt: skip
+
+
 def nv12_to_rgb(
     nv12,
     height: int,
@@ -306,8 +337,13 @@ def stream_analysis_chunks(
     prefetch: int = 3,
     crop: tuple[int, int, int, int] | None = None,
     keyframes_only: bool = False,
-) -> Iterator[tuple[np.ndarray, object]]:
+    sidecar: tuple[int, int] | None = None,
+) -> Iterator[tuple]:
     """Yield ``(source_frame_indices, rgb_uint8[B, H, W, 3] on device)`` chunks.
+
+    With ``sidecar = (w, h)`` the same decode also delivers every analysis frame
+    at that size and chunks are ``(indices, rgb, sidecar_rgb)`` -- keyframes can
+    then be written from the first decode instead of a second 4K pass.
 
     Decoding runs ahead in a background thread (``prefetch`` chunks deep), so
     the GPU work the caller does per chunk overlaps with NVDEC. ``crop`` is a
@@ -325,8 +361,15 @@ def stream_analysis_chunks(
     pre = [f"select='not(mod(n\\,{stride}))'"] if stride > 1 and not keyframes_only else []
     # keyframes_only decodes just the stream's I-frames (for sampling, not
     # analysis): indices are then ordinals, not source frame numbers.
-    cmd = _ffmpeg_cmd(info, size, pre, hwaccel, ("-skip_frame", "nokey") if keyframes_only else ())
-    frame_bytes = width * height * 3 // 2
+    if sidecar is not None:
+        if keyframes_only or sidecar[0] % 2 or sidecar[1] % 2:
+            raise ValueError("sidecar needs even dimensions and full analysis decoding")
+        cmd = _ffmpeg_cmd_stacked(info, size, sidecar, pre, hwaccel)
+        stack_w, stack_h = max(width, sidecar[0]), height + sidecar[1]
+        frame_bytes = stack_w * stack_h * 3 // 2
+    else:
+        cmd = _ffmpeg_cmd(info, size, pre, hwaccel, ("-skip_frame", "nokey") if keyframes_only else ())
+        frame_bytes = width * height * 3 // 2
     q: queue.Queue = queue.Queue(maxsize=prefetch)
     stop, handle = threading.Event(), []
     thread = threading.Thread(
@@ -346,16 +389,28 @@ def stream_analysis_chunks(
                 log.warning("%s", item)
                 break
             n = len(item) // frame_bytes
-            nv12 = (
-                torch.from_numpy(item).view(n, height * 3 // 2, width).to(device, non_blocking=True)
-            )
-            rgb = nv12_to_rgb(nv12, height, width, **color)
+            if sidecar is None:
+                nv12 = torch.from_numpy(item).view(n, height * 3 // 2, width).to(device, non_blocking=True)
+                rgb = nv12_to_rgb(nv12, height, width, **color)
+                side_rgb = None
+            else:  # split the stacked planes; convert each part on its own (no chroma bleed at the seam)
+                sw, sh = sidecar
+                full = torch.from_numpy(item).view(n, stack_h * 3 // 2, stack_w).to(device, non_blocking=True)
+                y_side, y_an = full[:, :sh, :sw], full[:, sh:stack_h, :width]
+                uv_side = full[:, stack_h : stack_h + sh // 2, :sw]
+                uv_an = full[:, stack_h + sh // 2 :, :width]
+                rgb = nv12_to_rgb(torch.cat([y_an, uv_an], 1), height, width, **color)
+                side_rgb = nv12_to_rgb(torch.cat([y_side, uv_side], 1), sh, sw, **color)
+                del full
             if crop is not None:
                 x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), size, multiple=8)
                 rgb = rgb[:, y0:y1, x0:x1].contiguous()
+                if side_rgb is not None:
+                    x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), sidecar, multiple=2)
+                    side_rgb = side_rgb[:, y0:y1, x0:x1].contiguous()
             indices = (np.arange(produced, produced + n) * stride).astype(np.int64)
             produced += n
-            yield indices, rgb
+            yield (indices, rgb) if sidecar is None else (indices, rgb, side_rgb)
     finally:
         # Reached on exhaustion and on early exit (break / close / exception):
         # never leave a decoder running behind the caller.
@@ -366,6 +421,32 @@ def stream_analysis_chunks(
         while not q.empty():
             q.get_nowait()
         thread.join(timeout=10)
+
+
+def write_sidecar_jpegs(chunks: Iterator[tuple], out_dir: Path, *, quality: int = 95,
+                        workers: int = 4) -> Iterator[tuple[np.ndarray, object]]:  # fmt: skip
+    """Pass-through for ``stream_analysis_chunks(..., sidecar=...)``: nvJPEG-encode every
+    sidecar frame to ``out_dir/f_<source index>.jpg`` and yield ``(indices, rgb)``.
+
+    Keyframes are picked among analysis frames, so writing every candidate at the
+    output size during the one decode replaces the second, seek-heavy 4K pass
+    (31 s for 213 keyframes of a 55 s clip; the stacked decode is 9 s in total).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from torchvision.io import encode_jpeg
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        pending = []
+        for indices, rgb, side in chunks:
+            data = encode_jpeg([f.permute(2, 0, 1).contiguous() for f in side], quality=quality)
+            for idx, d in zip(indices, data, strict=True):
+                pending.append(pool.submit((out_dir / f"f_{int(idx):06d}.jpg").write_bytes, d.cpu().numpy().tobytes()))
+            del side
+            yield indices, rgb
+        for fut in pending:
+            fut.result()
 
 
 def scaled_crop(

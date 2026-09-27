@@ -36,20 +36,24 @@ def _pad8(x):  # type: ignore[no-untyped-def]
     return y.round().to(x.dtype).permute(0, 2, 3, 1).contiguous()
 
 
-def _model_frames(model_dir: Path, images: Path, long_side: int):  # type: ignore[no-untyped-def]
+def _model_frames(model_dir: Path, images: Path, long_side: int, stride: int = 1):  # type: ignore[no-untyped-def]
     import pycolmap
 
     from drone3d.fastsfm.stage import load_frames
 
     rec = pycolmap.Reconstruction(str(model_dir))
     ims = sorted((im for im in rec.images.values() if im.has_pose), key=lambda im: im.name)
+    if len(ims) >= 40:  # short passes need every view (14 keyframes at stride 2 lost 90 % of the mesh)
+        ims = ims[::stride]
+    else:
+        stride = 1
     frames, full = load_frames([images / im.name for im in ims], long_side)
     s = frames.shape[2] / full[0]
     cams = []
     for im in ims:
         c = Camera.from_colmap(im, rec.cameras[im.camera_id])
         cams.append(Camera(c.f * s, c.cx * s, c.cy * s, c.k1, c.rotation, c.translation))
-    return ims, cams, frames
+    return ims, cams, frames, stride
 
 
 def run_dense(
@@ -59,6 +63,7 @@ def run_dense(
     *,
     long_side: int = 480,
     gaps: tuple[int, ...] = (2, 4, 8, 12),
+    keyframe_stride: int = 1,
     min_angle_deg: float = 0.5,
     rel_tol: float = 0.05,
     mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf",
@@ -81,11 +86,14 @@ def run_dense(
     for model_dir in model_dirs:
         timing: dict[str, float] = {}
         t0 = time.perf_counter()
-        ims, cams, frames = _model_frames(model_dir, images, long_side)
+        # Depth references: every ``keyframe_stride``-th keyframe; gaps are in original keyframes.
+        # Each surface is in ~4 keyframes' views, so the TSDF loses little and every step halves.
+        ims, cams, frames, used_stride = _model_frames(model_dir, images, long_side, keyframe_stride)
+        step_gaps = sorted({max(1, round(g / used_stride)) for g in gaps})
         n, h, w, _ = frames.shape
         timing["load"] = time.perf_counter() - t0
         t0 = time.perf_counter()
-        pairs = [(i, i + d) for d in gaps for i in range(n - d)]
+        pairs = [(i, i + d) for d in step_gaps for i in range(n - d)]
         cand: list[list[tuple[torch.Tensor, torch.Tensor]]] = [[] for _ in range(n)]
         for s in range(0, len(pairs), 32):
             chunk = pairs[s : s + 32]
@@ -139,7 +147,7 @@ def run_dense(
         del frames, vbg
         torch.cuda.empty_cache()
         results.append({
-            "model": str(model_dir), "status": "ok", "keyframes": n, "size": [w, h], "gaps": list(gaps),
+            "model": str(model_dir), "status": "ok", "keyframes": n, "keyframe_stride": used_stride, "size": [w, h], "gaps": list(gaps),
             "coverage_triangulated": round(tri_cov, 4),
             "coverage": round(float(np.mean([(d > 0).mean() for d in depths])), 4),
             "voxel": round(voxel, 6), "mesh": str(mdir / "mesh.ply"), "points": str(mdir / "points.ply"),

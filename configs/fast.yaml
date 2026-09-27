@@ -21,3 +21,4 @@ dense:
   backend: flow
   long_side: 480
   mono_model: depth-anything/Depth-Anything-V2-Large-hf
+  keyframe_stride: 2  # depth references: every 2nd keyframe on passes of 40+ keyframes

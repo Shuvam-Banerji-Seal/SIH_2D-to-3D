@@ -599,11 +599,25 @@ class Pipeline:
         georef = self._stage_result("georef")
         if georef:
             metrics["georeferencing"] = georef.get("gps_accuracy", {})
+            # PS deliverable 5 asks for a scale check in metrics.json. The
+            # Umeyama fit recovers a real similarity scale from GPS
+            # correspondences -- report it whenever georef ran, so the check
+            # is not silently absent on a default run (F32).
+            transform = georef.get("transform") or {}
+            if "scale" in transform:
+                metrics["scale_check"] = {
+                    "kind": "georef_similarity_scale",
+                    "scale": float(transform["scale"]),
+                    "relative_error": float(abs(float(transform["scale"]) - 1.0)),
+                    "note": "Umeyama similarity scale; 1.0 = GPS and model agree",
+                }
             if cfg.expected_extent_m and "georeferenced_sparse" in clouds:
                 measured = clouds["georeferenced_sparse"]["bounds"]["max_extent_m"]
-                metrics["scale_check"] = geometric_scale_error(measured, cfg.expected_extent_m)
+                metrics["scale_check_extent"] = geometric_scale_error(
+                    measured, cfg.expected_extent_m
+                )
             elif cfg.expected_extent_m:
-                metrics["scale_check"] = {
+                metrics["scale_check_extent"] = {
                     "expected_m": cfg.expected_extent_m,
                     "measured_m": None,
                     "note": "no georeferenced cloud available",

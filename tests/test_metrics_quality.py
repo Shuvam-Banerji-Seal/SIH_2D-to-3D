@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -180,3 +182,44 @@ def test_summarize_cloud_with_reference_includes_criterion_metrics() -> None:
     assert summary["completeness_vs_reference"]["completeness_ratio"] == 1.0
     # self-distance is 0 up to the cancellation round-off of the BLAS expansion
     assert summary["accuracy_vs_reference"]["chamfer_mean_m"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_georef_scale_is_reported_as_scale_check(tmp_path: Path) -> None:
+    """F32: PS deliverable 5 asks for a 'scale check' in metrics.json.
+
+    The code only emitted one when metrics.expected_extent_m was configured
+    (null by default), so a default run reported no scale at all -- even though
+    the Umeyama fit already recovers a genuine similarity scale.
+    """
+    import json as _json
+
+    from drone3d.config import load_config
+    from drone3d.pipeline import Pipeline
+    from drone3d.types import PipelineResult, StageReport
+
+    run_dir = tmp_path / "run"
+    (run_dir / "georef").mkdir(parents=True, exist_ok=True)
+    (run_dir / "georef" / "result.json").write_text(
+        _json.dumps(
+            {
+                "transform": {"scale": 1.0007, "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]},
+                "gps_accuracy": {"rmse_horizontal_m": 0.01},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    pipeline = object.__new__(Pipeline)
+    pipeline.run_dir = run_dir
+    pipeline.config = load_config(None, [])  # expected_extent_m stays None
+    pipeline._result = PipelineResult(run_dir=run_dir)
+    pipeline._result.stages = [StageReport("metrics", "ok", "summarised")]
+    pipeline._collect_metrics()
+
+    # run the stage body to write metrics.json
+    pipeline._stage_metrics()
+
+    written = _json.loads((run_dir / "metrics" / "metrics.json").read_text(encoding="utf-8"))
+    assert "scale_check" in written
+    assert written["scale_check"]["kind"] == "georef_similarity_scale"
+    assert written["scale_check"]["relative_error"] >= 0.0

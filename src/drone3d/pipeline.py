@@ -468,6 +468,8 @@ class Pipeline:
             texture_views=cfg.texture_views,
             texture_size=cfg.texture_size,
             max_triangles=cfg.max_triangles,
+            splats=self._stage_result("splat") if cfg.splats else None,
+            max_splats=cfg.max_splats,
         )
         _write_json(self._stage_dir("export") / "result.json", payload)
         n_files = sum(len(m["files"]) for m in payload["models"])
@@ -528,9 +530,17 @@ class Pipeline:
         if cfg.models == "largest":
             models = models[:1]
         have_depth = (self.dataset / "depths").is_dir()
+        dense = {m["model"]: m for m in (self._stage_result("dense") or {}).get("models", []) if m.get("status") == "ok"}
         trained = []
         for model in models:
             recon = Path(model["path"]).relative_to(self.dataset)
+            if cfg.init == "dense" and model["path"] in dense:  # start from the TSDF cloud, not ~1000 SfM points
+                from drone3d.splat.spirula import dense_init_model
+
+                init_dir = self.dataset / "sparse_init" / Path(model["path"]).name
+                dense_init_model(Path(model["path"]), Path(dense[model["path"]]["points"]), init_dir,
+                                 max_points=cfg.init_points)  # fmt: skip
+                recon = init_dir.relative_to(self.dataset)
             name = f"model_{Path(model['path']).name}"
             flags = {
                 "train_resolution_divisor": cfg.resolution_divisor,
@@ -556,7 +566,7 @@ class Pipeline:
         payload = {"models": trained, "depth_supervised": have_depth and cfg.depth_weight > 0}
         _write_json(self._stage_dir("splat") / "result.json", payload)
         summary = "; ".join(
-            f"{Path(t['run_dir']).name}: PSNR {t['eval_metrics'].get('psnr', float('nan')):.2f} dB, "
+            f"{Path(t['run_dir']).name}: PSNR {_mean_metric(t['eval_metrics'], 'psnr'):.2f} dB, "
             f"{t['num_splats']} splats"
             for t in trained
         )
@@ -941,6 +951,14 @@ def _mesh_stats(files: list[Path]) -> dict[str, Any]:
     }
 
 
+def _mean_metric(metrics: dict, key: str) -> float:
+    """A held-out metric as one number: spirula reports ``avg_<key>`` and a per-image list under ``key``."""
+    value = metrics.get(f"avg_{key}", metrics.get(key))
+    if isinstance(value, list):
+        value = float(np.mean(value)) if value else None
+    return float("nan") if value is None else float(value)
+
+
 def _summary_metrics(run_dir: Path) -> dict[str, Any]:
     """Flatten the headline numbers of every stage into one dictionary."""
     out: dict[str, Any] = {}
@@ -974,7 +992,7 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
     splat = _read_json(run_dir / "splat" / "result.json")
     if splat:
         out["splat"] = [
-            {"run": Path(m["run_dir"]).name, "passes": m.get("passes"), "num_splats": m["num_splats"], "seconds": m["seconds"], **{k: m["eval_metrics"].get(k) for k in ("psnr", "ssim", "lpips", "cc_psnr", "cc_ssim")}}
+            {"run": Path(m["run_dir"]).name, "passes": m.get("passes"), "num_splats": m["num_splats"], "seconds": m["seconds"], **{k: round(_mean_metric(m["eval_metrics"], k), 4) for k in ("psnr", "ssim", "lpips", "cc_psnr", "cc_ssim")}}
             for m in splat["models"]
         ]  # fmt: skip
     mesh = _read_json(run_dir / "mesh" / "result.json")

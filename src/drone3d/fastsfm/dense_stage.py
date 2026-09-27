@@ -39,6 +39,23 @@ def _release_gpu() -> None:
         o3c.cuda.release_cache()
 
 
+def _write_depth_previews(ims: list, depths: list[np.ndarray], out: Path) -> None:
+    """Fused depth per keyframe as a small turbo-coloured JPEG (near = warm; no depth / sky = black)."""
+    import cv2
+
+    have = [d[d > 0] for d in depths if (d > 0).any()]
+    if not have:
+        return
+    out.mkdir(parents=True, exist_ok=True)
+    lo, hi = np.percentile(1.0 / np.concatenate(have), [2, 98])  # one scale per model: views compare
+    for im, d in zip(ims, depths, strict=True):
+        inv = np.where(d > 0, 1.0 / np.maximum(d, 1e-9), 0.0)
+        x = np.clip((inv - lo) / max(hi - lo, 1e-12), 0.0, 1.0)
+        img = cv2.applyColorMap((x * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
+        img[d <= 0] = 0
+        cv2.imwrite(str(out / f"{Path(im.name).stem}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+
 def _pad8(x):  # type: ignore[no-untyped-def]
     """uint8 ``[B, H, W, 3]`` -> replicate-padded to multiples of 8 (RAFT's input grid)."""
     import torch.nn.functional as F
@@ -234,12 +251,14 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     mdir.mkdir(parents=True, exist_ok=True)
     o3d.io.write_triangle_mesh(str(mdir / "mesh.ply"), mesh)
     o3d.io.write_point_cloud(str(mdir / "points.ply"), pcd)
+    _write_depth_previews(r["ims"], depths, mdir / "depth")
     rec = {
         "model": str(model_dir), "status": "ok", "keyframes": n, "keyframe_stride": used_stride, "size": [w, h], "gaps": list(gaps),
         "coverage_triangulated": round(tri_cov, 4),
         "coverage": round(float(np.mean([(d > 0).mean() for d in depths])), 4),
         "view_completeness": round(completeness, 4),
         "voxel": round(voxel, 6), "mesh": str(mdir / "mesh.ply"), "points": str(mdir / "points.ply"),
+        "depth_previews": str(mdir / "depth"),
         "mesh_vertices": len(mesh.vertices), "mesh_triangles": len(mesh.triangles), "num_points": len(pcd.points),
         "mono": fill_info, "timing_s": {k: round(v, 2) for k, v in timing.items()},
     }  # fmt: skip

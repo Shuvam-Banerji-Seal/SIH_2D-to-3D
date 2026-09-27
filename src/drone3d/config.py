@@ -135,6 +135,8 @@ class ExportConfig:
     texture_views: int = 16  # candidate keyframes; each triangle takes its best view
     texture_size: int = 4096  # texture atlas size (px)
     max_triangles: int = 600_000  # viewable copies (GLB, textured, FBX); mesh.ply keeps full density
+    splats: bool = True  # convert trained Gaussian splats (splat stage) for the web viewer
+    max_splats: int = 1_500_000  # the most important splats kept in the web file (32 bytes each)
 
 
 @dataclass
@@ -163,6 +165,8 @@ class SplatConfig:
     depth_weight: float = 0.05  # Pearson depth-prior weight; 0 disables
     eval_interval: int = 8  # hold out every n-th keyframe for evaluation
     models: str = "all"  # all | largest: which SfM models to train
+    init: str = "dense"  # dense | sparse: start from the dense TSDF cloud (when the dense stage ran) or the SfM points
+    init_points: int = 400_000  # dense starting points per model (random subset)
     min_model_images: int = 8  # smaller SfM models are not trained
     cache_images: str = "disk"  # disk | cpu: cpu is faster but holds every decoded image in RAM
     flags: dict[str, object] = field(default_factory=dict)  # extra spirula train flags (key: value)
@@ -265,6 +269,8 @@ class PipelineConfig:
             raise ConfigError("depth.backend must be marigold or none")
         if self.splat.backend not in {"spirula", "none"}:
             raise ConfigError("splat.backend must be spirula or none")
+        if self.splat.init not in {"dense", "sparse"}:
+            raise ConfigError("splat.init must be dense or sparse")
         if self.splat.models not in {"all", "largest"}:
             raise ConfigError("splat.models must be all or largest")
         if self.mesh.backend not in {"spirula", "none"}:

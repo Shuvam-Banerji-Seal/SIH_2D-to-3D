@@ -16,6 +16,7 @@ __all__ = [
     "cloud_bounds",
     "completeness",
     "geometric_scale_error",
+    "load_cloud",
     "point_to_cloud_distances",
     "summarize_cloud",
     "voxel_coverage",
@@ -23,11 +24,9 @@ __all__ = [
 
 log = get_logger(__name__)
 
-_MAX_SAMPLES = 50_000
-_CHUNK = 1_000
-# Upper bound on the ``(chunk, n_ref)`` scratch block used by
-# `point_to_cloud_distances`, so reference size cannot blow up memory.
-_MEMORY_BUDGET_BYTES = 64 * 1024 * 1024
+_MAX_SAMPLES = (
+    500_000  # per cloud, for distances; a KD-tree query of this many takes about a second
+)
 
 
 def _as_points(points: Any) -> np.ndarray:
@@ -69,47 +68,34 @@ def voxel_coverage(points: Any, voxel_size: float) -> dict[str, Any]:
     if len(array) == 0:
         raise IngestionError("cannot compute voxel coverage of an empty point cloud")
     keys = np.floor(array / voxel_size).astype(np.int64)
-    unique = np.unique(keys, axis=0)
-    volume = float(len(unique)) * voxel_size**3
+    keys -= keys.min(axis=0)
+    span = keys.max(axis=0) + 1
+    if (
+        float(np.prod(span.astype(np.float64))) < 2.0**62
+    ):  # one int64 per voxel: much faster than unique rows
+        occupied = len(np.unique((keys[:, 0] * span[1] + keys[:, 1]) * span[2] + keys[:, 2]))
+    else:
+        occupied = len(np.unique(keys, axis=0))
+    volume = float(occupied) * voxel_size**3
     return {
         "voxel_size_m": float(voxel_size),
-        "occupied_voxels": int(len(unique)),
+        "occupied_voxels": int(occupied),
         "volume_m3": round(volume, 4),
         "points_per_m3": round(len(array) / volume, 3) if volume > 0 else 0.0,
     }
 
 
 def point_to_cloud_distances(
-    query: np.ndarray,
-    reference: np.ndarray,
-    *,
-    chunk: int = _CHUNK,
+    query: np.ndarray, reference: np.ndarray, *, workers: int = -1
 ) -> np.ndarray:
-    """Distance from every query point to the nearest reference point (chunked).
+    """Exact distance from every query point to the nearest reference point (KD-tree)."""
+    from scipy.spatial import cKDTree
 
-    Uses ``|a-b|^2 = |a|^2 + |b|^2 - 2 a·b`` so a chunk never materialises a
-    ``(chunk, n_ref, 3)`` broadcast array (which, with ``deltas**2``, cost two
-    such arrays at once -- ~2.4 GB at the default 50k reference points). The
-    chunk size is clamped so the ``(chunk, n_ref)`` scratch block stays inside
-    :data:`_MEMORY_BUDGET_BYTES`.
-    """
     query = np.asarray(query, dtype=np.float64).reshape(-1, 3)
     reference = np.asarray(reference, dtype=np.float64).reshape(-1, 3)
     if len(reference) == 0 or len(query) == 0:
         raise IngestionError("both clouds must be non-empty")
-
-    ref_sq = np.einsum("ij,ij->i", reference, reference)
-    max_chunk = max(1, _MEMORY_BUDGET_BYTES // (len(reference) * np.dtype(np.float64).itemsize))
-    step = max(1, min(chunk, max_chunk, len(query)))
-
-    distances = np.empty(len(query), dtype=np.float64)
-    for start in range(0, len(query), step):
-        block = query[start : start + step]
-        block_sq = np.einsum("ij,ij->i", block, block)
-        sq = block_sq[:, None] + ref_sq[None, :] - 2.0 * (block @ reference.T)
-        # Cancellation can make an exact zero slightly negative.
-        np.maximum(sq, 0.0, out=sq)
-        distances[start : start + step] = np.sqrt(sq.min(axis=1))
+    distances, _ = cKDTree(reference).query(query, k=1, workers=workers)
     return distances
 
 
@@ -168,12 +154,42 @@ def summarize_cloud(
     *,
     voxel_size: float = 0.5,
     reference: Any | None = None,
+    distance_threshold_m: float = 0.5,
 ) -> dict[str, Any]:
-    """Convenience summary used by the metrics pipeline stage."""
-    array = _subsample(_as_points(points), _MAX_SAMPLES)
+    """Bounds and voxel coverage of the whole cloud; distances to ``reference`` on subsamples."""
+    array = _as_points(points)
     summary: dict[str, Any] = {"bounds": cloud_bounds(array)}
     summary["coverage"] = voxel_coverage(array, voxel_size)
     if reference is not None:
         summary["accuracy_vs_reference"] = chamfer_distance(array, reference)
-        summary["completeness_vs_reference"] = completeness(reference, array)
+        summary["completeness_vs_reference"] = completeness(
+            reference, array, distance_threshold_m=distance_threshold_m
+        )
     return summary
+
+
+def load_cloud(path: str | Path, *, target_epsg: int | None = None) -> np.ndarray:
+    """A cloud file as ``[N, 3]`` float64.
+
+    LAS/LAZ keep their projected coordinates, reprojected to ``target_epsg``
+    when the file carries a CRS that differs; anything else (PLY, PCD, XYZ,
+    PTS) is read by Open3D as is.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise IngestionError(f"reference cloud not found: {path}")
+    if path.suffix.lower() in (".las", ".laz"):
+        import laspy
+
+        las = laspy.read(str(path))
+        pts = np.column_stack([las.x, las.y, las.z]).astype(np.float64)
+        crs = las.header.parse_crs()
+        if crs is not None and target_epsg is not None and crs.to_epsg() != target_epsg:
+            import pyproj
+
+            to = pyproj.Transformer.from_crs(crs, f"EPSG:{target_epsg}", always_xy=True)
+            pts = np.column_stack(to.transform(pts[:, 0], pts[:, 1], pts[:, 2]))
+        return pts
+    import open3d as o3d
+
+    return np.asarray(o3d.io.read_point_cloud(str(path)).points, dtype=np.float64)

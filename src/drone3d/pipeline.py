@@ -710,6 +710,9 @@ class Pipeline:
 
     def _stage_metrics(self) -> StageReport:
         metrics = _summary_metrics(self.run_dir)
+        clouds = self._cloud_metrics()
+        if clouds:
+            metrics["clouds"] = clouds
         path = _write_json(self._stage_dir("metrics") / "metrics.json", metrics)
         return StageReport(
             "metrics",
@@ -718,6 +721,52 @@ class Pipeline:
             artifacts=[Artifact("metrics", path)],
             metrics=metrics,
         )
+
+    def _cloud_metrics(self) -> list[dict[str, Any]]:
+        """Per exported model: bounds and voxel coverage, and accuracy/completeness vs ``metrics.reference_cloud``.
+
+        A LAS/LAZ reference is compared in the model's UTM zone (so only
+        georeferenced models are compared); any other format is taken to be in
+        the export frame of ``points.ply``.
+        """
+        import open3d as o3d
+
+        from drone3d.export.stage import _enu_to_utm
+        from drone3d.metrics.quality import load_cloud, summarize_cloud
+
+        export = self._stage_result("export")
+        if not export:
+            return []
+        cfg = self.config.metrics
+        origin = (self._stage_result("georef") or {}).get("origin")
+        ref_path = Path(cfg.reference_cloud) if cfg.reference_cloud else None
+        projected = ref_path is not None and ref_path.suffix.lower() in (".las", ".laz")
+        refs: dict[int | None, Any] = {}
+        rows = []
+        for m in export.get("models", []):
+            ply = next((f for f in m.get("files", []) if f.endswith("points.ply")), None)
+            if ply is None:
+                continue
+            p = np.asarray(o3d.io.read_point_cloud(str(self.run_dir / "export" / ply)).points, dtype=np.float64)
+            if not len(p):
+                continue
+            row: dict[str, Any] = {"model": m["model"], "units": m.get("units"), "epsg": m.get("epsg")}
+            reference, epsg = None, m.get("epsg")
+            if ref_path is not None:
+                if projected and not (epsg and origin):
+                    row["reference"] = "not compared: a LAS reference needs a georeferenced model"
+                else:
+                    key = epsg if projected else None
+                    if key not in refs:
+                        refs[key] = load_cloud(ref_path, target_epsg=key)
+                    reference = refs[key]
+                    if projected:
+                        p = _enu_to_utm(p, origin, epsg)
+                    row["reference"] = str(ref_path)
+            row.update(summarize_cloud(p, voxel_size=cfg.voxel_size, reference=reference,
+                                       distance_threshold_m=cfg.reference_threshold_m))  # fmt: skip
+            rows.append(row)
+        return rows
 
     def _stage_report(self) -> StageReport:
         from drone3d.report.html import generate_report, make_contact_sheet

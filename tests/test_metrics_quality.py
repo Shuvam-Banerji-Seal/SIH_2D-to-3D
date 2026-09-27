@@ -1,4 +1,4 @@
-"""Regression tests for point-cloud metrics (F5: chamfer memory blow-up)."""
+"""Point-cloud metrics: exact nearest-neighbour distances, coverage, reference comparison."""
 
 from __future__ import annotations
 
@@ -43,25 +43,6 @@ def test_identical_points_are_zero() -> None:
     distances = point_to_cloud_distances(cloud, cloud)
 
     np.testing.assert_allclose(distances, [0.0, 0.0], atol=1e-12)
-
-
-def test_chunk_clamping_path_still_correct(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The memory-budget clamp must not change the result.
-
-    Shrink the budget so ``max_chunk`` falls below the default ``chunk`` and the
-    clamped loop -- the replacement for the (chunk, n_ref, 3) broadcast -- is
-    exercised on small data.
-    """
-    monkeypatch.setattr("drone3d.metrics.quality._MEMORY_BUDGET_BYTES", 1024)
-    rng = np.random.default_rng(1)
-    reference = rng.normal(size=(23, 3))
-    query = rng.normal(size=(17, 3))
-
-    got = point_to_cloud_distances(query, reference, chunk=1_000)
-
-    np.testing.assert_allclose(got, _brute_force(query, reference), rtol=1e-12)
 
 
 def test_empty_clouds_raise() -> None:
@@ -219,3 +200,91 @@ def test_scale_check_reports_metric_scale_and_its_uncertainty(tmp_path: Path) ->
     check = _summary_metrics(run_dir)["scale_check"][0]
     assert abs(check["metres_per_model_unit"] - 4.0) / 4.0 < 0.01  # true scale is 1 / 0.25
     assert 0.0 < check["relative_std"] < 0.02  # 200 m track, 1 m GPS noise: sub-2 %
+
+
+def test_packed_voxel_count_matches_unique_rows() -> None:
+    rng = np.random.default_rng(7)
+    points = rng.uniform(-40, 25, size=(20_000, 3))
+
+    got = voxel_coverage(points, voxel_size=2.5)["occupied_voxels"]
+
+    assert got == len(np.unique(np.floor(points / 2.5).astype(np.int64), axis=0))
+
+
+def test_summary_counts_the_whole_cloud(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("drone3d.metrics.quality._MAX_SAMPLES", 10)
+    points = np.random.default_rng(8).normal(size=(100, 3))
+
+    summary = summarize_cloud(points, voxel_size=0.1, reference=points)
+
+    assert summary["bounds"]["n_points"] == 100  # distances are subsampled, counts are not
+
+
+def test_load_cloud_reprojects_a_las_reference(tmp_path: Path) -> None:
+    pytest.importorskip("laspy")
+    pyproj = pytest.importorskip("pyproj")
+    from drone3d.export.formats import write_las
+    from drone3d.metrics.quality import load_cloud
+
+    lon, lat = np.array([77.99, 78.0, 78.01]), np.array([28.5, 28.51, 28.52])
+    e43, n43 = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:32643", always_xy=True).transform(
+        lon, lat
+    )
+    e44, n44 = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:32644", always_xy=True).transform(
+        lon, lat
+    )
+    path = write_las(np.c_[e43, n43, [200.0, 201.0, 202.0]], None, tmp_path / "ref.las", epsg=32643)
+
+    same = load_cloud(path, target_epsg=32643)
+    other = load_cloud(path, target_epsg=32644)
+
+    np.testing.assert_allclose(same[:, :2], np.c_[e43, n43], atol=2e-3)  # millimetre quantisation
+    np.testing.assert_allclose(other[:, :2], np.c_[e44, n44], atol=2e-3)
+    np.testing.assert_allclose(other[:, 2], [200.0, 201.0, 202.0], atol=2e-3)
+
+
+def test_load_cloud_missing_file_raises(tmp_path: Path) -> None:
+    from drone3d.metrics.quality import load_cloud
+
+    with pytest.raises(IngestionError):
+        load_cloud(tmp_path / "nope.ply")
+
+
+def _fake_export(run_dir: Path, points: np.ndarray, *, epsg: int | None) -> None:
+    import json as _json
+
+    o3d = pytest.importorskip("open3d")
+    (run_dir / "export" / "model_0").mkdir(parents=True)
+    o3d.io.write_point_cloud(str(run_dir / "export" / "model_0" / "points.ply"),
+                             o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points)))  # fmt: skip
+    (run_dir / "export" / "result.json").write_text(_json.dumps({"models": [
+        {"model": "sparse/0", "units": "m" if epsg else "model units", "epsg": epsg, "files": ["model_0/points.ply"]}]}))  # fmt: skip
+
+
+def test_metrics_stage_compares_models_with_a_reference(tmp_path: Path) -> None:
+    from drone3d.config import PipelineConfig
+    from drone3d.pipeline import Pipeline
+
+    rng = np.random.default_rng(9)
+    points = rng.uniform(0, 50, size=(5000, 3))
+    run_dir = tmp_path / "run"
+    _fake_export(run_dir, points, epsg=None)
+    o3d = pytest.importorskip("open3d")
+    ref = points + np.array([0.3, 0.0, 0.0])
+    o3d.io.write_point_cloud(
+        str(tmp_path / "ref.ply"), o3d.geometry.PointCloud(o3d.utility.Vector3dVector(ref))
+    )
+
+    cfg = PipelineConfig()
+    cfg.metrics.reference_cloud = str(tmp_path / "ref.ply")
+    (row,) = Pipeline(cfg, run_dir)._cloud_metrics()
+
+    assert row["bounds"]["n_points"] == 5000
+    assert row["accuracy_vs_reference"]["accuracy_mean_m"] <= 0.3 + 1e-9
+    assert row["completeness_vs_reference"]["completeness_ratio"] == 1.0  # every point within 1 m
+    assert row["completeness_vs_reference"]["distance_threshold_m"] == 1.0
+
+    cfg.metrics.reference_cloud = str(tmp_path / "ref.las")  # projected reference, local model
+    (row,) = Pipeline(cfg, run_dir)._cloud_metrics()
+    assert row["reference"].startswith("not compared")
+    assert "accuracy_vs_reference" not in row

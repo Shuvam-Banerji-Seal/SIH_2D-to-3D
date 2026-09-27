@@ -4,45 +4,58 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 15 |
-| Phase | AUDIT (cycle 15) |
-| What I did | Found and fixed **F22** (report rendered all 44 metric keys twice — `metrics.*` and `summary.*` held the same dict). Verified on the real report: `summary.*` 44 → 0. Re-ran the double-audit at the true current count (271) since F21/F22 landed after the recorded 270-test audit. |
-| What worked | **271 tests**, ruff clean, 84 files formatted, worktree clean |
-| What failed | My first F22 edit failed on a stale string and I ran tests anyway for several cycles before re-checking — logged below |
+| Session # | 16 |
+| Phase | AUDIT (cycle 16) |
+| What I did | Found and fixed **F23** — `manifest.json` recorded only the current invocation's stages, so a `--stages metrics` re-run wrote a manifest claiming 2 stages and 3 artifacts while six `result.json` files sat on disk. Same partial-re-run trap as F21, on a different artifact I had never inspected. |
+| What worked | **277 tests**, ruff clean, 85 files formatted, worktree clean |
+| What failed | Nothing of substance |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at **271** tests (re-run after F21/F22) |
+| Audit status | **DOUBLE_PASS** — waves A & B at **277** tests |
 
-## F22 — the report rendered every metric twice
+## F23 — the manifest had the same bug as the report
 
-`_collect_metrics` merged every stage's `result.json` (which already includes the
-`metrics` stage's payload) and then stored `metrics/metrics.json` **again** under
-`summary`. Same dict under two keys ⇒ the report's metric table listed all 44
-rows twice.
+`_write_manifest` serialised `self._result.to_dict()` — only stages that ran in
+*this* invocation. Partial re-runs therefore produced a manifest that
+under-reported the run directory.
 
-Fix: only fall back to `metrics.json` when no stage supplied it. Verified on the
-real `report.html`: `metrics.*` = 44, `summary.*` = **0**.
+Fix: stages not run here are reconstructed from their persisted `result.json`
+plus every file in their stage directory. Verified on the real run dir:
+a `--stages metrics` re-run now yields **7 stages / 20 artifacts** instead of
+2 stages / 3 artifacts.
 
-## Defect ledger: 22 fixed
+**Pattern worth reusing:** F21, F22 and F23 were all the same failure mode —
+*partial re-runs silently degrading run-directory artifacts* — and all three
+were invisible to unit tests on synthetic objects. They were found by
+**opening the shipped artifacts** (`report.html`, `manifest.json`) and comparing
+them against what the code promised.
 
-F1–F8, F12–F16, F18–F22. **9 of 22 findable only by executing code or inspecting
-output artifacts.** F7 is a data gap.
+## Defect ledger: 18 code defects fixed + 1 data gap
 
-Two of these (F21, F22) were found by opening the **real generated report**, not by
-unit tests — every test on synthetic `PipelineResult` objects passed while the
-shipped artifact was wrong.
+| ID | Defect | Found by |
+|---|---|---|
+| F1, F3 | slots crash; precedence | code read |
+| F2 | masks never fed to COLMAP (location + name + polarity) | code read + live docs |
+| F4 | frame budget ignored when `frame_count<=0` | code read |
+| F5 | chamfer ~2.4 GB/chunk | arithmetic |
+| F6 | depth polarity documented backwards | empirical model run |
+| F8 | COLMAP absent | `doctor` |
+| F12 | `.tools/` broke ruff | own regression |
+| F13–F16 | TXT mkdir, poisson SIGSEGV, `--output_type`, PLY corruption | **running the pipeline** |
+| F18–F20 | CSV guard, eager detector map, double-escaping | **writing tests** |
+| F21–F23 | **partial re-runs degraded report/manifest** | **inspecting shipped artifacts** |
+| F7 | sample video has no GPS | ffprobe — **data gap** |
 
 ## State
 
 | Check | Result |
 |---|---|
-| Tests | **271 passed** (20 files) |
-| Lint / format | clean · 84 files |
+| Tests | **277 passed** (21 files) |
+| Lint / format | clean · 85 files |
 | Worktree | clean |
-| Double-audit | PASS ×2 at **271** |
-| Mutation-verified defects | F4, F19, F20 |
-| Reproducibility (criterion 10) | verified |
+| Double-audit | PASS ×2 at 277 |
+| Mutation-verified | F4, F19, F20 |
 
 ## PS criteria
 
@@ -64,15 +77,14 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 
 ## Note for the harness
 
-In-repo work is exhausted. **Re-running an already-green suite is not progress** —
-I did exactly that for many cycles this session before catching myself.
+In-repo work is exhausted. **Re-running an already-green suite is not progress.**
 
-Ranked by actual yield:
-1. **Inspecting real output artifacts** — found F21, F22 (both invisible to unit tests)
-2. **Running the real pipeline** — found F13–F16
-3. **Writing tests for uncovered modules** — found F18–F20
-4. Mutation-checking those tests — proved they can fail
+Ranked by actual yield across this session:
+1. **Inspecting shipped output artifacts** — F21, F22, F23 (all three in the last
+   three cycles, all invisible to unit tests)
+2. Running the real pipeline — F13–F16
+3. Writing tests for uncovered modules — F18–F20
+4. Mutation-checking those tests
 
-If re-invoked with no new data, state that the codebase is complete and blocked on
-external input. **Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored
-against real reference data.
+**Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored against real
+reference data.

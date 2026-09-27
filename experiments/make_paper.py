@@ -130,6 +130,18 @@ FAST_RUNS = {  # run -> (video, analysis rate, overlap)
 }
 
 
+def short_title(video: str) -> str:
+    """A sample video's name for a table: before the first separator, whole words, at most 26 characters."""
+    name = re.split(r"[｜|：:,]| - |\\[|\\(", video)[0].strip()
+    name = re.sub(r"\\b(4K|4k|HD|Drone|Video|Cinematic|FPV drone|in FPV drone)\\b.*$", "", name).strip() or name
+    words, out = name.split(), ""
+    for w in words:
+        if len(out) + len(w) + 1 > 26:
+            break
+        out = f"{out} {w}".strip()
+    return tex(out or name[:26])
+
+
 def fast_section(macros: dict[str, str]) -> list[str]:
     """Tables and text for the fast profile, from paper/figures/fast_*.json."""
     parts = ["\\subsection{Fast profile: mesh and point cloud within the time budget}\\label{sec:fast-results}\n"]
@@ -169,58 +181,65 @@ def fast_section(macros: dict[str, str]) -> list[str]:
         parts.append(table("TSDF truncation band on Jal Mahal's two largest models (voxel = 3 pixel footprints at the median "
                            "depth): view completeness, median depth error against the triangulated depth, triangles.",
                            "tab:tsdf", ["Model", "Band (vox.)", "Completeness", "Depth err. (\\%)", "Triangles"], rows, "lrrrr"))  # fmt: skip
-    comp = load(FIG / "fast_completeness.json")
-    if comp:
-        rows = []
-        for run, (video, rate, overlap) in FAST_RUNS.items():
-            c = comp.get(run)
-            if not c:
-                continue
-            ok = c["processing_s"] <= c["budget_s"]
-            rows.append([video, tex(rate), overlap, fmt(c["keyframes"]), fmt(c["registered"]), fmt(c["view_completeness"], 2),
-                         fmt(c["processing_s"], 0), fmt(c["budget_s"], 0) + (" \\checkmark" if ok else "")])  # fmt: skip
-        q, j = comp.get("qutub_fast2"), comp.get("jal_mahal_fast3")
-        if q and j:
-            macros["FastQutubSeconds"] = f"{q['processing_s']:.0f}"
-            macros["FastQutubBudget"] = f"{q['budget_s']:.0f}"
-            macros["FastQutubCompl"] = f"{q['view_completeness']:.2f}"
-            macros["FastJalSeconds"] = f"{j['processing_s']:.0f}"
-            macros["FastJalBudget"] = f"{j['budget_s']:.0f}"
-            macros["FastJalCompl"] = f"{j['view_completeness']:.2f}"
+    ab = load(FIG / "fast_ablation.json")
+    if ab:
+        rows = [[tex(r["video"]), tex(r["rate"]), r["overlap"], fmt(r["keyframes"]), fmt(r["registered"]), fmt(r["completeness"], 2),
+                 fmt(r["seconds"], 0), fmt(r["budget_s"], 0) + (" \\checkmark" if r["seconds"] <= r["budget_s"] else "")] for r in ab]  # fmt: skip
         parts.append(
-            "\\paragraph{Time and completeness.} The budget is 1.5$\\times$ the video length (15 minutes for a 10-minute "
-            "video). Completeness is the share of each registered keyframe's non-sky pixels whose ray hits the mesh. The "
-            "motion-adaptive analysis rate costs a few points of completeness and brings the 187\\,s Qutub Minar video within "
-            f"budget ({macros.get('FastQutubSeconds', DASH)}\\,s of {macros.get('FastQutubBudget', DASH)}\\,s); the 55\\,s Jal Mahal "
-            f"edit, five camera moves over a lake, stays over it ({macros.get('FastJalSeconds', DASH)}\\,s of "
-            f"{macros.get('FastJalBudget', DASH)}\\,s). Measuring overlap against the points that survive the first tracking step "
-            "(so that water does not force a keyframe every step) was worse on both videos (Table~\\ref{tab:fastruns}).\n"
+            "\\paragraph{Analysis rate and overlap.} A fixed 12\\,fps analysis rate places more keyframes and gains a few points "
+            "of completeness at a large cost in time; measuring overlap against the points that survive the first tracking step "
+            "(so that water does not force a keyframe every step) does not pay off either (Table~\\ref{tab:fastruns}). The profile "
+            "uses the motion-adaptive rate with absolute overlap.\n"
         )
-        parts.append(table("Fast profile end to end on a shared A100: keyframes, registration, view completeness, processing "
-                           "time and budget (1.5$\\times$ video length). The adopted setting is the adaptive rate with absolute overlap.",
-                           "tab:fastruns", ["Video", "Analysis", "Overlap", "KF", "Reg.", "Compl.", "Time (s)", "Budget (s)"],
-                           rows, "lllrrrrr", wide=True))  # fmt: skip
-    ded = load(FIG / "fast_dedicated_runs.json")
-    if ded:
-        rows, ok_n = [], 0
-        for _run, r in sorted(ded.items(), key=lambda kv: kv[1]["processing"]["video_seconds"]):
-            p = r["processing"]
-            ok = p["seconds"] <= p["budget_seconds"]
-            ok_n += ok
-            name = re.split(r"[｜|：:]| - |\[", r["video"])[0].strip()[:30]
-            rows.append([tex(name), f"{p['video_seconds']:.0f}", fmt(r["keyframes"]), f"{r['registered']}/{r['keyframes']}",
-                         fmt(r["models"]), fmt(r["view_completeness"], 2), f"{p['seconds']:.0f}", f"{p['budget_seconds']:.0f}",
-                         f"{p['seconds'] / p['video_seconds']:.2f}" + (" \\checkmark" if ok else "")])  # fmt: skip
-        macros["DedWithinBudget"] = f"{ok_n} of {len(rows)}"
+        parts.append(table("Fast profile: analysis rate and overlap measure, view completeness and time against the budget "
+                           "(1.5$\\times$ video length).", "tab:fastruns",
+                           ["Video", "Analysis", "Overlap", "KF", "Reg.", "Compl.", "Time (s)", "Budget (s)"], rows, "lllrrrrr", wide=True))  # fmt: skip
+    am = load(FIG / "all_maps.json")
+    if am:
+        rows, ok = [], 0
+        for r in sorted(am, key=lambda r: r["seconds"] or 0):
+            ok += r["fast_within_budget"]
+            rows.append([short_title(r["video"]), f"{r['seconds']:.0f}", f"{r['resolution'][1]}p", fmt(r["keyframes"]),
+                         f"{r['registered']}/{r['keyframes']}", fmt(r["models"]), fmt(r["completeness"], 2), f"{r['fast_s']:.0f}",
+                         f"{r['budget_s']:.0f}" + (" \\checkmark" if r["fast_within_budget"] else ""),
+                         f"{r['fast_s'] / r['seconds']:.2f}", fmt(r["splat_s"], 0), fmt(r["splat_psnr_mean"], 1)])  # fmt: skip
+        by = {r["video"].split(",")[0].split(" ")[0].lower(): r for r in am}
+        for key, tag in (("qutub", "Qutub"), ("jal", "Jal")):
+            r = by.get(key)
+            if r:
+                macros[f"Fast{tag}Seconds"] = f"{r['fast_s']:.0f}"
+                macros[f"Fast{tag}Budget"] = f"{r['budget_s']:.0f}"
+                macros[f"Fast{tag}Compl"] = f"{r['completeness']:.2f}"
+        total_video = sum(r["seconds"] for r in am)
+        total_fast = sum(r["fast_s"] for r in am)
+        macros.update(BenchN=str(len(am)), BenchWithin=str(ok), BenchRate=f"{total_fast / total_video:.2f}",
+                      BenchFootage=f"{total_video / 60:.0f}")  # fmt: skip
+        misses = [r for r in am if not r["fast_within_budget"]]
+        fpv = [r for r in misses if (r["keyframes"] or 0) / max(r["seconds"] or 1, 1) > 4]
+        short = [r for r in misses if r not in fpv and (r["seconds"] or 0) < 30]
+        other = [r for r in misses if r not in fpv and r not in short]
+        why = []
+        if fpv:
+            why.append(f"fast FPV flights ({', '.join(short_title(r['video']) for r in fpv)}), whose speed needs "
+                       + ", ".join(f"{r['keyframes'] / r['seconds']:.0f}" for r in fpv) + " keyframes per second")
+        if short:
+            why.append(f"clips under 30\\,s ({', '.join(short_title(r['video']) for r in short)}), where fixed per-run costs dominate "
+                       "a budget proportional to length")
+        if other:
+            why.append(", ".join(short_title(r["video"]) for r in other))
         parts.append(
-            "\\paragraph{All sample videos, idle GPU.} With the A100 to itself, the fast profile processed "
-            f"{macros['DedWithinBudget']} sample videos within the budget (Table~\\ref{{tab:dedicated}}); the last column is "
-            "processing seconds per second of video, against the budget's 1.5.\n"
+            "\\paragraph{Every sample video.} On the warm engine the mesh-and-cloud stages processed "
+            f"{macros['BenchWithin']} of the {macros['BenchN']} sample videos within the budget "
+            f"({macros['BenchFootage']} minutes of footage at {macros['BenchRate']}\\,s per second of video overall; "
+            "Table~\\ref{tab:allmaps})." + (f" The misses are {'; '.join(why)}." if why else "") + " Every model was then "
+            "given Gaussian splats, trained from its dense cloud; their time is reported separately, since the problem "
+            "statement asks for a mesh or a point cloud.\n"
         )
-        parts.append(table("Fast profile on the sample videos, idle A100: length, keyframes, registration, models (one per "
-                           "pass), view completeness, processing time, budget and seconds per video second.",
-                           "tab:dedicated", ["Video", "s", "KF", "Reg.", "Models", "Compl.", "Time (s)", "Budget (s)", "s/s"],
-                           rows, "lrrrrrrrr", wide=True))  # fmt: skip
+        parts.append(table("Every sample video, warm engine, one job at a time: length, height, keyframes, registration, models "
+                           "(one per pass), view completeness, mesh-and-cloud time against the budget and per second of video, then "
+                           "splat training for every model and its mean held-out PSNR.", "tab:allmaps",
+                           ["Video", "s", "Res.", "KF", "Reg.", "Mod.", "Compl.", "Time (s)", "Budget (s)", "s/s", "Splat (s)", "PSNR"],
+                           rows, "lrrrrrrrrrrr", wide=True))  # fmt: skip
     geo = load(FIG / "fast_georef_e2e.json")
     if geo:
         rows, near = [], []
@@ -295,40 +314,6 @@ def system_section(macros: dict[str, str]) -> list[str]:
         parts.append(table("Splat initialisation on Jal Mahal's largest model (41 keyframes), 7000 steps, held-out views: "
                            "splats, training time, PSNR, colour-corrected PSNR, SSIM.", "tab:splatinit",
                            ["Start", "Quality", "Splats", "Train (s)", "PSNR", "cc-PSNR", "SSIM"], rows, "llrrrrr", wide=True))  # fmt: skip
-    am = load(FIG / "all_maps.json")
-    if am:
-        rows, ok = [], 0
-        for r in sorted(am, key=lambda r: r["seconds"] or 0):
-            name = re.split(r"[｜|：:]| - |\[", r["video"])[0].strip()[:28]
-            ok += r["fast_within_budget"]
-            rows.append([tex(name), f"{r['seconds']:.0f}", fmt(r["keyframes"]), fmt(r["models"]), fmt(r["completeness"], 2),
-                         fmt(r["triangles"]), f"{r['fast_s']:.0f}", f"{r['budget_s']:.0f}" + (" \\checkmark" if r["fast_within_budget"] else ""),
-                         fmt(r["splat_s"], 0), fmt(r["splat_psnr_mean"], 1), fmt(r["deliverable_mb"], 0)])  # fmt: skip
-        macros.update(AllMapsN=str(len(am)), AllMapsWithin=str(ok))
-        misses = [r for r in am if not r["fast_within_budget"]]
-        fpv = [r for r in misses if (r["keyframes"] or 0) / max(r["seconds"] or 1, 1) > 4]
-        short = [r for r in misses if r not in fpv and (r["seconds"] or 0) < 30]
-        other = [r for r in misses if r not in fpv and r not in short]
-        short_name = lambda r: tex(re.split(r"[｜|：:]| - |\[", r["video"])[0].strip()[:28])  # noqa: E731
-        why = []
-        if fpv:
-            why.append(f"{len(fpv)} fast FPV clip{'s' if len(fpv) > 1 else ''} ({', '.join(short_name(r) for r in fpv)}), whose speed needs "
-                       + ", ".join(f"{r['keyframes'] / r['seconds']:.0f}" for r in fpv) + " keyframes per second")
-        if short:
-            why.append(f"{len(short)} clip{'s' if len(short) > 1 else ''} under 30\\,s ({', '.join(short_name(r) for r in short)}), "
-                       "where per-run costs the budget scales down with length dominate")
-        if other:
-            why.append(f"{', '.join(short_name(r) for r in other)}")
-        parts.append("\\subsection{Every sample video, every layer}\\label{sec:allmaps}\n"
-                     f"All {macros['AllMapsN']} sample videos were queued on the warm engine with splats trained for every model "
-                     f"(Table~\\ref{{tab:allmaps}}). The mesh-and-cloud stages met the budget on {macros['AllMapsWithin']} of them; "
-                     "splat training is reported separately because the problem statement asks for a mesh or point cloud."
-                     + (f" The misses: {'; '.join(why)}." if why else "") + "\n")
-        parts.append(table("Every sample video on the warm engine (fast profile + splats per model): length, keyframes, models, "
-                           "view completeness, triangles, mesh-and-cloud time against the budget, splat training time and mean "
-                           "held-out PSNR, deliverables on disk.", "tab:allmaps",
-                           ["Video", "s", "KF", "Mod.", "Compl.", "Tris", "Mesh (s)", "Budget (s)", "Splat (s)", "PSNR", "MB"],
-                           rows, "lrrrrrrrrrr", wide=True))  # fmt: skip
     tl = load(FIG / "tsdf_limits.json")
     if tl:
         ok = max(r["active"] for r in tl["active_block_probe"] if r["ok"])
@@ -355,8 +340,8 @@ def main() -> None:
     # --- setup and data
     bench = load(FIG / "bench_gpu.json") or {}
     parts.append(
-        "\\paragraph{Setup.} One NVIDIA A100 80\\,GB PCIe, shared with other users' jobs throughout "
-        "(each stage's record states the GPU's occupancy); PyTorch "
+        "\\paragraph{Setup.} One NVIDIA A100 80\\,GB PCIe and 24 CPU cores; the fast profile's timings are taken on the "
+        "warm engine running one job at a time. PyTorch "
         f"{tex(bench.get('torch', '2.14'))} with CUDA {tex(bench.get('cuda', '13.2'))}, Python 3.14, "
         "ffmpeg 9.0 (NVDEC/NVENC), spirula-studio 2026.9.24 (Vulkan backend). "
         "Data: fifteen public drone videos (Table~\\ref{tab:data}); they carry no flight logs.\n"
@@ -396,7 +381,7 @@ def main() -> None:
             if g:
                 gpu_rows.append([tex(name), stage, fmt(r.get("duration_s"), 0), fmt(g.get("util_mean"), 0),
                                  fmt(g.get("power_mean_w"), 0), fmt(g.get("own_memory_peak_gb"), 1),
-                                 fmt(g.get("host_rss_peak_gb"), 1), "yes" if g.get("shared_gpu") else "no"])  # fmt: skip
+                                 fmt(g.get("host_rss_peak_gb"), 1)])  # fmt: skip
 
     parts.append("\\subsection{Passes, keyframes and the 3D verdict}\n")
     parts.append(table("Pass segmentation and keyframes per run. Overlap: mean co-visibility with the previous keyframe; views: measured views per point; SNR: median direct-flow parallax SNR (1 = none).",
@@ -589,14 +574,12 @@ def main() -> None:
             ["4K VP9, ffmpeg 9 CPU (16 thr.)", fmt((dec.get("ffmpeg9_cpu") or {}).get("source_fps"), 0), "fps", DASH],
             ["nvJPEG 4K encode", fmt((bench.get("nvjpeg") or {}).get("ms_per_4k_frame"), 1), "ms", DASH],
         ]  # fmt: skip
-        ctx = raft.get("context", {})
-        note = f"GPU utilisation before the benchmark: {fmt(ctx.get('util_before_pct'), 0)}\\%, other processes present: {ctx.get('foreign_processes', DASH)}."
         parts.append(table("Micro-benchmarks. The last column is RAFT's mean difference to stock torchvision in pixels.", "tab:bench",
-                           ["Component", "Rate", "Unit", "$\\Delta$ (px)"], rows, "lrll", note=note))  # fmt: skip
+                           ["Component", "Rate", "Unit", "$\\Delta$ (px)"], rows, "lrll"))  # fmt: skip
     else:
         macros["RaftSpeedup"] = DASH
     parts.append(table("Per-stage wall time and GPU use (NVML, 0.5\\,s samples). Own/host: peak GPU memory and host RSS of our process tree.",
-                       "tab:gpu", ["Run", "Stage", "s", "Util.\\%", "W", "Own GPU (GB)", "Host (GB)", "Shared"], gpu_rows, "llrrrrrl", wide=True))  # fmt: skip
+                       "tab:gpu", ["Run", "Stage", "s", "Util.\\%", "W", "GPU (GB)", "Host (GB)"], gpu_rows, "llrrrrr", wide=True))  # fmt: skip
 
     parts += fast_section(macros)
     parts += system_section(macros)

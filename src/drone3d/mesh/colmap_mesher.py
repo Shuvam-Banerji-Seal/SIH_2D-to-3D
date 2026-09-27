@@ -9,7 +9,7 @@ from drone3d.exceptions import BackendUnavailable, Drone3DError, ReconstructionE
 from drone3d.logging_utils import get_logger
 from drone3d.mesh.base import MeshBackend
 from drone3d.types import MeshResult
-from drone3d.utils.ply import read_ply_header
+from drone3d.utils.ply import ply_vertex_count, read_ply_header
 from drone3d.utils.shell import run_command, which
 
 __all__ = ["ColmapMesher", "ply_element_counts"]
@@ -51,6 +51,11 @@ class ColmapMesher(MeshBackend):
         dense_ply = Path(dense_ply)
         if not dense_ply.is_file():
             raise ReconstructionError(f"dense point cloud not found: {dense_ply}")
+        # An empty cloud passes the is_file check but makes COLMAP's meshers
+        # crash (SIGSEGV in Poisson, SIGABRT in the Delaunay fallback) instead
+        # of failing cleanly. Reject it up front (F27).
+        if ply_vertex_count(dense_ply) == 0:
+            raise ReconstructionError(f"dense point cloud is empty, nothing to mesh: {dense_ply}")
 
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)

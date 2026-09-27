@@ -4,43 +4,39 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 18 |
-| Phase | AUDIT (cycle 18) |
-| What I did | Continued artifact inspection and found **F25**: the texture step called `texture_mesher`, which **COLMAP 4.x does not recognise** (it is `mesh_texturer`), passed `--image_path` instead of `--workspace_path`, and looked for `mesh.obj` when the tool writes a textured PLY + atlas. A textured mesh is **criterion 4**. Verified end-to-end: `textured/mesh.ply` now produced. |
-| What worked | **281 tests**, ruff clean, 85 files formatted, worktree clean |
-| What failed | 2 cycles lost to a PATH-less re-run and a missing import in my own tests — both test-side, fixed immediately |
+| Session # | 19 |
+| Phase | AUDIT (cycle 19) |
+| What I did | Challenged "none actionable" by running a **type checker for the first time** (`make typecheck` / mypy). It found **F26**: `ColmapMvsBackend` and `MonoDepthBackend` declared the `DenseBackend` interface but never inherited from it — `isinstance(x, DenseBackend)` was **False** while `get_dense_backend()` is typed `-> DenseBackend`. Both fixed; contract test added. |
+| What worked | **283 tests**, ruff clean, 85 files formatted, worktree clean |
+| What failed | 3 missing-import slips in my own test file (fixed immediately); `trimesh` "unresolved" is stub noise, not a defect |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at **281** tests (supersedes 279) |
+| Audit status | **DOUBLE_PASS** — waves A & B at **283** tests (supersedes 281) |
 
-## F25 — the texturing command did not exist
+## F26 — the declared return type was untrue
 
-Three faults in one block, all invisible because `configs/fast.yaml` sets
-`mesh.texture=false` so the path never executed:
+`get_dense_backend()` returns `DenseBackend`, but the two concrete backends
+never inherited it. MRO was `[ColmapMvsBackend, object]`. `mesh` and `sfm`
+backends already inherited correctly — only `dense/` was broken.
 
-| Fault | Was | Should be |
-|---|---|---|
-| command name | `texture_mesher` | `mesh_texturer` |
-| workspace flag | `--image_path` | `--workspace_path` (the undistorter workspace: `dense_ply.parent`, holding `images/` + `sparse/`) |
-| expected output | `mesh.obj` | textured PLY + `texture.png` atlas |
+Found by **running mypy** (`make typecheck`), which CI never invokes. It
+reported 33 diagnostics in 10 files; **2 were real** (`dense/base.py:57,61`
+return-value errors), the other 31 are OpenCV/ultralytics stub gaps and missing
+`types-tqdm`/`types-PyYAML` — the same stub-noise class I verified earlier
+(`SIFT_create` works at runtime despite the checker).
 
-Found by comparing `mesh/result.json` (`textured: false`, empty `textured/` dir)
-against the deliverable list, then `colmap help` confirmed the name was wrong.
+**Lesson:** the Makefile had a `typecheck` target all along. An unexercised
+verification tool is an unverified codebase.
 
-Verified on the real mesh: `textured/mesh.ply` produced, `textured: true`.
+## Defect ledger: 21 code defects fixed + 1 data gap
 
-**Correction on my own record:** I first described this as "texturing silently
-produced nothing." Wrong — the config had texturing disabled. The real defect is
-the latent command-name/flag/output triple.
-
-## Defect ledger: 20 code defects fixed + 1 data gap
-
-F1–F6, F8, F12–F16, F18–**F25**, plus F7 (data gap).
+F1–F6, F8, F12–F16, F18–**F26**, plus F7 (data gap).
 
 | Found by | Defects |
 |---|---|
-| **Inspecting shipped artifacts** | **F21, F22, F23, F24, F25** |
+| **Running a type checker** | **F26** |
+| Inspecting shipped artifacts | F21, F22, F23, F24, F25 |
 | Running the real pipeline | F13, F14, F15, F16 |
 | Writing tests | F18, F19, F20 |
 | Live COLMAP docs | F2 |
@@ -52,17 +48,16 @@ F1–F6, F8, F12–F16, F18–**F25**, plus F7 (data gap).
 
 | Check | Result |
 |---|---|
-| Tests | **281 passed** (22 files) |
+| Tests | **283 passed** (23 files) |
 | Lint / format | clean · 85 files |
 | Worktree | clean |
-| Double-audit | PASS ×2 at 281 |
+| Double-audit | PASS ×2 at 283 |
 | Mutation-verified | F4, F19, F20 |
 
 ## PS criteria
 
-Scored **3 of 10** (7 robustness, 9 usability, 10 reproducibility). Criterion 4's
-mechanism now actually works (F25) though visual review is still pending.
-Criteria **2, 3, 6 blocked on external data**.
+Scored **3 of 10** (7 robustness, 9 usability, 10 reproducibility). Criteria
+**2, 3, 6 blocked on external data**.
 
 ## The one remaining item is not code
 
@@ -79,17 +74,16 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 
 ## Note for the harness
 
-In-repo work is exhausted. **Re-running an already-green suite is not progress.**
+In-repo work is exhausted *unless* a new verification **surface** is found. The
+last three cycles each found a defect only by using a tool that had never been
+exercised:
 
-Ranked by actual yield across this session:
-1. **Inspecting shipped artifacts** — F21, F22, F23, F24, **F25** (five straight)
-2. Running the real pipeline — F13–F16
-3. Writing tests for uncovered modules — F18–F20
+1. Cycle 17–18: inspecting shipped artifacts (F21–F25)
+2. Cycle 19: **running a type checker** (F26)
 
-The method that keeps paying: **open what the tool wrote to disk and compare
-against what the code promised.** F25 was a wrong command name sitting in a
-branch no config enables — unit tests could not see it; only reading
-`mesh/result.json` against the deliverable list did.
+Remaining unexercised surfaces, if any: `pre-commit` hooks, `make lock`, the
+`api`/`geo` extras' runtime paths, and the `accurate` config profile end-to-end.
+**Do not** re-run an already-green suite — that is logged as wasted motion.
 
 **Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored against real
 reference data.

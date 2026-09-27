@@ -101,3 +101,22 @@ def test_aggregate_reports_every_model_including_all_failed() -> None:
         "abs_rel_median": None,
         "cv_monotone_delta1": None,
     }
+
+
+def test_supervision_mask_drops_sky_and_far_field() -> None:
+    from drone3d.depth.stage import supervision_mask
+
+    # Tie points cover predictions 0.2..0.6 at depths 10..100 m; the top rows are
+    # sky, predicted far beyond anything a tie point saw (0.95).
+    rng = np.random.default_rng(0)
+    p_at = rng.uniform(0.2, 0.6, 400)
+    z = np.exp(2.3 + 5.0 * (p_at - 0.2))
+    pred = np.full((10, 10), 0.4)
+    pred[:3] = 0.95
+    depth = np.exp(2.3 + 5.0 * (pred - 0.2))
+    mask = supervision_mask(pred, depth, p_at, z, far_factor=3.0)
+    assert not mask[:3].any() and mask[3:].all()
+    # Inside the calibrated range but beyond the far cut is dropped too.
+    depth2 = depth.copy()
+    depth2[5, 5] = 10 * z.max()
+    assert not supervision_mask(pred, depth2, p_at, z, far_factor=3.0)[5, 5]

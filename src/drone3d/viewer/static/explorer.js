@@ -33,6 +33,10 @@ export class Explorer extends EventTarget {
     this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbit.enableDamping = true;
     this.orbit.dampingFactor = 0.12;
+    // Render on demand: while the view changes and for a moment after (splat sorting settles), then idle.
+    this._awake = performance.now();
+    this.orbit.addEventListener('change', () => this.wake());
+    this.orbit.addEventListener('start', () => this.wake());
     this.hemi = new THREE.HemisphereLight(0xeef3ff, 0x3a3226, 1.6);
     this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
     this.sun.position.set(0.4, -0.6, 1);
@@ -61,6 +65,8 @@ export class Explorer extends EventTarget {
     this.resize();
     this.renderer.setAnimationLoop(() => this._tick());
   }
+
+  wake(ms = 1200) { this._awake = Math.max(this._awake, performance.now() + ms); }
 
   // ------------------------------------------------------------------ scene
   status(text) { this.dispatchEvent(new CustomEvent('status', { detail: text })); }
@@ -96,6 +102,7 @@ export class Explorer extends EventTarget {
     this._apply(entry);
     if (frame) this.frame(this.models.length - 1);
     this.dispatchEvent(new CustomEvent('models'));
+    this.wake(2500);
     return entry;
   }
 
@@ -226,7 +233,7 @@ export class Explorer extends EventTarget {
     this.dispatchEvent(new CustomEvent('layers'));
   }
 
-  _apply(entry) {
+  _apply(entry) { this.wake();
     const L = this.layers;
     if (entry.meshObj) {
       entry.meshObj.visible = L.mesh;
@@ -254,20 +261,20 @@ export class Explorer extends EventTarget {
       depth: v.some((m) => m.images && m.camera_rotations && (m.frames?.depth || m.base)) }[name] ?? true;
   }
 
-  setPointSize(s) { this.pointSize = s; this.models.forEach((m) => this._apply(m)); }
+  setPointSize(s) { this.wake(); this.pointSize = s; this.models.forEach((m) => this._apply(m)); }
 
-  setImageScale(k) { // keyframe photo / depth planes: bigger, and further out along each camera's axis
+  setImageScale(k) { this.wake(); // keyframe photo / depth planes: bigger, and further out along each camera's axis
     this.imageScale = k;
     for (const m of this.models) for (const g of [m.photoObj, m.depthObj]) g?.children.forEach((p) => {
       const u = p.userData; p.scale.setScalar(k); p.position.copy(u.center).addScaledVector(u.axis, u.size * k);
     });
   }
 
-  setRenderScale(s) { this.renderScale = s; this.resize(); }
+  setRenderScale(s) { this.wake(); this.renderScale = s; this.resize(); }
 
-  setBackground(hex) { this.scene.background = new THREE.Color(hex); }
+  setBackground(hex) { this.wake(); this.scene.background = new THREE.Color(hex); }
 
-  showModel(i, on) {
+  showModel(i, on) { this.wake();
     const m = this.models[i]; if (!m) return;
     m.visible = m.group.visible = on;
     if (on) { if (this.layers.points) this._loadPoints(m).then(() => this._apply(m)); if (this.layers.splats) this._loadSplat(m).then(() => this._apply(m)); }
@@ -302,7 +309,7 @@ export class Explorer extends EventTarget {
     return box;
   }
 
-  frame(i = null) {
+  frame(i = null) { this.wake();
     const m = i != null ? this.models[i] : this.models.find((x) => x.visible);
     const box = i != null && m ? new THREE.Box3().setFromPoints((m.spec.bounds || []).map((q) => new THREE.Vector3(...q))) : this._visibleBox();
     if (box.isEmpty() && m) box.copy(m.box);
@@ -364,7 +371,7 @@ export class Explorer extends EventTarget {
     this.camera.updateProjectionMatrix();
   }
 
-  _pose(pos, R) { // world-from-camera rotation (OpenCV: x right, y down, z forward) -> three.js camera
+  _pose(pos, R) { this.wake(); // world-from-camera rotation (OpenCV: x right, y down, z forward) -> three.js camera
     const m = new THREE.Matrix4().set(R[0], -R[1], -R[2], 0, R[3], -R[4], -R[5], 0, R[6], -R[7], -R[8], 0, 0, 0, 0, 1);
     this.camera.position.copy(pos);
     this.camera.quaternion.setFromRotationMatrix(m);
@@ -389,6 +396,7 @@ export class Explorer extends EventTarget {
     const el = this.renderer.domElement;
     el.tabIndex = 0;
     let drag = null, down = null;
+    ['pointermove', 'wheel', 'keydown'].forEach((t) => el.addEventListener(t, () => this.wake(), { passive: true }));
     el.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; if (this.nav === 'fly') { drag = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); } el.focus(); });
     el.addEventListener('pointermove', (e) => {
       if (this.nav !== 'fly' || !drag) return;
@@ -452,7 +460,7 @@ export class Explorer extends EventTarget {
       calls: this.renderer.info.render.calls, pixelRatio: this.renderer.getPixelRatio() };
   }
 
-  resize() {
+  resize() { this.wake();
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * this.renderScale);
     this.renderer.setSize(w, h, false);
@@ -462,6 +470,14 @@ export class Explorer extends EventTarget {
 
   _tick() {
     const dt = Math.min(this.clock.getDelta(), 0.1);
+    const active = this.follow || (this.nav === 'fly' && this.keys.size) || this.measuring;
+    if (active) this.wake(300);
+    if (performance.now() > this._awake) { // nothing moved: do not redraw
+      this.orbit.update(); this.idle = true;
+      if (performance.now() - this._fpsT > 1000) { this.fps = 0; this._fpsT = performance.now(); this.dispatchEvent(new CustomEvent('tick')); }
+      return;
+    }
+    this.idle = false;
     if (this.follow) {
       const f = this.follow;
       f.t = Math.min(1, f.t + (dt * f.speed) / f.seconds);
@@ -482,6 +498,7 @@ export class Explorer extends EventTarget {
     this._frames++;
     const now = performance.now();
     if (now - this._fpsT > 500) { this.fps = Math.round((this._frames * 1000) / (now - this._fpsT)); this._frames = 0; this._fpsT = now; this.dispatchEvent(new CustomEvent('tick')); }
+    this.renderer.domElement.dataset.frames = String((+this.renderer.domElement.dataset.frames || 0) + 1);
   }
 
   dispose() { this.renderer.setAnimationLoop(null); this.clear(); this.renderer.dispose(); this.renderer.domElement.remove(); }

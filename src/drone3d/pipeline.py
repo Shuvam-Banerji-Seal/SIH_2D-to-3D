@@ -401,7 +401,7 @@ class Pipeline:
             name = f"model_{Path(model['path']).name}"
             flags = {
                 "train_resolution_divisor": cfg.resolution_divisor,
-                "cache_images": "cpu",
+                "cache_images": cfg.cache_images,
                 **cfg.flags,
             }
             if not have_depth:

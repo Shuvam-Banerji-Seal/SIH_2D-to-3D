@@ -50,7 +50,8 @@ def main() -> None:
             "run": run.name, "video": Path(ing.get("path", "")).name, "seconds": ing.get("duration_s"),
             "resolution": [ing.get("width"), ing.get("height")], "fps": ing.get("fps"),
             "keyframes": sfm.get("input_images"), "registered": sfm.get("registered_images"), "models": len(dense),
-            "completeness": round(sum(d["view_completeness"] for d in dense) / len(dense), 4) if dense else None,
+            # the share of every registered keyframe's non-sky pixels the mesh covers: models weighted by their keyframes
+            "completeness": round(sum(d["view_completeness"] * d["keyframes"] for d in dense) / sum(d["keyframes"] for d in dense), 4) if dense else None,
             "triangles": sum(d.get("mesh_triangles") or 0 for d in dense),
             "stage_s": stages, "fast_s": round(fast, 1), "splat_s": stages.get("splat"), "total_s": p["seconds"],
             "budget_s": p["budget_seconds"], "fast_within_budget": fast <= p["budget_seconds"],
@@ -76,13 +77,13 @@ def main() -> None:
             m = load(run / "metrics" / "metrics.json") or {}
             k = load(run / "keyframes" / "result.json") or {}
             s_ = load(run / "sfm" / "result.json") or {}
-            d = [x["view_completeness"] for x in m.get("dense", []) if x.get("view_completeness") is not None]
+            dm = [x for x in m.get("dense", []) if x.get("view_completeness") is not None]
             stages = {st: v for st, v in m["processing"]["per_stage_s"].items() if st != "splat"}
             an = k.get("analysis", {})
             fps = (load(run / "ingest" / "result.json") or {}).get("video", {}).get("fps")
             label = f"{rate}, {fps / an['stride']:.1f} fps" if rate == "adaptive" and fps and an.get("stride") else rate
             ablation.append({"video": video, "rate": label, "overlap": overlap, "keyframes": s_.get("input_images"),
-                             "registered": s_.get("registered_images"), "completeness": round(sum(d) / len(d), 4) if d else None,
+                             "registered": s_.get("registered_images"), "completeness": round(sum(x["view_completeness"] * x["keyframes"] for x in dm) / sum(x["keyframes"] for x in dm), 4) if dm else None,
                              "seconds": round(sum(stages.values()), 1), "budget_s": m["processing"]["budget_seconds"]})  # fmt: skip
     (FIG / "fast_ablation.json").write_text(json.dumps(ablation, indent=1))
     print(f"{len(ablation)} ablation rows")

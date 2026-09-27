@@ -69,8 +69,10 @@ def table(
     )
     foot = f"\n\\par\\smallskip\\footnotesize {note}" if note else ""
     return (
-        f"\\begin{{{env}}}[t]\n\\centering\\small\n\\caption{{{caption}}}\\label{{{label}}}\n"
-        f"\\begin{{tabular}}{{{spec}}}\n\\toprule\n{' & '.join(header)} \\\\\n\\midrule\n{body} \\\\\n\\bottomrule\n\\end{{tabular}}{foot}\n\\end{{{env}}}\n"
+        f"\\begin{{{env}}}[htbp]\n\\centering\\small\n\\caption{{{caption}}}\\label{{{label}}}\n"
+        f"\\begin{{adjustbox}}{{max width=\\linewidth}}\n"
+        f"\\begin{{tabular}}{{{spec}}}\n\\toprule\n{' & '.join(header)} \\\\\n\\midrule\n{body} \\\\\n\\bottomrule\n\\end{{tabular}}\n"
+        f"\\end{{adjustbox}}{foot}\n\\end{{{env}}}\n"
     )
 
 
@@ -162,6 +164,19 @@ def main() -> None:
     parts.append("\\subsection{Passes, keyframes and the 3D verdict}\n")
     parts.append(table("Pass segmentation and keyframes per run. Overlap: mean co-visibility with the previous keyframe; views: measured views per point; SNR: median direct-flow parallax SNR (1 = none).",
                        "tab:keyframes", ["Run", "Pass", "Time (s)", "KF", "Overlap", "Views", "SNR", "Verdict"], kf_rows, "llrrrrrl", wide=True))  # fmt: skip
+    canon_kf = load(ROOT / "outputs" / "jal_mahal" / "keyframes" / "result.json")
+    if canon_kf:
+        passes = canon_kf["passes"]
+        t = canon_kf["timing_s"]
+        overlaps = [p["mean_overlap_consecutive"] for p in passes]
+        parts.append(
+            f"On Jal Mahal the flow signal splits the edit into {len(passes)} passes at its cuts and fades, and the band "
+            f"selects {canon_kf['num_keyframes']} keyframes; the mean overlap with the previous keyframe lies in "
+            f"{min(overlaps):.2f}--{max(overlaps):.2f}, inside or just above the target band, and every pass is "
+            f"judged \\emph{{3d}} (Table~\\ref{{tab:keyframes}}). Decoding and flow for the {canon_kf['analysis']['frames']} "
+            f"analysis frames took {t['decode_and_flow']:.0f}\\,s, selection {t['selection']:.0f}\\,s and 4K extraction "
+            f"{t['extraction']:.0f}\\,s.\n"
+        )
 
     control = load(
         ROOT / "outputs" / "controls" / "pure_rotation_run" / "keyframes" / "result.json"
@@ -192,9 +207,24 @@ def main() -> None:
         )
 
     parts.append("\\subsection{Structure from motion}\n")
+    ablation = load(FIG / "ablations.json") or {}
+    sampling = {r["label"]: r for r in ablation.get("sampling", [])}
+    base, canon = sampling.get("1 fps (uniform)"), sampling.get("overlap band (canonical)")
+    uniform, band = sampling.get("uniform, same budget"), sampling.get("overlap band (dev)")
+    if base and canon and uniform and band:
+        parts.append(
+            f"With the same SfM settings, 1\\,fps sampling registers {base['registered']} of {base['frames']} frames in "
+            f"{base['models']} disconnected models (the largest {base['largest']}), and uniform sampling at the selector's "
+            f"budget of {uniform['frames']} frames registers {uniform['registered']} but splits into {uniform['models']} models "
+            f"(largest {uniform['largest']}). The overlap band registers all {band['frames']} (largest {band['largest']}); "
+            f"after cropping the letterbox and trimming fades the canonical run registers {canon['registered']} of "
+            f"{canon['frames']} (Table~\\ref{{tab:sampling}}). A model per group of passes is expected: the passes of a "
+            "cinematic edit are cut from different flights and need not overlap. "
+            "One focal length per pass keeps the reprojection error while OpenCV's independent $f_x,f_y$ drift apart "
+            "(Table~\\ref{tab:camera}).\n"
+        )
     parts.append(table("Structure from motion on the selected keyframes.", "tab:sfm",
                        ["Run", "KF", "Registered", "Models", "Reproj. (px)", "Time (s)"], sfm_rows, "lrrrrr"))  # fmt: skip
-    ablation = load(FIG / "ablations.json") or {}
     if ablation.get("sampling"):
         rows = [[tex(r["label"]), fmt(r["frames"]), fmt(r["registered"]), fmt(r["models"]), fmt(r.get("largest")), tex(r.get("note", ""))]
                 for r in ablation["sampling"]]  # fmt: skip
@@ -208,21 +238,42 @@ def main() -> None:
         parts.append(table("Camera model on Jal Mahal: independent $f_x,f_y$ (OpenCV) against one focal (radial).", "tab:camera",
                            ["Camera", "Focal(s) per pass (px)", "Reproj. (px)", "Points"], rows, "llrr"))  # fmt: skip
 
-    depth_rows = []
+    depth_rows, withheld = [], []
     for name, d in runs.items():
         depth = load(d / "depth" / "result.json")
         if depth:
             for model, v in depth["per_model"].items():
-                depth_rows.append([tex(name), tex(Path(model).name), fmt(v.get("aligned")), fmt(v.get("abs_rel_median"), 3),
-                                   fmt(v.get("delta1_mean"), 3), fmt(v.get("valid_fraction_mean"), 2)])  # fmt: skip
-    extra_depth = load(FIG / "depth_agreement.json")
-    if extra_depth:
-        for model, v in extra_depth.get("per_model", {}).items():
-            depth_rows.append(["jal-mahal (dev)", tex(Path(model).name), fmt(v.get("aligned")), fmt(v.get("abs_rel_median"), 3),
-                               fmt(v.get("delta1_mean"), 3), fmt(v.get("valid_fraction_mean"), 2)])  # fmt: skip
+                depth_rows.append([tex(name), tex(Path(model).name), f"{v['aligned']}/{v['images']}",
+                                   fmt(v.get("cv_affine_abs_rel_median"), 3), fmt(v.get("cv_monotone_abs_rel_median"), 3),
+                                   fmt(v.get("cv_affine_delta1"), 3), fmt(v.get("cv_monotone_delta1"), 3)])  # fmt: skip
+                if v["aligned"] == 0:
+                    withheld.append((Path(model).name, v["images"]))
     parts.append("\\subsection{Monocular depth prior}\n")
-    parts.append(table("Marigold~v2 against SfM tie points, after per-image log-affine alignment. AbsRel: median over images of the per-image median relative error.",
-                       "tab:depth", ["Run", "Model", "Images", "AbsRel", "$\\delta_1$", "Valid"], depth_rows, "llrrrr"))  # fmt: skip
+    if depth_rows:
+        withheld_text = (
+            " ".join(
+                f"Model~{m} ({n} keyframes, the far lake-side pass) has no image whose prediction correlates positively "
+                "with its tie-point depths; it is trained without depth rather than with a wrong one."
+                for m, n in withheld
+            )
+            if withheld
+            else ""
+        )
+        parts.append(
+            "Table~\\ref{tab:depth} scores each calibration on tie points it was not fitted to. The monotone map lowers "
+            "held-out AbsRel on every model with depth; the gain is largest where the scene spans a wide depth range "
+            f"(Fig.~\\ref{{fig:depth}}), which a single log-affine map cannot follow. {withheld_text}\n"
+        )
+    if (FIG / "depth_panel.png").is_file():
+        parts.append(
+            "\\begin{figure*}[t]\\centering\\includegraphics[width=0.92\\textwidth]{depth_panel.png}"
+            "\\caption{Marigold~v2 on Jal Mahal keyframes (canonical run). Right: prior depth against SfM tie-point depth "
+            "for the log-affine fit (grey) and the monotone calibration (blue). On the lake-facing passes the affine fit "
+            "flattens the far shore and the ridge; the monotone map follows them (it also sends a few near points far). "
+            "Held-out AbsRel for both is given above each depth map.}\\label{fig:depth}\\end{figure*}\n"
+        )
+    parts.append(table("Marigold~v2 against SfM tie points, scored on held-out tie points (5-fold cross-validation per image, median over images): log-affine vs monotone calibration.",
+                       "tab:depth", ["Run", "Model", "Aligned", "AbsRel aff.", "AbsRel mono.", r"$\delta_1$ aff.", r"$\delta_1$ mono."], depth_rows, "llrrrrr"))  # fmt: skip
 
     parts.append("\\subsection{Gaussian splatting}\n")
     for r in ablation.get("splat") or []:
@@ -237,6 +288,21 @@ def main() -> None:
                 fmt(r.get("seconds"), 0),
             ]
         )
+    by_label = {r["label"]: r for r in ablation.get("splat") or []}
+    rgb, v1, v2 = (by_label.get(k) for k in ("model_0, RGB only", "model_0, depth prior (v1 mask)", "model_0, depth prior (v2 mask)"))
+    if rgb and v1 and rgb.get("psnr") and v1.get("psnr"):
+        v2_text = (
+            f" With the calibrated-range mask (v2) it reaches {v2['psnr']:.2f}\\,dB / {v2['ssim']:.3f}."
+            if v2 and v2.get("psnr")
+            else ""
+        )
+        parts.append(
+            f"On the largest model ({v1['eval_views']} held-out views), training on RGB alone gives "
+            f"{rgb['psnr']:.2f}\\,dB PSNR / {rgb['ssim']:.3f} SSIM and training with the depth prior (weight "
+            f"{v1['depth_weight']}) {v1['psnr']:.2f}\\,dB / {v1['ssim']:.3f} (Table~\\ref{{tab:splat}}).{v2_text} "
+            "Held-out photometric scores measure interpolation between nearby views; the prior's purpose is geometry "
+            "away from them, which these numbers do not capture.\n"
+        )
     parts.append(table("3DGS on held-out keyframes (every 8th keyframe never used in training).", "tab:splat",
                        ["Run", "Model", "Splats", "PSNR", "SSIM", "LPIPS", "Train (s)"], splat_rows, "llrrrrr", wide=True))  # fmt: skip
 
@@ -247,6 +313,16 @@ def main() -> None:
         rows = [[fmt(r["gps_noise_h_m"], 1), fmt(r["lateral_m"], 0), fmt(r["sim_probe_rmse_m"], 1), fmt(r["auto_probe_rmse_m"], 2),
                  fmt(r["sim_in_sample_h_m"], 2), fmt(r["auto_loo_h_m"], 2), fmt(r["scale_rel_err"], 1, pct=True)] for r in geo]  # fmt: skip
         parts.append("\\subsection{Georeferencing a straight pass}\n")
+        worst_ours = max(r["auto_probe_rmse_m"] for r in geo)
+        parts.append(
+            "None of the sample videos carries a flight log, so georeferencing is evaluated in simulation "
+            "(\\texttt{experiments/georef\\_study.py}): a 300\\,m track at 80\\,m altitude over flat ground with buildings, "
+            "the SfM model hidden behind a random similarity, horizontal GPS noise, and a sideways deviation of the "
+            "track from a straight line of 0--60\\,m; the error is measured at ground points 100\\,m off the track. "
+            "(Sloped ground, where the rule falls back to the similarity, is covered by the unit tests.) "
+            f"The levelled fit is never worse than the similarity (worst {worst_ours:.1f}\\,m) and its metric scale error "
+            f"stays below {macros['ScaleErrMax']}\\,\\% (Table~\\ref{{tab:georef}}, Fig.~\\ref{{fig:georef}}).\n"
+        )
         parts.append(
             "\\begin{figure*}[t]\\centering\\includegraphics[width=0.85\\textwidth]{georef_study.pdf}"
             "\\caption{Error of ground 100\\,m off-track after GPS alignment (median of 20 synthetic scenes per point). "

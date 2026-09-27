@@ -7,7 +7,7 @@ name = "drone3d"
 version = "0.1.0"
 description = "Single-pass drone video to accurate, georeferenced 3D models (SIH PS 26158 / NTRO)."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { text = "GPL-2.0-only" }
 authors = [
   { name = "Team SIH_2D-to-3D" },
@@ -25,9 +25,9 @@ classifiers = [
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering :: Image Processing",
   "Topic :: Scientific/Engineering :: GIS",
 ]
@@ -39,15 +39,30 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ai = [
-  "torch>=2.2",
-  "torchvision>=0.17",
-  "transformers>=4.40",
-  "ultralytics>=8.2",
+# GPU keyframe selection, NVML telemetry, splat rendering.
+gpu = [
+  "torch>=2.14",
+  "torchvision>=0.29",
+  "nvidia-ml-py>=13.0",
 ]
-sfm = ["pycolmap>=0.6"]
-mesh = ["open3d>=0.18", "trimesh>=4.0"]
-geo = ["pyproj>=3.6", "rasterio>=1.3", "laspy>=2.5"]
+# Marigold v2 monocular depth (third_party/marigold-v2 is imported from source).
+depth = [
+  "torch>=2.14",
+  "diffusers>=0.40",
+  "transformers>=5.4",
+  "accelerate>=1.13",
+  "peft>=0.18",
+  "safetensors>=0.8",
+  "bitsandbytes>=0.50",
+  "omegaconf>=2.3",
+  "scipy>=1.15",
+  "scikit-image>=0.25",
+  "matplotlib>=3.10",
+  "pillow>=12.0",
+]
+sfm = ["pycolmap>=4.2"]
+mesh = ["open3d>=0.20", "trimesh>=5.0", "plyfile>=1.1"]
+geo = ["pyproj>=3.7", "laspy>=2.5"]
 api = [
   "fastapi>=0.110",
   "uvicorn[standard]>=0.29",
@@ -84,6 +99,16 @@ package = true
 default-groups = ["dev"]
 # Keep resolution reproducible across machines/CI.
 resolution = "highest"
+
+# Newest PyTorch CUDA build with cp314 wheels; CUDA 13.2 runs on the 13.3 driver.
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu132" }
+torchvision = { index = "pytorch-cu132" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/drone3d"]

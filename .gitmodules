@@ -1,0 +1,9 @@
+[submodule "third_party/spirula-studio"]
+	path = third_party/spirula-studio
+	url = https://github.com/harry7557558/spirula-studio.git
+[submodule "third_party/marigold-v2"]
+	path = third_party/marigold-v2
+	url = https://github.com/huawei-bayerlab/marigold-v2.git
+[submodule "third_party/javascript-animation-skills"]
+	path = third_party/javascript-animation-skills
+	url = https://github.com/iart-ai/javascript-animation-skills.git

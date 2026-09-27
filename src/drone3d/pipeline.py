@@ -688,6 +688,37 @@ class Pipeline:
         return metrics
 
     def _write_manifest(self) -> Path:
+        """Serialise the whole run directory, not just this invocation.
+
+        `self._result` holds only the stages that ran here, so a partial
+        re-run (`--stages metrics`) would write a manifest listing 2 of the
+        run's 8 stages and dropping the other artifacts (F23 -- the same
+        partial-re-run trap as F21, but on manifest.json).
+        """
+        stages = [stage.to_dict() for stage in self._result.stages]
+        seen = {stage["name"] for stage in stages}
+        for name in ALL_STAGES:
+            if name in seen:
+                continue
+            stored = self._stage_result(name)
+            if not stored:
+                continue
+            stage_dir = self._stage_dir(name)
+            artifacts = [
+                {"name": p.stem, "path": str(p), "kind": p.suffix.lstrip(".") or "file"}
+                for p in sorted(stage_dir.iterdir())
+                if p.is_file()
+            ]
+            stages.append(
+                {
+                    "name": name,
+                    "status": "ok",
+                    "message": "",
+                    "duration_s": 0.0,
+                    "artifacts": artifacts,
+                    "metrics": stored,
+                }
+            )
         return _write_json(
             self.run_dir / "manifest.json",
             {
@@ -695,7 +726,7 @@ class Pipeline:
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "run_dir": str(self.run_dir),
                 "config": self.config.to_dict(),
-                "result": self._result.to_dict(),
+                "result": {**self._result.to_dict(), "stages": stages},
             },
         )
 

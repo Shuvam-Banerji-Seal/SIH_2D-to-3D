@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from drone3d.config import DenseConfig, MeshConfig, SfMConfig
+from drone3d.config import DenseConfig, MeshConfig, SfMConfig, load_config
 from drone3d.dense.base import NullDenseBackend, get_dense_backend
 from drone3d.exceptions import BackendUnavailable, ConfigError
 from drone3d.mesh.base import NullMeshBackend, get_mesh_backend
@@ -286,3 +286,29 @@ def test_metrics_are_not_stored_twice(tmp_path: Path) -> None:
 
     assert metrics["metrics"]["frames"]["count"] == 20
     assert "summary" not in metrics
+
+
+def test_manifest_lists_stages_from_earlier_runs(tmp_path: Path) -> None:
+    """F23: manifest.json must describe the run directory, not just this invocation.
+
+    `_write_manifest` serialised only `self._result`, so a `--stages metrics`
+    re-run wrote a manifest claiming 2 stages and 3 artifacts while six
+    result.json files sat on disk.
+    """
+    run_dir = tmp_path / "run"
+    for name in ("ingest", "sfm", "dense"):
+        (run_dir / name).mkdir(parents=True, exist_ok=True)
+        (run_dir / name / "result.json").write_text(json.dumps({"x": 1}), encoding="utf-8")
+
+    pipeline = object.__new__(Pipeline)
+    pipeline.run_dir = run_dir
+    pipeline.config = load_config(None, [])
+    pipeline._result = PipelineResult(run_dir=run_dir)
+    pipeline._result.stages = [StageReport("metrics", "ok", "summarised")]
+
+    pipeline._write_manifest()
+
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    names = [s["name"] for s in manifest["result"]["stages"]]
+    assert set(names) >= {"metrics", "ingest", "sfm", "dense"}
+    assert manifest["result"]["stages"][0]["name"] == "metrics"  # this run first

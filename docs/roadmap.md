@@ -1,57 +1,28 @@
 # Roadmap
 
-Status legend: `done` · `scaffolded` (interfaces + config wired, needs backend
-or dataset) · `planned`.
+## Done (on branch `gs-pipeline`)
 
-## M0 — Repository foundation — done
+- GPU ingest (NVDEC, GPU colour conversion, nvJPEG), letterbox and fade handling.
+- Pass segmentation, overlap-band keyframes, direct-flow parallax test with a
+  pure-rotation negative control.
+- spirula-studio GPU SfM, depth-supervised 3DGS, meshing; gsplat fly-throughs.
+- Marigold v2 depth prior with per-image monotone calibration and held-out scoring.
+- Ground-levelled georeferencing with leave-one-out error and scale uncertainty
+  (validated in simulation).
+- Per-stage GPU / host-memory telemetry; paper and promo film generated from run JSON.
 
-- uv-first `pyproject.toml`, committed `uv.lock`, Makefile targets
-- CLI (`run`, `init-config`, `doctor`, `version`), typed config with `--set`
-- CI: ruff lint/format, import + CLI smoke checks, config validation
-- Docs: problem statement, architecture, data formats, this roadmap
+## Next
 
-## M1 — Ingest & preprocessing — scaffolded
-
-- [x] Video probing, deterministic frame sampling, frame manifests
-- [x] CSV / DJI SRT / GPX / JSON telemetry parsers + interpolation
-- [x] Quality scoring (sharpness, exposure, contrast) and keyframe selection
-- [x] Focus-aware deblur, stabilization, motion/YOLO dynamic masks
-- [x] Unit tests: frame sampling + `max_frames` budget (`tests/test_io_video.py`)
-- [ ] Decode via FFmpeg for codecs OpenCV handles poorly
-
-## M2 — Reconstruction backends — scaffolded
-
-- [x] COLMAP backend (features → sequential/exhaustive matching → mapper)
-- [x] Dense MVS backend (undistort → patch-match → fusion)
-- [x] Poisson/Delaunay meshing + texture mapping; Open3D/Trimesh path
-- [x] End-to-end validated on the bundled sample clip (20 keyframes → 21
-      registered images → 246k dense points → 31,883-vertex mesh)
-- [ ] Publish baseline metrics against NTRO reference data
-- [ ] Optional pycolmap in-process backend for the `sfm` extra
-
-## M3 — Georeferencing & metric accuracy — scaffolded
-
-- [x] WGS84 ↔ ECEF ↔ ENU conversions, similarity (Umeyama) fit on camera centers
-- [x] GPS RMSE reporting, camera-track GeoJSON, georeferenced PLY output
-- [ ] IMU-aided orientation priors and barometric fusion
-- [ ] RTK/PPK weighting and GCP import for absolute checks
-
-## M4 — AI depth & dynamic-object handling — planned
-
-- [x] Monocular depth backend (Depth Anything V2) producing per-frame maps
-- [ ] Scale-calibrated depth fusion to fill occluded surfaces
-- [ ] Semantic segmentation of vegetation/roads for class-aware meshing
-- [ ] Learned deblurring (NAFNet-style) behind the `ai` extra
-
-## M5 — Near-real-time & delivery — planned
-
-- [ ] Tile-streaming pipeline with incremental SfM for live UAV downlink
-- [ ] FastAPI service (`api` extra): submit video, poll status, download model
-- [ ] 3D Tiles / glTF export for browser visualization
-- [ ] GPU acceleration profile
-
-## M6 — Evaluation & hardening — planned
-
-- [ ] Benchmark harness: accuracy, completeness, scale error, latency
-- [ ] Golden datasets and regression thresholds in CI (`slow` marker)
-- [ ] Field trial with the NTRO-provided real-time dataset
+1. **A real flight log.** Every public sample lacks GPS; georeferencing accuracy
+   on real telemetry (DJI SRT) is the most important missing evaluation. The
+   SRT parser also has known gaps for older DJI formats (`longtitude`,
+   `GPS(lon,lat,alt)`).
+2. **Dynamic objects.** Wire spirula-studio's `distraction_robustness` or SAM text
+   masks ("person; car; boat") into the pipeline and measure ghosting.
+3. **Far-field depth.** Marigold saturates on distant scenes; a metric depth
+   model or a learned monotone calibration across images could replace per-image
+   withholding.
+4. **Throughput.** Overlap decode of the next clip with training of the current
+   one; train small pass models with fewer steps.
+5. **Compositional objects.** WorldSculpt-style per-object meshes from the splat
+   scene given instance masks and boxes.

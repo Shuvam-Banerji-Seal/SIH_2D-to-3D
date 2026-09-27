@@ -1,73 +1,35 @@
-# Input and output data formats
+# Data formats
 
-## Video
+## Inputs
 
-Any container OpenCV/FFmpeg can decode: `.mp4`, `.mov`, `.mkv`, `.avi`.
-1080p and 4K are expected; nothing is assumed about frame rate — telemetry is
-resampled onto frame timestamps.
+| Input | Formats | Config key |
+|---|---|---|
+| Video | anything ffmpeg demuxes; NVDEC decodes H.264, HEVC, VP8/9, AV1, MPEG-2/4, VC-1, MJPEG, other codecs fall back to CPU decoding | `ingest.video` |
+| Flight log (optional) | CSV (auto-detected columns), DJI `.srt`, `.gpx`, JSON list | `ingest.telemetry` |
 
-```yaml
-ingest:
-  video: data/pass_01.mp4
-```
+Telemetry is interpolated to each keyframe's timestamp; georeferencing needs at
+least `geo.min_correspondences` GPS-tagged keyframes per SfM model.
 
-## Telemetry
+## Intermediate artifacts (inside the run directory)
 
-`ingest.telemetry` accepts `.csv`, `.tsv`, `.txt`, `.srt` (DJI), `.gpx` and
-`.json`. Column names are auto-detected (case-insensitive, units stripped).
-
-| Canonical field | Accepted column names |
-| --- | --- |
-| `t` | `t`, `time`, `timestamp`, `time_s`, `elapsed_s`, `offset_s` |
-| `lat` | `lat`, `latitude`, `gps_lat`, `lat_deg` |
-| `lon` | `lon`, `lng`, `long`, `longitude`, `lon_deg` |
-| `alt_m` | `alt`, `altitude`, `abs_alt`, `elevation`, `ele` |
-| `rel_alt_m` | `rel_alt`, `relative_altitude`, `altitude_agl`, `agl` |
-| `heading_deg` | `heading`, `compass_heading`, `course` |
-| `pitch_deg`, `roll_deg`, `yaw_deg` | `pitch`, `roll`, `yaw` (+ `_deg`) |
-| `speed_ms` | `speed`, `ground_speed`, `velocity` |
-
-Example CSV:
-
-```csv
-timestamp,latitude,longitude,altitude,rel_alt,heading,pitch,roll,speed
-0.000,12.971598,77.594562,912.4,100.0,42.1,-3.0,0.4,7.8
-0.033,12.971612,77.594591,912.5,100.1,42.3,-3.1,0.3,7.9
-```
-
-DJI SRT blocks are parsed directly:
-
-```
-1
-00:00:00,000 --> 00:00:00,033
-2024-01-01 09:15:00.000
-[latitude: 12.971598] [longitude: 77.594562]
-[rel_alt: 100.0 abs_alt: 912.4] [heading: 42.1]
-```
-
-JSON accepts a list of objects or an object with a `samples` / `telemetry` /
-`gps` / `data` / `records` list. GPS timestamps may be numeric seconds or
-ISO-8601; absolute times are normalised to seconds relative to the first fix.
+| Path | Format |
+|---|---|
+| `dataset/images/pass_NN/f_XXXXXX.jpg` | keyframes, source resolution (letterbox cropped), nvJPEG q95; `XXXXXX` is the source frame index |
+| `dataset/sparse/N/{cameras,images,points3D}.bin` | COLMAP binary model (spirula-studio writes it); one per reconstructable pass or merged group of passes |
+| `dataset/depths/pass_NN/f_XXXXXX.png` | 16-bit PNG, linear z-depth scaled so the 99.9th percentile is 65535, 0 = no data (spirula-studio's format) |
+| `dataset/depth_raw/pass_NN/f_XXXXXX.npz` | raw Marigold v2 log-depth prediction (`pred`, float16, 1024 px long side) |
+| `keyframes/selection.json` | passes, keyframes, per-frame flow consistency and sharpness, selector config |
+| `keyframes/keyframes.json` | one row per keyframe: name, frame index, time, pass, overlap, GPS if any |
 
 ## Outputs
 
-| Artifact | Path | Consumer |
-| --- | --- | --- |
-| Keyframes | `frames_selected/*.jpg` | SfM, texturing, contact sheet |
-| Dynamic masks | `preprocess/masks/*.png` | COLMAP mask input (`0` = ignore; name = image name + `.png`) |
-| Frame manifest | `ingest/frames.csv`, `preprocess/selected_frames.csv` | All stages |
-| Sparse model | `sfm/sparse/` (COLMAP), `sfm/sparse.ply` | dense, georef |
-| Dense cloud | `dense/fused.ply` | mesh, georef, metrics |
-| Mesh | `mesh/mesh-*.ply`, `mesh/textured/mesh.ply` (+ `texture.png` atlas) | viewer/CAD/GIS |
-| Georeferenced cloud | `georef/georeferenced_*.ply` (local ENU, metres) | measurement |
-| Camera track | `georef/camera_track.geojson` (WGS84) | GIS |
-| Metrics | `metrics/metrics.json` | evaluation |
-| Report | `report.html`, `manifest.json` | judges/operators |
-
-Coordinate conventions:
-
-- Local ENU metres with origin = median GPS fix (override with `geo.origin_*`).
-- WGS84 / EPSG:4326 for all geographic output. `geo.epsg` is recorded in
-  `georef/result.json` for provenance but **no reprojection is performed** --
-  all geographic output is EPSG:4326.
-- PLY files carry `x, y, z` (float32) and optional `red, green, blue` (uint8).
+| Path | Format |
+|---|---|
+| `splats/model_N/step-*.ckpt/splat.ply` | 3D Gaussian Splatting PLY (INRIA layout: position, normal, SH degree 3 `f_dc`/`f_rest`, logit opacity, log scale, wxyz rotation), float32 little-endian |
+| `splats/model_N/scene_transform.json` | the similarity from the COLMAP frame to the frame the splats were trained in |
+| `splats/model_N/mesh*.{ply,obj,glb}` | meshes extracted from the splats: vertex colour (PLY/GLB) and texture atlas (OBJ/GLB) |
+| `splats/model_N/eval-{gt,render}-*.png`, `metrics.json` | held-out views (every 8th keyframe) and their PSNR / SSIM / L1 |
+| `georef/model_N_sparse_enu.ply` | tie points in local East-North-Up metres; the WGS84 origin is in the PLY header comment and `georef/result.json` |
+| `georef/camera_track.geojson` | GPS track of the keyframes (RFC 7946, WGS84) |
+| `render/model_N_flythrough.mp4` | H.264 (NVENC) fly-through along the camera track |
+| `metrics/metrics.json` | headline numbers of every stage, including per-stage GPU and host-memory use |

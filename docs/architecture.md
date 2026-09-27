@@ -1,89 +1,58 @@
 # Architecture
 
-## Pipeline overview
+## Stages and their files
 
-```mermaid
-flowchart LR
-    A[Drone video 1080p/4K] --> B[ingest]
-    T[GPS / IMU / flight log] --> B
-    B -->|frames + telemetry| C[preprocess]
-    C -->|quality-ranked keyframes| D[sfm]
-    D -->|camera poses + sparse cloud| E[dense]
-    E -->|dense cloud / depth maps| F[mesh]
-    D -.text model.-> G[georef]
-    T -.GPS fixes.-> G
-    E -.fused cloud.-> G
-    C --> M[metrics]
-    D --> M
-    E --> M
-    G --> M
-    M --> R[report]
-    R --> O[report.html + manifest.json]
-```
+Stages talk to each other only through files in one run directory, so any
+stage can be re-run alone (`drone3d run --run-dir R --stages splat,mesh`). Each
+stage writes `<stage>/result.json`, and — when it used the GPU —
+`<stage>/gpu_timeline.json` with NVML utilisation, power, memory, host RSS and
+whether other processes shared the GPU.
 
-Every stage communicates through files inside a single run directory, so stages
-can be re-run independently (`drone3d run --stages mesh`).
+| Stage | Reads | Writes | Runs on |
+|---|---|---|---|
+| `ingest` | video, telemetry | `ingest/result.json`, `ingest/telemetry.json` | CPU (ffprobe) |
+| `keyframes` | video | `dataset/images/pass_NN/*.jpg`, `keyframes/{selection,keyframes,result}.json`, timeline figure | NVDEC, RAFT (CUDA Graphs), nvJPEG |
+| `sfm` | keyframes | `dataset/sparse/N/` (COLMAP), `sfm/result.json` | spirula-studio (Vulkan compute) |
+| `depth` | keyframes, SfM | `dataset/depths/`, `dataset/depth_raw/`, `depth/result.json` | Marigold v2 (NF4 DiT, bf16) |
+| `splat` | dataset (+ depths) | `splats/model_N/` (splat.ply, held-out renders, metrics.json) | spirula-studio trainer |
+| `mesh` | splats | `splats/model_N/mesh*.{ply,obj,glb}` | spirula-studio mesher |
+| `georef` | SfM, keyframe GPS | `georef/*_sparse_enu.ply`, `camera_track.geojson` | CPU |
+| `render` | splats, SfM | `render/*_flythrough.mp4` | gsplat + NVENC |
+| `metrics`, `report` | everything | `metrics/metrics.json`, `report.html`, `manifest.json` | CPU |
 
-## Run directory layout
+## Key decisions and the evidence behind them
 
-```
-outputs/<run_name>_<UTC timestamp>/
-├── manifest.json                  # config + stage results + metrics
-├── report.html                    # self-contained report (embedded previews)
-├── logs/run.log
-├── frames/                        # raw sampled frames
-├── frames_selected/               # quality-ranked keyframes (+ masks/)
-├── ingest/                        # frames.csv, video_info.json, telemetry_summary.json
-├── preprocess/                    # selected_frames.csv, selection_summary.json
-├── sfm/                           # database.db, sparse model, sparse.ply, result.json
-├── dense/                         # fused.ply or depth/*.npy, result.json
-├── mesh/                          # mesh-*.ply / textured/mesh.ply + texture.png, result.json
-├── georef/                        # georeferenced_*.ply, camera_track.geojson, result.json
-└── metrics/                       # metrics.json
-```
+| Decision | Evidence (reproduce with) |
+|---|---|
+| Keyframes by measured co-visibility, not a fixed rate | Jal Mahal: 1 fps sampling registered 22/55 frames in 2 fragments; overlap-band keyframes registered 213/213 (`outputs/jal_mahal/sfm/result.json`) |
+| Chained flow for overlap, **direct** flow for the 3D test | chained RAFT error grows ~linearly (0.8 px at 24 frames) vs ~0.13 px direct (`experiments/flow_drift.py`) |
+| Parallax SNR decides "is it 3D?", GRIC only confirms | pure-rotation control: SNR 1.24 (degenerate) while GRIC still preferred F on 60 % of pairs (`outputs/controls/pure_rotation_run`) |
+| One focal length per pass (`radial`) | OpenCV's independent fx/fy drifted 10–20 % apart with no reprojection gain (0.761 vs 0.771 px) |
+| Letterbox crop, fade trimming | bars inflated overlap and held-out PSNR; a fade-out keyframe scored 13 dB as a held-out view |
+| Monotone depth calibration | held-out AbsRel vs SfM 5.0→2.7 %, 7.5→3.3 % over log-affine (`outputs/jal_mahal/depth/result.json`, `cv_*`) |
+| Ground-levelled 4-DoF georeferencing | straight pass: 7-DoF similarity 147–221 m off 100 m from the track, levelled fit 0.2–1.8 m (`experiments/georef_study.py`) |
+| RAFT without host syncs + CUDA Graphs | ~4× flow throughput, identical output within bf16 noise (`experiments/bench_gpu.py`) |
 
-## Module map
+## GPU and memory discipline
 
-| Module | Responsibility | Backends / deps |
-| --- | --- | --- |
-| `drone3d.config` | Typed YAML config, dotted `--set` overrides, validation | PyYAML |
-| `drone3d.io` | Video probing, deterministic sampling, telemetry parsers | OpenCV |
-| `drone3d.preprocess` | Quality scoring, keyframe selection, deblur, stabilization, dynamic masks | OpenCV; optional Ultralytics |
-| `drone3d.sfm` | SfM backends + feature/frame-graph diagnostics | COLMAP; OpenCV |
-| `drone3d.dense` | Dense MVS and monocular depth | COLMAP; optional torch/transformers |
-| `drone3d.mesh` | Poisson/Delaunay meshing, texturing, export | COLMAP; optional Open3D/Trimesh |
-| `drone3d.geo` | WGS84↔ECEF↔ENU, similarity georeferencing, camera geometry | NumPy |
-| `drone3d.metrics` | Cloud bounds, density, Chamfer/completeness, scale check | NumPy |
-| `drone3d.report` | Contact sheet + standalone HTML report | OpenCV |
-| `drone3d.pipeline` | Stage orchestration, artifact contracts, manifest | - |
-| `drone3d.cli` | `run`, `init-config`, `doctor`, `version` | - |
+- Decoding: ffmpeg ≥ 5 with `-hwaccel cuda` + `scale_cuda`, raw NV12 out, colour
+  conversion on the GPU; a background thread streams chunks so decoding
+  overlaps RAFT.
+- Flow and analysis frames are preallocated on the GPU from the probed frame
+  count and released before 4K extraction; 4K conversion runs in 8-frame
+  sub-batches.
+- Marigold's NF4 base transformer is cached (`$DEPTH_ASSETS_DIR/cache`), so a
+  load reads ~11 GB instead of re-quantising 39 GB.
+- Host RAM: spirula caches training images on disk by default
+  (`splat.cache_images`), extraction holds ≤ 2 groups of 24 raw 4K frames, the
+  mesher uses `mesh.num_threads` (12), and every stage records its peak RSS.
 
-## Design decisions
+## Third-party components
 
-- **Artifact-based stages.** Each stage reads its predecessors' JSON artifacts
-  and writes its own. This keeps stages resumable, testable and swappable, and
-  makes the run directory self-describing for judges/operators.
-- **Graceful degradation.** Missing optional backends (no COLMAP, no GPU) mark a
-  stage `skipped` with an actionable message instead of failing the run, so
-  ingest/preprocess/metrics/report always produce evidence.
-- **Quality-first frame selection.** More candidates are extracted than needed
-  (`preprocess.oversample`) and ranked by a composite of sharpness, exposure and
-  contrast before reconstruction — directly targeting single-pass motion blur.
-- **Georeferencing by camera centers.** COLMAP camera centers are matched to
-  per-frame GPS fixes and a robust similarity transform (Umeyama) is fitted,
-  yielding metric scale and a reported horizontal/vertical RMSE without GCPs.
-- **uv-managed environment.** Single `pyproject.toml` with PEP 735 dependency
-  groups and a committed `uv.lock` for reproducible hackathon judging.
-
-## Optional dependencies
-
-| Extra | Enables | Install |
-| --- | --- | --- |
-| `ai` | Monocular depth (Depth Anything V2), YOLO dynamic masks | `uv sync --extra ai` |
-| `sfm` | pycolmap in-process backend | `uv sync --extra sfm` |
-| `mesh` | Open3D Poisson meshing, Trimesh export/decimation | `uv sync --extra mesh` |
-| `geo` | pyproj/rasterio/laspy declared but not yet used by the code | `uv sync --extra geo` |
-| `api` | FastAPI service layer (planned) | `uv sync --extra api` |
-
-External binaries: COLMAP (`colmap`) for SfM/MVS/meshing. Check with
-`uv run drone3d doctor`.
+| Component | Role | Licence | Integration |
+|---|---|---|---|
+| spirula-studio | SfM, 3DGS training, meshing | GPL-3.0 | separate program, CLI (`splat/spirula.py`) |
+| Marigold v2 | depth prior | code/weights Apache-2.0 (base: Qwen-Image-Edit-2509) | imported from `third_party/marigold-v2` |
+| torchvision RAFT | optical flow | BSD-3 | patched forward (`keyframes/flow.py`) |
+| gsplat | fly-through rasteriser | Apache-2.0 | JIT CUDA extension |
+| javascript-animation-skills | promo film | MIT | `promo/` |

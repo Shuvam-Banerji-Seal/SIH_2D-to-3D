@@ -1,0 +1,178 @@
+[
+ {
+  "model": "0",
+  "refs": 33,
+  "depth_cov": 1.0,
+  "voxel_px": 2.0,
+  "trunc": 4.0,
+  "completeness": 0.475,
+  "depth_err_vs_triangulated": 0.0042,
+  "triangles": 39150,
+  "fuse_s": 2.11
+ },
+ {
+  "model": "0",
+  "refs": 33,
+  "depth_cov": 1.0,
+  "voxel_px": 2.0,
+  "trunc": 8.0,
+  "completeness": 0.711,
+  "depth_err_vs_triangulated": 0.0051,
+  "triangles": 176666,
+  "fuse_s": 1.36
+ },
+ {
+  "model": "0",
+  "refs": 33,
+  "depth_cov": 1.0,
+  "voxel_px": 2.0,
+  "trunc": 12.0,
+  "completeness": 0.799,
+  "depth_err_vs_triangulated": 0.006,
+  "triangles": 388637,
+  "fuse_s": 1.15
+ },
+ {
+  "model": "0",
+  "refs": 33,
+  "depth_cov": 1.0,
+  "voxel_px": 2.0,
+  "trunc": 16.0,
+  "completeness": 0.853,
+  "depth_err_vs_triangulated": 0.0067,
+  "triangles": 647932,
+  "fuse_s": 1.51
+ },
+ {
+  "model": "0",
+  "refs": 33,
+  "depth_cov": 1.0,
+  "voxel_px": 3.0,
+  "trunc": 4.0,
+  "completeness": 0.468,
+  "depth_err_vs_triangulated": 0.0042,
+  "triangles": 41072,
+  "fuse_s": 1.0
+ },
+ {
+  "model": "0",
+  "refs": 33,
+  "depth_cov": 1.0,
+  "voxel_px": 3.0,
+  "trunc": 8.0,
+  "completeness": 0.722,
+  "depth_err_vs_triangulated": 0.0051,
+  "triangles": 184092,
+  "fuse_s": 0.84
+ },
+ {
+  "model": "0",
+  "refs": 33,
+  "depth_cov": 1.0,
+  "voxel_px": 3.0,
+  "trunc": 12.0,
+  "completeness": 0.8,
+  "depth_err_vs_triangulated": 0.006,
+  "triangles": 402964,
+  "fuse_s": 1.07
+ },
+ {
+  "model": "0",
+  "refs": 33,
+  "depth_cov": 1.0,
+  "voxel_px": 3.0,
+  "trunc": 16.0,
+  "completeness": 0.853,
+  "depth_err_vs_triangulated": 0.0068,
+  "triangles": 666407,
+  "fuse_s": 0.95
+ },
+ {
+  "model": "1",
+  "refs": 14,
+  "depth_cov": 1.0,
+  "voxel_px": 2.0,
+  "trunc": 4.0,
+  "completeness": 0.706,
+  "depth_err_vs_triangulated": 0.0089,
+  "triangles": 277313,
+  "fuse_s": 0.58
+ },
+ {
+  "model": "1",
+  "refs": 14,
+  "depth_cov": 1.0,
+  "voxel_px": 2.0,
+  "trunc": 8.0,
+  "completeness": 0.836,
+  "depth_err_vs_triangulated": 0.0099,
+  "triangles": 661814,
+  "fuse_s": 0.36
+ },
+ {
+  "model": "1",
+  "refs": 14,
+  "depth_cov": 1.0,
+  "voxel_px": 2.0,
+  "trunc": 12.0,
+  "completeness": 0.881,
+  "depth_err_vs_triangulated": 0.0104,
+  "triangles": 995928,
+  "fuse_s": 0.59
+ },
+ {
+  "model": "1",
+  "refs": 14,
+  "depth_cov": 1.0,
+  "voxel_px": 2.0,
+  "trunc": 16.0,
+  "completeness": 0.903,
+  "depth_err_vs_triangulated": 0.0107,
+  "triangles": 1272145,
+  "fuse_s": 0.36
+ },
+ {
+  "model": "1",
+  "refs": 14,
+  "depth_cov": 1.0,
+  "voxel_px": 3.0,
+  "trunc": 4.0,
+  "completeness": 0.75,
+  "depth_err_vs_triangulated": 0.0092,
+  "triangles": 178556,
+  "fuse_s": 0.34
+ },
+ {
+  "model": "1",
+  "refs": 14,
+  "depth_cov": 1.0,
+  "voxel_px": 3.0,
+  "trunc": 8.0,
+  "completeness": 0.874,
+  "depth_err_vs_triangulated": 0.0105,
+  "triangles": 416504,
+  "fuse_s": 0.36
+ },
+ {
+  "model": "1",
+  "refs": 14,
+  "depth_cov": 1.0,
+  "voxel_px": 3.0,
+  "trunc": 12.0,
+  "completeness": 0.912,
+  "depth_err_vs_triangulated": 0.0109,
+  "triangles": 604939,
+  "fuse_s": 0.39
+ },
+ {
+  "model": "1",
+  "refs": 14,
+  "depth_cov": 1.0,
+  "voxel_px": 3.0,
+  "trunc": 16.0,
+  "completeness": 0.928,
+  "depth_err_vs_triangulated": 0.011,
+  "triangles": 743658,
+  "fuse_s": 0.32
+ }
+]

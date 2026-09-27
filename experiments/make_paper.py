@@ -104,12 +104,131 @@ def dataset_rows() -> list[list[str]]:
 
 
 def run_dirs() -> dict[str, Path]:
-    """Pipeline runs with at least a keyframes result, keyed by run name."""
+    """Accurate-profile (spirula SfM) runs with a keyframes result, keyed by run name.
+
+    Fast-profile runs (``sfm.backend: flow``) are reported in their own section
+    from the committed ``paper/figures/fast_*.json``.
+    """
     runs = {}
     for d in sorted((ROOT / "outputs").iterdir()):
-        if (d / "keyframes" / "result.json").is_file():
-            runs[d.name] = d
+        if not (d / "keyframes" / "result.json").is_file():
+            continue
+        sfm = load(d / "sfm" / "result.json") or {}
+        if sfm.get("backend") == "flow":
+            continue
+        runs[d.name] = d
     return runs
+
+
+FAST_RUNS = {  # run -> (video, analysis rate, overlap)
+    "jal_mahal_fast2": ("Jal Mahal", "12 fps", "absolute"),
+    "jal_mahal_fast3": ("Jal Mahal", "adaptive, 3.0 fps", "absolute"),
+    "jal_mahal_rel6": ("Jal Mahal", "adaptive, 6.0 fps", "relative"),
+    "qutub_fast": ("Qutub Minar", "15 fps", "absolute"),
+    "qutub_fast2": ("Qutub Minar", "adaptive, 3.3 fps", "absolute"),
+    "qutub_fast3": ("Qutub Minar", "adaptive, 7.5 fps", "relative"),
+}
+
+
+def fast_section(macros: dict[str, str]) -> list[str]:
+    """Tables and text for the fast profile, from paper/figures/fast_*.json."""
+    parts = ["\\subsection{Fast profile: mesh and point cloud within the time budget}\\label{sec:fast-results}\n"]
+    ff = load(FIG / "fast_flow_sfm.json")
+    if ff and ff["rows"]:
+        sift = ff["sift_reference"]
+        final = next((r for r in ff["rows"] if r["tracks"].startswith("960") and r["mapper"] == "global"), ff["rows"][-1])
+        macros["FlowSfmCentre"] = f"{100 * final['centre_rmse_rel_extent']:.2f}"
+        macros["FlowSfmRot"] = f"{final['rotation_err_median_deg']:.2f}"
+        rows = [[tex(r["tracks"]), r["mapper"], fmt(r["flow_s"], 1), fmt(r["mapping_s"], 1), f"{r['registered']}/{r['keyframes']}",
+                 fmt(r["reproj_px"], 2), fmt(100 * r["centre_rmse_rel_extent"], 2), fmt(r["rotation_err_median_deg"], 2),
+                 fmt(r["rotation_err_max_deg"], 2)] for r in ff["rows"]]  # fmt: skip
+        parts.append(
+            "\\paragraph{Structure from flow.} On the 97-keyframe orbit of Jal Mahal, tracks from direct RAFT flow register "
+            f"every keyframe; with 960\\,px tracks the global mapper's camera centres agree with spirula's SIFT reconstruction to "
+            f"{macros['FlowSfmCentre']}\\,\\% of the flight extent and its rotations to {macros['FlowSfmRot']}$^\\circ$ (median), with no "
+            "feature extraction or matching (Table~\\ref{tab:flowsfm}). Tracking at 640\\,px is cheaper but 2.5--3$\\times$ less "
+            "accurate. COLMAP's incremental mapper needs its initialisation angle lowered from 16$^\\circ$ to 2$^\\circ$ to "
+            "start on single-pass footage at all and is eight times slower here.\n"
+        )
+        note = (f"Reference: spirula-studio SIFT SfM of all {sift.get('images')} Jal Mahal keyframes, "
+                f"{fmt(sift.get('seconds'), 0)}\\,s for extraction, matching and mapping.")  # fmt: skip
+        parts.append(table("SfM from flow tracks on Jal Mahal pass 3 against SIFT SfM of the same keyframes (similarity-aligned).",
+                           "tab:flowsfm", ["Tracks", "Mapper", "Flow (s)", "Map (s)", "Reg.", "Reproj. (px)",
+                                           "Centre (\\% ext.)", "Rot. med. ($^\\circ$)", "Rot. max ($^\\circ$)"],
+                           rows, "llrrrrrrr", wide=True, note=note))  # fmt: skip
+    sweep = load(FIG / "fast_tsdf_sweep.json")
+    if sweep:
+        rows = [[r["model"], fmt(r["trunc"], 0), fmt(r["completeness"], 3), fmt(100 * r["depth_err_vs_triangulated"], 2),
+                 fmt(int(r["triangles"]))] for r in sweep if r["voxel_px"] == 3.0]  # fmt: skip
+        parts.append(
+            "\\paragraph{Fusion.} The depth maps (triangulated, then filled by the calibrated prior) cover every non-sky pixel "
+            "of the references, yet a TSDF with the usual 4-voxel truncation band keeps only part of the view: neighbouring "
+            "views disagree slightly and their signed distances cancel. Widening the band recovers most of it at a small cost "
+            "in depth error against the triangulated geometry (Table~\\ref{tab:tsdf}); the profile uses 12 voxels.\n"
+        )
+        parts.append(table("TSDF truncation band on Jal Mahal's two largest models (voxel = 3 pixel footprints at the median "
+                           "depth): view completeness, median depth error against the triangulated depth, triangles.",
+                           "tab:tsdf", ["Model", "Band (vox.)", "Completeness", "Depth err. (\\%)", "Triangles"], rows, "lrrrr"))  # fmt: skip
+    comp = load(FIG / "fast_completeness.json")
+    if comp:
+        rows = []
+        for run, (video, rate, overlap) in FAST_RUNS.items():
+            c = comp.get(run)
+            if not c:
+                continue
+            ok = c["processing_s"] <= c["budget_s"]
+            rows.append([video, tex(rate), overlap, fmt(c["keyframes"]), fmt(c["registered"]), fmt(c["view_completeness"], 2),
+                         fmt(c["processing_s"], 0), fmt(c["budget_s"], 0) + (" \\checkmark" if ok else "")])  # fmt: skip
+        q, j = comp.get("qutub_fast2"), comp.get("jal_mahal_fast3")
+        if q and j:
+            macros["FastQutubSeconds"] = f"{q['processing_s']:.0f}"
+            macros["FastQutubBudget"] = f"{q['budget_s']:.0f}"
+            macros["FastQutubCompl"] = f"{q['view_completeness']:.2f}"
+            macros["FastJalSeconds"] = f"{j['processing_s']:.0f}"
+            macros["FastJalBudget"] = f"{j['budget_s']:.0f}"
+            macros["FastJalCompl"] = f"{j['view_completeness']:.2f}"
+        parts.append(
+            "\\paragraph{Time and completeness.} The budget is 1.5$\\times$ the video length (15 minutes for a 10-minute "
+            "video). Completeness is the share of each registered keyframe's non-sky pixels whose ray hits the mesh. The "
+            "motion-adaptive analysis rate costs a few points of completeness and brings the 187\\,s Qutub Minar video within "
+            f"budget ({macros.get('FastQutubSeconds', DASH)}\\,s of {macros.get('FastQutubBudget', DASH)}\\,s); the 55\\,s Jal Mahal "
+            f"edit, five camera moves over a lake, stays over it ({macros.get('FastJalSeconds', DASH)}\\,s of "
+            f"{macros.get('FastJalBudget', DASH)}\\,s). Measuring overlap against the points that survive the first tracking step "
+            "(so that water does not force a keyframe every step) was worse on both videos (Table~\\ref{tab:fastruns}).\n"
+        )
+        parts.append(table("Fast profile end to end on a shared A100: keyframes, registration, view completeness, processing "
+                           "time and budget (1.5$\\times$ video length). The adopted setting is the adaptive rate with absolute overlap.",
+                           "tab:fastruns", ["Video", "Analysis", "Overlap", "KF", "Reg.", "Compl.", "Time (s)", "Budget (s)"],
+                           rows, "lllrrrrr", wide=True))  # fmt: skip
+    geo = load(FIG / "fast_georef_e2e.json")
+    if geo:
+        rows, near = [], []
+        for m in geo["models"]:
+            me = m.get("mesh_error_m") or {}
+            b = me.get("by_distance_from_track") or {}
+            n100 = b.get("0-100 m")
+            if n100:
+                near.append(n100["median"])
+            rows.append([tex(Path(m["model"]).name), tex(m.get("mode") or DASH), fmt(m.get("rotation_err_deg"), 2),
+                         fmt(100 * abs(m["scale_est"] / m["scale_true"] - 1), 2),
+                         fmt((m.get("held_out") or {}).get("loo_rmse_horizontal_m"), 2),
+                         fmt(n100["median"], 2) if n100 else DASH,
+                         fmt((b.get("100-300 m") or {}).get("median"), 2), fmt((b.get("300-inf m") or {}).get("median"), 1)])  # fmt: skip
+        macros["GeoNearTrack"] = f"{min(near):.2f}--{max(near):.2f}" if near else DASH
+        noise = geo["gps_noise_m"]
+        parts.append(
+            "\\paragraph{Georeferencing, end to end.} Each Jal Mahal model receives a known model-to-world similarity at the real "
+            f"site and its keyframes GPS with {noise['horizontal']}\\,m horizontal and {noise['vertical']}\\,m vertical noise; the "
+            "pipeline's georef and export stages then run unchanged. The levelled fit recovers rotation to a few tenths of a "
+            f"degree and scale to half a percent; the exported mesh is within {macros['GeoNearTrack']}\\,m (median) of the truth "
+            "within 100\\,m of the track, and the error grows with distance, as yaw and scale error do (Table~\\ref{tab:geoe2e}). "
+            "LAS and GeoTIFF outputs carry EPSG:32643 (UTM 43N).\n"
+        )
+        parts.append(table("Georeferencing with synthetic GPS on the real models: rotation error, scale error, held-out horizontal "
+                           "RMSE of the cameras, and median mesh error by distance from the flight track.",
+                           "tab:geoe2e", ["Model", "Fit", "Rot. ($^\\circ$)", "Scale (\\%)", "LOO (m)", "$<$100\\,m", "100--300\\,m", "$>$300\\,m"],
+                           rows, "llrrrrrr", wide=True))  # fmt: skip
+    return parts
 
 
 def main() -> None:
@@ -363,13 +482,17 @@ def main() -> None:
     parts.append(table("Per-stage wall time and GPU use (NVML, 0.5\\,s samples). Own/host: peak GPU memory and host RSS of our process tree.",
                        "tab:gpu", ["Run", "Stage", "s", "Util.\\%", "W", "Own GPU (GB)", "Host (GB)", "Shared"], gpu_rows, "llrrrrrl", wide=True))  # fmt: skip
 
+    parts += fast_section(macros)
     (OUT / "results.tex").write_text("\n".join(parts))
     (OUT / "macros.tex").write_text(
         "\n".join(f"\\newcommand{{\\{k}}}{{{v}}}" for k, v in sorted(macros.items()))
         + "\n"
         + "".join(
             f"\\providecommand{{\\{k}}}{{{DASH}}}\n"
-            for k in ("ScaleErrMax", "RaftSpeedup", "ControlSNR", "DriftChained", "DriftDirect")
+            for k in ("ScaleErrMax", "RaftSpeedup", "ControlSNR", "DriftChained", "DriftDirect", "FastQutubSeconds",
+                      "FastQutubBudget", "FastQutubCompl", "FastJalSeconds", "FastJalBudget", "FastJalCompl",
+                      "GeoNearTrack", "FlowSfmCentre", "FlowSfmRot")
+            if k not in macros
         )
     )
     print(f"wrote {OUT / 'results.tex'} ({len(runs)} runs) and {len(macros)} macros")

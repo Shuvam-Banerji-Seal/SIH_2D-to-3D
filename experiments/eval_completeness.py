@@ -12,6 +12,7 @@ keyframe-weighted mean completeness, triangles, and the processing time.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -67,6 +68,8 @@ def main() -> None:
         }
         print(run.name, out[run.name], flush=True)
     print(json.dumps(out, indent=1))
+    if os.environ.get("EVAL_OUT"):
+        Path(os.environ["EVAL_OUT"]).write_text(json.dumps(out, indent=1))
 
 
 if __name__ == "__main__":

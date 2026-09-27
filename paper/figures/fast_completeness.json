@@ -1,0 +1,50 @@
+{
+ "jal_mahal_fast2": {
+  "keyframes": 213,
+  "registered": 213,
+  "view_completeness": 0.8214,
+  "triangles": 1520209,
+  "processing_s": 262.5,
+  "budget_s": 82.3
+ },
+ "jal_mahal_fast3": {
+  "keyframes": 128,
+  "registered": 128,
+  "view_completeness": 0.7778,
+  "triangles": 1259927,
+  "processing_s": 146.7,
+  "budget_s": 82.3
+ },
+ "jal_mahal_rel6": {
+  "keyframes": 82,
+  "registered": 82,
+  "view_completeness": 0.7062,
+  "triangles": 1070538,
+  "processing_s": 144.8,
+  "budget_s": 82.3
+ },
+ "qutub_fast": {
+  "keyframes": 110,
+  "registered": 102,
+  "view_completeness": 0.8064,
+  "triangles": 971024,
+  "processing_s": 307.0,
+  "budget_s": 281.2
+ },
+ "qutub_fast2": {
+  "keyframes": 113,
+  "registered": 106,
+  "view_completeness": 0.7489,
+  "triangles": 2681247,
+  "processing_s": 242.6,
+  "budget_s": 281.2
+ },
+ "qutub_fast3": {
+  "keyframes": 106,
+  "registered": 98,
+  "view_completeness": 0.6956,
+  "triangles": 986802,
+  "processing_s": 292.0,
+  "budget_s": 281.2
+ }
+}

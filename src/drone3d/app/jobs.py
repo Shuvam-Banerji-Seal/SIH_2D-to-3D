@@ -78,11 +78,8 @@ def run_status(run_dir: Path) -> dict:
     dense = _read(run_dir / "dense" / "result.json") or {}
     export = _read(run_dir / "export" / "result.json") or {}
     geo = _read(run_dir / "georef" / "result.json") or {}
-    comp = [
-        m["view_completeness"]
-        for m in dense.get("models", [])
-        if m.get("view_completeness") is not None
-    ]
+    comp = [(m["view_completeness"], m.get("keyframes") or 1) for m in dense.get("models", [])
+            if m.get("view_completeness") is not None]  # fmt: skip
     video = ingest.get("video") or {}
     summary = {
         "video": Path(video.get("path", "")).name or (cfg.get("ingest") or {}).get("video"),
@@ -92,7 +89,8 @@ def run_status(run_dir: Path) -> dict:
         "registered": sfm.get("registered_images"),
         "models": len(sfm.get("models", [])) or None,
         "triangles": sum(m.get("mesh_triangles") or 0 for m in dense.get("models", []) if m.get("status") == "ok") or None,
-        "completeness": round(sum(comp) / len(comp), 3) if comp else None,
+        # of every registered keyframe's non-sky pixels: each model weighted by its keyframes
+        "completeness": round(sum(c * k for c, k in comp) / sum(k for _, k in comp), 3) if comp else None,
         "processing": metrics.get("processing"),
         "georeferenced": bool(geo.get("models")),
         "georef": [{"model": Path(m["model"]).name, "mode": m.get("mode"),

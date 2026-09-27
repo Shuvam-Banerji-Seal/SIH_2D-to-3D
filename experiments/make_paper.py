@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -369,6 +370,14 @@ def system_section(macros: dict[str, str]) -> list[str]:
     return parts
 
 
+def test_count() -> str:
+    """The number of tests pytest collects in the repository now."""
+    out = subprocess.run([sys.executable, "-m", "pytest", "--co", "-q", "-p", "no:warnings"], cwd=ROOT,
+                         capture_output=True, text=True, timeout=300).stdout  # fmt: skip
+    n = sum(int(line.rsplit(": ", 1)[1]) for line in out.splitlines() if re.match(r"^tests/\S+\.py: \d+$", line))
+    return str(n) if n else DASH
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     macros: dict[str, str] = {}
@@ -620,6 +629,7 @@ def main() -> None:
 
     parts += fast_section(macros)
     parts += system_section(macros)
+    macros["TestCount"] = test_count()
     (OUT / "results.tex").write_text("\n".join(parts))
     (OUT / "macros.tex").write_text(
         "\n".join(f"\\newcommand{{\\{k}}}{{{v}}}" for k, v in sorted(macros.items()))

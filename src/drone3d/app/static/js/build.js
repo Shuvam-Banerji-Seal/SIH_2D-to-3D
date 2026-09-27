@@ -63,20 +63,32 @@ export async function viewNew(main) {
   function drawLogs() {
     $('#telemetry').innerHTML = '<option value="">none — levelled model in SfM units</option>' + st.logs.map((l) => `<option value="${esc(l.path)}" ${keep.telemetry === l.path ? 'selected' : ''}>${esc(l.name)} (${l.origin})</option>`).join('');
   }
+  // XHR rather than fetch: a 10-minute 4K flight is gigabytes, and only XHR reports upload progress.
+  const send = (f, onProgress) => new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest(), fd = new FormData(); fd.append('file', f);
+    x.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    x.onload = () => { let body = {}; try { body = JSON.parse(x.responseText); } catch { /* not JSON */ }
+      x.status < 400 ? resolve(body) : reject(new Error(body.detail || `${x.status} ${x.statusText}`)); };
+    x.onerror = () => reject(new Error('the upload was interrupted'));
+    x.open('POST', '/api/upload'); x.send(fd);
+  });
+  let uploading = false;
   async function upload(f) {
-    const drop = $('#drop');
-    drop.textContent = `Uploading ${f.name} (${(f.size / 1e6).toFixed(0)} MB)…`;
-    const fd = new FormData(); fd.append('file', f);
+    if (uploading) { toast('An upload is still running', 'bad'); return; }
+    uploading = true;
+    const drop = $('#drop'), t0 = performance.now();
+    drop.innerHTML = `<div>Uploading <b>${esc(f.name)}</b> (${(f.size / 1e6).toFixed(0)} MB) <span class="mono" id="upPct">0 %</span></div><div class="bar" style="margin-top:8px"><i id="upBar" style="width:0"></i></div>`;
     try {
-      const r = await fetch('/api/upload', { method: 'POST', body: fd });
-      const body = await r.json(); if (!r.ok) throw new Error(body.detail || r.statusText);
+      const body = await send(f, (q) => { const s = (performance.now() - t0) / 1000;
+        $('#upPct').textContent = `${(100 * q).toFixed(0)} %${q > 0.02 && q < 1 ? ` · ${fmtS(s * (1 - q) / q)} left` : ''}`; $('#upBar').style.width = `${100 * q}%`; });
       [st.videos, st.logs] = await Promise.all([api('/api/videos'), api('/api/telemetry')]);
       if (st.videos.some((v) => v.path === body.path)) keep.video = body.path; else keep.telemetry = body.path;
       drawVideos(); drawLogs(); launch();
-      drop.innerHTML = `Uploaded <b>${esc(f.name)}</b> — drop another, or <u>choose a file</u><input type="file" id="file" hidden>`;
-      toast(`Uploaded ${f.name}`, 'ok');
-    } catch (e) { drop.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
-    bindFile();
+      const what = body.reused ? `<b>${esc(body.name)}</b> was already uploaded — using it` : `Uploaded <b>${esc(body.name)}</b>`;
+      drop.innerHTML = `${what} — drop another, or <u>choose a file</u><input type="file" id="file" hidden>`;
+      toast(body.reused ? `${body.name}: already uploaded` : `Uploaded ${body.name}`, 'ok');
+    } catch (e) { drop.innerHTML = `<span class="err">${esc(e.message)}</span> — drop a file to try again, or <u>choose one</u><input type="file" id="file" hidden>`; }
+    uploading = false; bindFile();
   }
   function bindFile() { const file = $('#file'); if (file) file.onchange = () => file.files[0] && upload(file.files[0]); }
 
@@ -122,7 +134,7 @@ export async function viewNew(main) {
   $('#modonly').addEventListener('change', (e) => { o.modifiedOnly = e.target.checked; renderOptions($('#sections'), o); });
   $('#resetall').addEventListener('click', () => { o.overrides = {}; o.stageList = null; redraw(); });
   const drop = $('#drop');
-  drop.addEventListener('click', (e) => { if (e.target.id !== 'file') $('#file').click(); });
+  drop.addEventListener('click', (e) => { const f = $('#file'); if (f && e.target.id !== 'file') f.click(); }); // no input while uploading
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('hover'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
   drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('hover'); if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); });

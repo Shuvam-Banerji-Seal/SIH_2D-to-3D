@@ -86,6 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
     view_parser.add_argument("--port", type=int, default=8765)
     view_parser.set_defaults(func=cmd_view)
 
+    ui_parser = subparsers.add_parser("ui", help="Web app: configure, run and explore reconstructions")
+    ui_parser.add_argument("--host", default="127.0.0.1")
+    ui_parser.add_argument("--port", type=int, default=8080)
+    ui_parser.set_defaults(func=cmd_ui)
+
     subparsers.add_parser("version", help="Print the version").set_defaults(func=cmd_version)
     return parser
 
@@ -223,6 +228,22 @@ def cmd_view(args: argparse.Namespace) -> int:
     with http.server.ThreadingHTTPServer((args.host, args.port), handler) as httpd:
         print(f"viewer: http://{args.host}:{args.port}/  (Ctrl+C to stop)")
         httpd.serve_forever()
+    return 0
+
+
+def cmd_ui(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    try:
+        import uvicorn
+
+        from drone3d.app.server import create_app
+    except ImportError as exc:
+        print(f"the web app needs the api extra ({exc}): uv sync --extra api", file=sys.stderr)
+        return 1
+    repo = Path.cwd()
+    print(f"drone3d ui: http://{args.host}:{args.port}/  (runs in {repo / 'outputs'})")
+    uvicorn.run(create_app(repo), host=args.host, port=args.port, log_level="warning")
     return 0
 
 

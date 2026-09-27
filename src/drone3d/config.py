@@ -48,8 +48,8 @@ ALL_STAGES: tuple[str, ...] = (
 class IngestConfig:
     """Video and telemetry inputs."""
 
-    video: str | None = None
-    telemetry: str | None = None
+    video: str | None = None  # the drone video (mp4, mov, mkv, avi, webm)
+    telemetry: str | None = None  # flight log for georeferencing: DJI SRT, CSV, GPX or JSON (optional)
 
 
 @dataclass
@@ -61,23 +61,23 @@ class KeyframeConfig:
     # adaptive_rate: probe the motion and analyse fewer frames when the camera moves slowly
     adaptive_rate: bool = False
     target_motion: float = 0.02  # median flow per analysis step, fraction of the width
-    min_analysis_fps: float = 3.0
+    min_analysis_fps: float = 3.0  # lower bound for the adaptive analysis rate
     relative_overlap: bool = False  # ignore what dies in the first step (water, reflections)
     flow_model: str = "raft_large"  # raft_large | raft_small
-    flow_batch: int = 32
+    flow_batch: int = 32  # RAFT pairs per GPU batch (memory vs throughput)
     overlap_target: float = 0.75  # tau: co-visibility with the previous keyframe
     overlap_band: float = 0.10  # delta: candidates lie in [tau, tau + delta]
-    max_gap_s: float = 2.0
-    min_pass_s: float = 2.0
-    cut_consistency: float = 0.35
-    hfov_deg: float = 72.0
-    parallax_snr: float = 2.0
+    max_gap_s: float = 2.0  # longest allowed time between keyframes; a pass is split beyond it
+    min_pass_s: float = 2.0  # shorter camera moves are ignored
+    cut_consistency: float = 0.35  # flow forward-backward consistency below this is a cut or fade
+    hfov_deg: float = 72.0  # horizontal field of view used before SfM refines the focal length
+    parallax_snr: float = 2.0  # median parallax SNR a pass needs to count as 3D (1 = no parallax)
     output_long_side: int | None = None  # None keeps the source resolution
-    jpeg_quality: int = 95
+    jpeg_quality: int = 95  # keyframe JPEG quality (nvJPEG)
     crop_letterbox: bool = True  # detect and remove black bars before analysis
     passes: list[int] = field(default_factory=list)  # restrict to these pass ids
     skip_degenerate: bool = True  # drop passes with no recoverable 3D structure
-    hwaccel: bool = True
+    hwaccel: bool = True  # decode with NVDEC (falls back to CPU if unavailable)
 
 
 @dataclass
@@ -89,7 +89,7 @@ class SfMConfig:
     camera_model: str = "radial"  # one focal: drone cameras have square pixels
     camera_mode: str = "folder"  # one camera per pass folder (edits may re-crop)
     features: str = "sift"  # sift | aliked-n16rot | aliked-n32 | loma-b128 | loma-b
-    extra_args: list[str] = field(default_factory=list)
+    extra_args: list[str] = field(default_factory=list)  # extra command-line arguments for spirula sfm
     # backend: flow
     flow_long_side: int = 960  # tracking resolution; keypoints are written at full resolution
     flow_span: int = 3  # direct flow to the next N keyframes
@@ -103,11 +103,11 @@ class DenseConfig:
     """Dense depth from flow triangulation (+ monocular fill) fused in a GPU TSDF."""
 
     backend: str = "flow"  # flow | none
-    long_side: int = 480
+    long_side: int = 480  # depth-map resolution (px); 960 is sharper and ~4x slower than 480
     gaps: list[int] = field(default_factory=lambda: [2, 4, 8, 12])  # in keyframes
     keyframe_stride: int = 1  # depth maps for every N-th keyframe (the TSDF still fuses them all)
-    min_angle_deg: float = 0.5
-    rel_tol: float = 0.05
+    min_angle_deg: float = 0.5  # smallest triangulation angle kept (single-pass keyframes are 0.1-1 deg apart)
+    rel_tol: float = 0.05  # neighbour depths must agree within this fraction to be fused
     mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf"  # null: triangulated depth only
     # TSDF: the truncation band drives completeness. Jal Mahal's two largest models, band 4 -> 12
     # voxels: completeness 0.47 -> 0.80 and 0.75 -> 0.91 (depth maps cover all non-sky pixels, but
@@ -115,24 +115,24 @@ class DenseConfig:
     # against the triangulated depth 0.42 -> 0.60 % and 0.92 -> 1.09 %. 3 px voxels match 2 px with
     # fewer triangles.
     voxel_px: float = 3.0  # TSDF voxel in pixel footprints at the median depth
-    trunc_voxels: float = 12.0
+    trunc_voxels: float = 12.0  # TSDF truncation band in voxels (4 -> 12: completeness 0.47 -> 0.80)
     tsdf_memory_gb: float = 8.0  # GPU memory for the TSDF hash map; the voxel grows if the scene needs more
-    min_model_images: int = 3
+    min_model_images: int = 3  # SfM models with fewer registered keyframes are skipped
 
 
 @dataclass
 class ExportConfig:
     """Deliverable formats and the web viewer."""
 
-    enabled: bool = True
-    mesh_formats: list[str] = field(default_factory=lambda: ["ply", "obj", "glb", "fbx"])
-    las: bool = True
+    enabled: bool = True  # write the deliverables and the viewer
+    mesh_formats: list[str] = field(default_factory=lambda: ["ply", "obj", "glb", "fbx"])  # ply | obj | glb | fbx
+    las: bool = True  # write the point cloud as LAS (UTM + EPSG when georeferenced)
     geotiff: bool = True  # DSM + orthophoto (projected UTM when georeferenced)
     raster_cell: float | None = None  # metres (or model units); default: 2 x median point spacing
-    viewer: bool = True
+    viewer: bool = True  # write the three.js web viewer
     texture: bool = True  # bake an atlas from the keyframes (sharper than TSDF vertex colours)
     texture_views: int = 16  # candidate keyframes; each triangle takes its best view
-    texture_size: int = 4096
+    texture_size: int = 4096  # texture atlas size (px)
     max_triangles: int = 600_000  # viewable copies (GLB, textured, FBX); mesh.ply keeps full density
 
 
@@ -141,12 +141,12 @@ class DepthConfig:
     """Monocular depth prior aligned to SfM."""
 
     backend: str = "marigold"  # marigold | none
-    checkpoint: str = "depth/Log-stage2"
-    long_side: int = 1024
-    batch: int = 4
+    checkpoint: str = "depth/Log-stage2"  # Marigold v2 checkpoint (depth/Log-stage2 or normals)
+    long_side: int = 1024  # prediction resolution (px)
+    batch: int = 4  # keyframes per Marigold batch
     quantization: str = "4bit"  # 4bit | 8bit | none
     far_factor: float = 3.0  # beyond this x the SfM depth range counts as sky
-    out_long_side: int | None = 1920
+    out_long_side: int | None = 1920  # written depth-map resolution (px)
     calibration: str = "monotone"  # monotone (isotonic vs SfM) | affine
 
 
@@ -155,16 +155,16 @@ class SplatConfig:
     """3D Gaussian Splatting (spirula-studio trainer)."""
 
     backend: str = "spirula"  # spirula | none
-    preset: str = "3dgs"
-    iterations: int = 30000
-    quality: str = "high"
+    preset: str = "3dgs"  # spirula-studio training preset
+    iterations: int = 30000  # training steps per model
+    quality: str = "high"  # low | medium | high | extreme
     resolution_divisor: int = 2  # train on 1/divisor of the keyframe resolution
     depth_weight: float = 0.05  # Pearson depth-prior weight; 0 disables
     eval_interval: int = 8  # hold out every n-th keyframe for evaluation
     models: str = "all"  # all | largest: which SfM models to train
-    min_model_images: int = 8
+    min_model_images: int = 8  # smaller SfM models are not trained
     cache_images: str = "disk"  # disk | cpu: cpu is faster but holds every decoded image in RAM
-    flags: dict[str, object] = field(default_factory=dict)
+    flags: dict[str, object] = field(default_factory=dict)  # extra spirula train flags (key: value)
 
 
 @dataclass
@@ -172,8 +172,8 @@ class MeshConfig:
     """Mesh extraction from the trained splats."""
 
     backend: str = "spirula"  # spirula | none
-    formats: list[str] = field(default_factory=lambda: ["ply", "glb", "obj"])
-    colors: list[str] = field(default_factory=lambda: ["vertex", "texture"])
+    formats: list[str] = field(default_factory=lambda: ["ply", "glb", "obj"])  # mesh files written from the splats
+    colors: list[str] = field(default_factory=lambda: ["vertex", "texture"])  # vertex colours and/or texture atlas
     num_threads: int = 12  # CPU threads for meshing (0 = all; the host may be shared)
 
 
@@ -181,32 +181,35 @@ class MeshConfig:
 class GeoConfig:
     """Georeferencing from GPS priors."""
 
-    enabled: bool = True
-    origin_lat: float | None = None
-    origin_lon: float | None = None
-    origin_alt: float = 0.0
+    enabled: bool = True  # georeference when the keyframes carry GPS
+    origin_lat: float | None = None  # ENU origin latitude (default: median of the GPS fixes)
+    origin_lon: float | None = None  # ENU origin longitude (default: median of the GPS fixes)
+    origin_alt: float = 0.0  # ENU origin altitude when the log has none (m)
     align_mode: str = "auto"  # auto | similarity | yaw-scale | translation
-    min_correspondences: int = 3
-    write_geojson: bool = True
+    min_correspondences: int = 3  # GPS-tagged keyframes a model needs to be georeferenced
+    write_geojson: bool = True  # write the camera track as GeoJSON
 
 
 @dataclass
 class RenderConfig:
     """Fly-through renders of the trained splats."""
 
-    enabled: bool = True
-    seconds: float = 12.0
-    fps: int = 30
-    long_side: int = 1920
+    enabled: bool = True  # render fly-through videos of the splats
+    seconds: float = 12.0  # fly-through length
+    fps: int = 30  # frames per second
+    long_side: int = 1920  # video resolution (px)
 
 
 @dataclass
 class MetricsConfig:
     """Quality metrics and reporting."""
 
-    voxel_size: float = 0.5
+    voxel_size: float = 0.5  # voxel size for coverage statistics (m when georeferenced, else model units)
+    # optional ground-truth cloud: LAS/LAZ in a projected CRS (georeferenced runs), or PLY/PCD/XYZ
+    # in the export frame; gives accuracy and completeness of every model against it
     reference_cloud: str | None = None
-    report_thumbnails: int = 12
+    reference_threshold_m: float = 1.0  # a reference point counts as reconstructed within this distance (PS: <= 1 m)
+    report_thumbnails: int = 12  # keyframes shown in the HTML report
     gpu_telemetry: bool = True  # sample NVML utilisation/power during the run
 
 
@@ -214,10 +217,10 @@ class MetricsConfig:
 class PipelineConfig:
     """Top-level configuration for a full pipeline run."""
 
-    run_name: str = "run"
-    output_root: str = "outputs"
-    stages: list[str] = field(default_factory=lambda: list(ALL_STAGES))
-    log_level: str = "INFO"
+    run_name: str = "run"  # run directory name under output_root
+    output_root: str = "outputs"  # where run directories are created
+    stages: list[str] = field(default_factory=lambda: list(ALL_STAGES))  # stages to run, in pipeline order
+    log_level: str = "INFO"  # DEBUG | INFO | WARNING | ERROR
 
     ingest: IngestConfig = field(default_factory=IngestConfig)
     keyframes: KeyframeConfig = field(default_factory=KeyframeConfig)
@@ -265,6 +268,8 @@ class PipelineConfig:
             raise ConfigError("splat.models must be all or largest")
         if self.mesh.backend not in {"spirula", "none"}:
             raise ConfigError("mesh.backend must be spirula or none")
+        if self.metrics.voxel_size <= 0 or self.metrics.reference_threshold_m <= 0:
+            raise ConfigError("metrics.voxel_size and metrics.reference_threshold_m must be > 0")
         if self.geo.align_mode not in {"auto", "similarity", "yaw-scale", "translation"}:
             raise ConfigError(
                 "geo.align_mode must be one of: auto, similarity, yaw-scale, translation"

@@ -513,7 +513,12 @@ class Pipeline:
             cloud = load_ply(cloud_path)
             transformed = transform.apply(cloud.points)
             output = stage_dir / f"georeferenced_{label}.ply"
-            write_ply(output, transformed, cloud.colors)
+            write_ply(
+                output,
+                transformed,
+                cloud.colors,
+                comment="ENU local tangent plane; EPSG:4326 WGS84",
+            )
             georeferenced.append(output)
             artifacts.append(Artifact(f"georeferenced_{label}", output))
 

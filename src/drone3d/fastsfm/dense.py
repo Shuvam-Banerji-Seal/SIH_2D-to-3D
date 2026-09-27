@@ -18,6 +18,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
+from drone3d.logging_utils import get_logger
+
 __all__ = ["Camera", "fuse_depths", "pair_depth", "tsdf_fuse"]
 
 
@@ -146,6 +148,13 @@ def _surface_blocks(frames: list[tuple[np.ndarray, np.ndarray, Camera]], block: 
     return int(len(np.unique(np.concatenate(keys)))) if keys else 0
 
 
+log = get_logger(__name__)
+MAX_ACTIVE_BLOCKS = 60_000  # Open3D 0.20 mesh extraction fails above ~65k blocks (see tsdf_fuse)
+# Grids of 138k then 161k blocks in one process crashed the second extraction (each alone was fine);
+# every sequence up to 90k blocks (all sample videos) worked. 100k blocks = 8.2 GB.
+MAX_CAPACITY_BLOCKS = 100_000
+
+
 def tsdf_fuse(
     frames: list[tuple[np.ndarray, np.ndarray, Camera]],
     *,
@@ -165,17 +174,46 @@ def tsdf_fuse(
     surface points fall into (the truncation band spills into neighbours); if
     that exceeds ``memory_gb`` the voxel grows until it fits -- an undersized
     hash map crashes the CUDA kernel instead of raising.
+
+    Open3D 0.20 cannot extract a mesh from more than ~65k active blocks (the
+    CUDA kernel fails with "unspecified launch failure", poisoning the whole
+    process, and the CPU path segfaults: 62,760 blocks work, 66,472 do not),
+    so the voxel is also grown until the surface stays under
+    :data:`MAX_ACTIVE_BLOCKS`; if the fused grid still exceeds it, the frames
+    are fused once more at the voxel that fits. The hash map is also held to
+    :data:`MAX_CAPACITY_BLOCKS`, the largest size tested safe for several
+    grids in one process; at Jal Mahal's quality settings, 8 GB instead of 24
+    changed completeness by under 0.01.
     """
+    fixed = block_count is not None
+    for attempt in range(3):
+        vbg, voxel = _fuse_once(frames, voxel=voxel, depth_max=depth_max, trunc_voxels=trunc_voxels,
+                                block_count=block_count if fixed else None, memory_gb=memory_gb)  # fmt: skip
+        active = int(vbg.hashmap().size())
+        if active <= MAX_ACTIVE_BLOCKS or fixed or attempt == 2:
+            return vbg, voxel
+        grown = voxel * float(np.sqrt(active / MAX_ACTIVE_BLOCKS)) * 1.05
+        log.info("TSDF: %d active blocks > %d that Open3D can mesh; voxel %.4g -> %.4g", active,
+                 MAX_ACTIVE_BLOCKS, voxel, grown)  # fmt: skip
+        del vbg
+        voxel = grown
+    raise AssertionError("unreachable")
+
+
+def _fuse_once(frames: list[tuple[np.ndarray, np.ndarray, Camera]], *, voxel: float, depth_max: float,
+               trunc_voxels: float, block_count: int | None, memory_gb: float):  # type: ignore[no-untyped-def]  # fmt: skip
     import open3d as o3d
     import open3d.core as o3c
 
     if block_count is None:
-        cap = int(memory_gb * 1e9 / (16**3 * 20))
+        cap = min(int(memory_gb * 1e9 / (16**3 * 20)), MAX_CAPACITY_BLOCKS)
         for _ in range(8):
-            block_count = 3 * _surface_blocks(frames, voxel * 16, depth_max) + 4096
-            if block_count <= cap:
+            surface = _surface_blocks(frames, voxel * 16, depth_max)
+            block_count = 3 * surface + 4096
+            if block_count <= cap and surface <= MAX_ACTIVE_BLOCKS:
                 break
-            voxel *= float(np.sqrt(block_count / cap)) * 1.05  # surface blocks ~ 1 / voxel^2
+            # surface blocks ~ 1 / voxel^2
+            voxel *= float(np.sqrt(max(block_count / cap, surface / MAX_ACTIVE_BLOCKS))) * 1.05
         block_count = min(block_count, cap)
 
     device = o3c.Device("CUDA:0") if o3c.cuda.is_available() else o3c.Device("CPU:0")

@@ -24,6 +24,21 @@ __all__ = ["run_dense"]
 log = get_logger(__name__)
 
 
+def _release_gpu() -> None:
+    """Return torch's and Open3D's cached GPU memory between models.
+
+    Open3D keeps freed blocks of a grid in its own cache; reusing them for the
+    next, differently sized grid made mesh extraction hit an illegal memory
+    access (quality profile, third model of Jal Mahal) that ran fine alone.
+    """
+    import open3d.core as o3c
+    import torch
+
+    torch.cuda.empty_cache()
+    if o3c.cuda.is_available():
+        o3c.cuda.release_cache()
+
+
 def _pad8(x):  # type: ignore[no-untyped-def]
     """uint8 ``[B, H, W, 3]`` -> replicate-padded to multiples of 8 (RAFT's input grid)."""
     import torch.nn.functional as F
@@ -187,7 +202,6 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
                  voxel_px: float, trunc_voxels: float = 12.0, tsdf_memory_gb: float = 8.0) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Depth, fusion and mesh for one SfM model -> its result record."""
     import open3d as o3d
-    import torch
 
     r = compute_depths(model_dir, images, raft, mono, long_side=long_side, gaps=gaps, keyframe_stride=keyframe_stride,
                        min_angle_deg=min_angle_deg, rel_tol=rel_tol)  # fmt: skip
@@ -205,11 +219,13 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     vbg, voxel = tsdf_fuse([(depths[i], rgb[i], cams[i]) for i in range(n)], voxel=voxel,
                            depth_max=float(np.percentile(valid, 99.5)), trunc_voxels=trunc_voxels,
                            memory_gb=tsdf_memory_gb)  # fmt: skip
+    log.info("dense %s: TSDF voxel %.4g, %d active blocks of %d", name, voxel, int(vbg.hashmap().size()),
+             int(vbg.hashmap().capacity()))  # fmt: skip
     mesh = vbg.extract_triangle_mesh().to_legacy()
     pcd = vbg.extract_point_cloud().to_legacy()
     timing["tsdf"] = time.perf_counter() - t0
     del frames, vbg
-    torch.cuda.empty_cache()
+    _release_gpu()
     if not len(mesh.triangles) and not len(pcd.points):
         log.info("dense %s: %d keyframes, the TSDF produced no surface", name, n)
         return {"model": str(model_dir), "status": "empty", "keyframes": n}
@@ -249,16 +265,14 @@ def run_dense(
 ) -> dict:
     import torch
 
-    from drone3d.keyframes.flow import RaftFlow
+    from drone3d.engine import models
 
     started = time.perf_counter()
     out_dir.mkdir(parents=True, exist_ok=True)
-    raft = RaftFlow("raft_large", batch=16, iters=12)
+    raft = models.raft("raft_large", batch=16, iters=12)
     mono = None
     if mono_model:
-        from drone3d.fastsfm.mono import MonoDepth
-
-        mono = MonoDepth(mono_model)
+        mono = models.mono(mono_model)
     results = []
     for model_dir in model_dirs:
         try:

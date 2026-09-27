@@ -82,14 +82,26 @@ if (RUN) {
   await drag(cx, cy, -260, 40, 2600); await hold(600);
   await drag(cx, cy, 200, -60, 2200); await hold(600);
   await page.mouse.move(cx, cy); for (let i = 0; i < 10; i++) { await page.mouse.wheel(0, -120); await sleep(90); } await hold(900);
+  // every layer is its own switch
   await click('.lay[data-l="texture"]'); await hold(1600); await click('.lay[data-l="texture"]'); await hold(700);
   await click('.lay[data-l="shaded"]'); await hold(1700); await click('.lay[data-l="shaded"]'); await hold(500);
   await click('.lay[data-l="wireframe"]'); await hold(1600); await click('.lay[data-l="wireframe"]'); await hold(500);
   await click('.lay[data-l="points"]'); await click('.lay[data-l="mesh"]'); await hold(2400);
   await click('.lay[data-l="splats"]'); await click('.lay[data-l="points"]'); await hold(3500);
+  await drag(cx, cy, -220, 20, 2600); await hold(800);
   await click('.lay[data-l="mesh"]'); await click('.lay[data-l="splats"]'); await hold(800);
+  await click('#xpOut'); await hold(500); await click('#xpOut'); await hold(700);
+  await click('.lay[data-l="cameras"]'); await hold(1200); await click('.lay[data-l="cameras"]'); await hold(1200); // the flight path (on by default)
+  await click('.lay[data-l="photos"]'); await hold(2600);
+  await page.locator('#xpIs').fill('5'); await page.locator('#xpIs').dispatchEvent('input'); await hold(1600);
+  await click('.lay[data-l="photos"]'); await click('.lay[data-l="depth"]'); await hold(2600);
+  await click('.lay[data-l="depth"]'); await hold(500);
+  await click('#xpFit'); await hold(900); await click('#xpIn'); await hold(600);
+  if (await page.locator('.lay[data-l="video"]:not(.off-avail)').count()) { await click('.lay[data-l="video"]'); await hold(1200); }
   await click('[data-nav="follow"]'); await hold(9000);
   await click('[data-nav="orbit"]'); await hold(800);
+  if (await page.locator('.lay[data-l="video"].on').count()) await click('.lay[data-l="video"]');
+  await click('#xpFit'); await hold(900);
   await to('#filmPanel', 1400); await hold(900);
   await click('[data-fm="depth"]'); await hold(2200); await click('[data-fm="split"]'); await hold(2200); await click('[data-fm="photo"]'); await hold(600);
   await click('#film .frame:nth-child(6)'); await hold(3500);
@@ -100,6 +112,11 @@ if (RUN) {
   const fb = { x: W * 0.55, y: H * 0.5 };
   await drag(fb.x, fb.y, -300, 30, 2800); await hold(900);
   await page.keyboard.press('Escape'); await hold(900);
+  if (await page.locator('#depthPanel:not([hidden])').count()) { // the photo / depth comparison slider
+    await to('#depthPanel', 1300); await hold(700);
+    const cb = await page.locator('#compare').boundingBox();
+    if (cb) { await drag(cb.x + cb.width * 0.5, cb.y + cb.height / 2, cb.width * 0.35, 0, 1600); await hold(500); await drag(cb.x + cb.width * 0.85, cb.y + cb.height / 2, -cb.width * 0.7, 0, 2400); await hold(900); }
+  }
   await to('#downloads', 1400); await hold(2500);
 }
 

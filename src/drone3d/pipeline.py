@@ -926,7 +926,7 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
     dense = _read_json(run_dir / "dense" / "result.json")
     if dense:
         out["dense"] = [
-            {k: m.get(k) for k in ("model", "keyframes", "coverage_triangulated", "coverage", "mesh_triangles", "num_points", "voxel")}
+            {k: m.get(k) for k in ("model", "keyframes", "coverage_triangulated", "coverage", "view_completeness", "mesh_triangles", "num_points", "voxel")}
             for m in dense["models"]
             if m.get("status") == "ok"
         ]  # fmt: skip

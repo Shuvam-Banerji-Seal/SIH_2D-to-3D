@@ -188,8 +188,10 @@ def tsdf_fuse(
         block_count=block_count,
         device=device,
     )
+    skipped = 0
     for depth, rgb, cam in frames:
-        if not (depth > 0).any():  # Open3D aborts on a frame that touches no block
+        if not ((depth > 0) & (depth < depth_max)).any():  # Open3D aborts on a frame that touches no block
+            skipped += 1
             continue
         intr = o3c.Tensor(np.array([[cam.f, 0, cam.cx - 0.5], [0, cam.f, cam.cy - 0.5], [0, 0, 1]]), o3c.float64)
         extr = np.eye(4)
@@ -197,6 +199,9 @@ def tsdf_fuse(
         extr_t = o3c.Tensor(extr, o3c.float64)
         d_img = o3d.t.geometry.Image(o3c.Tensor(np.ascontiguousarray(depth, dtype=np.float32))).to(device)
         c_img = o3d.t.geometry.Image(o3c.Tensor(np.ascontiguousarray(rgb.astype(np.float32) / 255.0))).to(device)
-        blocks = vbg.compute_unique_block_coordinates(d_img, intr, extr_t, 1.0, depth_max, trunc_voxels)
-        vbg.integrate(blocks, d_img, c_img, intr, intr, extr_t, 1.0, depth_max, trunc_voxels)
+        try:
+            blocks = vbg.compute_unique_block_coordinates(d_img, intr, extr_t, 1.0, depth_max, trunc_voxels)
+            vbg.integrate(blocks, d_img, c_img, intr, intr, extr_t, 1.0, depth_max, trunc_voxels)
+        except RuntimeError:  # e.g. "no block is touched": one frame must not sink the model
+            skipped += 1
     return vbg, voxel

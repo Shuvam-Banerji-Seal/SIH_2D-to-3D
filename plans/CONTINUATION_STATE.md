@@ -4,64 +4,64 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 17 |
-| Phase | AUDIT (cycle 17) |
-| What I did | Inspected the emitted dynamic masks — the artifact-inspection method that has now found 4 defects — and found **F24**: `DynamicMasker` promises "vehicles, people and animals" but uses MOG2 background subtraction, which on a translating UAV flags the whole static scene. Measured 67–74% of early frames ignored. Added a `max_dynamic_fraction` guard (verified: 67–74% → 0%, plausible 13–23% detections preserved). |
-| What worked | **279 tests**, ruff clean, 85 files formatted, worktree clean |
-| What failed | Nothing of substance |
+| Session # | 18 |
+| Phase | AUDIT (cycle 18) |
+| What I did | Artifact inspection found **F25**: the texture step invoked `texture_mesher`, a command COLMAP 4.x does not recognise (it is `mesh_texturer`), passed `--image_path` where the tool wants `--workspace_path`, and looked for `mesh.obj` when it writes a textured PLY + atlas. Verified end-to-end against the real mesh. |
+| What worked | **281 tests**, ruff clean, 85 files formatted, worktree clean |
+| What failed | My own workspace heuristic was wrong on the first try (used `images_dir.parent`; the tool wants `dense_ply.parent`) — corrected against the real command |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at **279** tests |
+| Audit status | **DOUBLE_PASS** — waves A & B at **281** tests |
 
-## F24 — the masker ate the scene it was meant to protect
+## F25 — texturing called a command that does not exist
 
-`DynamicMasker` uses `cv2.createBackgroundSubtractorMOG2`, which assumes a
-**static camera**. On a translating UAV every pixel changes, so static terrain is
-flagged as foreground. Measured on the bundled farmland clip: frames 1–5 dropped
-**67–74%** of their pixels (a single 628k-pixel blob — the whole scene, not a
-mover), frames 6+ dropped 13–23%. That silently deletes valid SfM features — the
-opposite of criterion 5's intent.
+Three faults in one block, none previously exercised because
+`configs/fast.yaml` sets `mesh.texture=false`:
 
-Fix: `max_dynamic_fraction=0.5`. A mask covering more of the frame than that is
-camera motion, not movers, so it is dropped for that frame and the scene kept.
-
-Verified on the real clip: warm-up frames **0%** dropped (was 67–74%), plausible
-detections preserved byte-identical.
-
-**Method note:** found by *reading the emitted mask PNGs* — checking each one's
-value histogram and blob sizes. This is the 4th consecutive defect invisible to
-unit tests on synthetic objects.
-
-## Defect ledger: 19 code defects fixed + 1 data gap
-
-| ID | Defect | Found by |
+| | old | correct |
 |---|---|---|
-| F1, F3, F4 | slots crash; precedence; frame budget | code read |
-| F2 | masks never fed to COLMAP (location + name + polarity) | code read + live docs |
-| F5, F8, F12 | chamfer memory; COLMAP absent; `.tools/` broke ruff | arithmetic / `doctor` |
-| F6 | depth polarity documented backwards | empirical model run |
-| F13–F16 | TXT mkdir; poisson SIGSEGV; `--output_type`; PLY corruption | **running the pipeline** |
-| F18–F20 | CSV guard; eager detector map; double-escaping | **writing tests** |
-| F21–F23 | partial re-runs degraded report/manifest | **inspecting artifacts** |
-| **F24** | **dynamic masking deleted 67–74% of the scene** | **inspecting emitted masks** |
-| F7 | sample video has no GPS | ffprobe — **data gap** |
+| command | `texture_mesher` | **`mesh_texturer`** |
+| workspace flag | `--image_path` | **`--workspace_path`** (the undistorter workspace: `dense_ply.parent`) |
+| expected output | `mesh.obj` | **textured PLY + texture atlas PNG** |
+
+A textured mesh is **criterion 4**, so this path matters. Found by comparing
+`mesh/result.json` (`"textured": false`, empty `textured/` dir) against the PS
+deliverable list, then confirming via `colmap help` that the command name was
+simply wrong.
+
+Verified end-to-end on the real mesh: `textured/mesh.ply` now produced,
+`textured: true`.
+
+## Defect ledger: 20 code defects fixed + 1 data gap
+
+F1–F6, F8, F12–F16, F18–**F25**, plus F7 (data gap).
+
+| Found by | Defects |
+|---|---|
+| **Inspecting shipped output artifacts** | **F21, F22, F23, F24, F25** (five consecutive) |
+| Running the real pipeline | F13, F14, F15, F16 |
+| Writing tests | F18, F19, F20 |
+| Live COLMAP docs | F2 |
+| Empirical model run | F6 |
+| Arithmetic / `doctor` | F5, F8, F12 |
+| Code reading alone | F1, F3, F4 |
 
 ## State
 
 | Check | Result |
 |---|---|
-| Tests | **279 passed** (21 files) |
+| Tests | **281 passed** (22 files) |
 | Lint / format | clean · 85 files |
 | Worktree | clean |
-| Double-audit | PASS ×2 at 279 |
+| Double-audit | PASS ×2 at 281 |
 | Mutation-verified | F4, F19, F20 |
 
 ## PS criteria
 
-Scored **3 of 10** (7 robustness, 9 usability, 10 reproducibility). Criteria
-**2, 3, 6 blocked on external data**. Criterion 5 now has a *correct* mask
-mechanism (F2 wiring + F24 guard), though visual confirmation still pending.
+Scored **3 of 10** (7 robustness, 9 usability, 10 reproducibility). Criterion 4
+now has a working texturing path (F25) — quality review still pending. Criteria
+**2, 3, 6 blocked on external data**.
 
 ## The one remaining item is not code
 
@@ -81,14 +81,14 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 In-repo work is exhausted. **Re-running an already-green suite is not progress.**
 
 Ranked by actual yield across this session:
-1. **Inspecting shipped output artifacts** — F21, F22, F23, **F24** (four consecutive)
+1. **Inspecting shipped output artifacts** — F21, F22, F23, F24, **F25** (five straight)
 2. Running the real pipeline — F13–F16
 3. Writing tests for uncovered modules — F18–F20
-4. Mutation-checking those tests
 
-The method that keeps paying: **open the files the tool actually produced and
-compare against what the code promised.** Unit tests on synthetic objects missed
-all four of F21–F24.
+F25 is the sharpest example: three wrong facts about an external tool (command
+name, flag, output filename) survived every unit test because the path was
+disabled in the default config. Only *comparing a result file against the
+deliverable list* exposed it.
 
 **Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored against real
 reference data.

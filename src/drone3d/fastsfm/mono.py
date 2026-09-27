@@ -80,10 +80,10 @@ def calibrate_fill(disparity: np.ndarray, tri_depth: np.ndarray, *, far_factor: 
         calib = MonotoneMap(p_at, z, slope=fit.a)
     except ValueError:
         return tri_depth, {**info, "status": "calibration-failed"}
-    mono = np.exp(calib(torch.from_numpy(p)).numpy())
+    mono = np.exp(calib(p))  # numpy: torch's CPU path is 24-thread and ~10x slower on a busy host
     far = far_factor * float(np.quantile(z, 0.99))
     fill = ~have & ~sky & (mono > 0) & (mono < far)
     depth = np.where(have, tri_depth, np.where(fill, mono, 0.0)).astype(np.float32)
-    rel = np.abs(np.exp(calib(torch.from_numpy(p_at)).numpy()) - z) / z
+    rel = np.abs(np.exp(calib(p_at)) - z) / z
     info.update(status="filled", filled=round(float(fill.mean()), 4), in_sample_abs_rel=round(float(np.median(rel)), 4))
     return depth, info

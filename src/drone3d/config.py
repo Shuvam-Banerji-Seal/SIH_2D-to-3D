@@ -90,7 +90,7 @@ class SfMConfig:
     flow_span: int = 3  # direct flow to the next N keyframes
     flow_stride: int = 16  # seeding grid (px at the tracking resolution)
     flow_max_gap: int = 4  # keyframe pairs matched per track
-    mapper: str = "incremental"  # incremental | global (GLOMAP)
+    mapper: str = "global"  # global (GLOMAP; registered every pass of our footage) | incremental
 
 
 @dataclass

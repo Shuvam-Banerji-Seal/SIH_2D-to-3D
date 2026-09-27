@@ -102,12 +102,21 @@ def run_flow_sfm(
         recs, t = map_tracks(db, images, work_dir / f"models_{folder.name}", mapper=mapper)
         timing["verification"] += t["verification_s"]
         timing["mapping"] += t["mapping_s"]
+        best = max(recs.values(), key=lambda r: r.num_reg_images(), default=None)
+        used = mapper
+        if best is None or best.num_reg_images() < 0.8 * len(paths):
+            # the other mapper on the same verified pairs; keep whichever registers more
+            other = "global" if mapper == "incremental" else "incremental"
+            recs2, t2 = map_tracks(db, images, work_dir / f"models_{folder.name}_{other}", mapper=other, verify=False)
+            timing["mapping"] += t2["mapping_s"]
+            best2 = max(recs2.values(), key=lambda r: r.num_reg_images(), default=None)
+            if best2 is not None and (best is None or best2.num_reg_images() > best.num_reg_images()):
+                best, used, recs = best2, other, recs2
         rows = summarize(recs)
         per_pass.append({"pass": folder.name, "keyframes": len(paths), "tracks": tracks.stats, "database": db_info,
-                         "models": rows, "timing_s": t})  # fmt: skip
-        for mid, rec in recs.items():
-            if rec.num_reg_images() >= min_images:
-                found.append((rec.num_reg_images(), folder.name, mid, rec))
+                         "mapper": used, "models": rows, "timing_s": t})  # fmt: skip
+        if best is not None and best.num_reg_images() >= min_images:  # one model per pass: the largest
+            found.append((best.num_reg_images(), folder.name, 0, best))
     del raft
     torch.cuda.empty_cache()
     found.sort(key=lambda f: -f[0])

@@ -16,7 +16,7 @@ keyframes:
   output_long_side: 1920
 sfm:
   backend: flow
-  mapper: incremental
+  mapper: global
 dense:
   backend: flow
   long_side: 480

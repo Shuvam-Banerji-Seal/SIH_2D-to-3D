@@ -856,6 +856,37 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
             {k: m.get(k) for k in ("run_dir", "vertices", "faces", "seconds")}
             for m in mesh["meshes"]
         ]
+    dense = _read_json(run_dir / "dense" / "result.json")
+    if dense:
+        out["dense"] = [
+            {k: m.get(k) for k in ("model", "keyframes", "coverage_triangulated", "coverage", "mesh_triangles", "num_points", "voxel")}
+            for m in dense["models"]
+            if m.get("status") == "ok"
+        ]  # fmt: skip
+    export = _read_json(run_dir / "export" / "result.json")
+    if export:
+        out["export"] = {
+            "files": sorted(f for m in export["models"] for f in m["files"]),
+            "viewer": export.get("viewer"),
+        }
+    # Problem statement 26158: < 15 minutes of processing for a 10-minute video.
+    ingest = _read_json(run_dir / "ingest" / "result.json") or {}
+    video_s = (ingest.get("video") or {}).get("duration_s")
+    stage_s = {
+        st: r["duration_s"]
+        for st in ALL_STAGES
+        if st not in ("metrics", "report") and (r := _read_json(run_dir / st / "result.json") or {}).get("duration_s")
+    }
+    if stage_s:
+        total = round(sum(stage_s.values()), 1)
+        budget = round(1.5 * video_s, 1) if video_s else None
+        out["processing"] = {
+            "seconds": total,
+            "per_stage_s": stage_s,
+            "video_seconds": video_s,
+            "budget_seconds": budget,
+            "within_budget": (total <= budget) if budget else None,
+        }
     geo = _read_json(run_dir / "georef" / "result.json")
     if geo and geo.get("models"):
         out["georef"] = [

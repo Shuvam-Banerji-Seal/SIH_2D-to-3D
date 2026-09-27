@@ -261,6 +261,7 @@ class ConsecutiveFlow:
         *,
         progress: Callable[[int], None] | None = None,
         keep_frames: bool = True,
+        capacity: int | None = None,
     ) -> tuple[ConsecutiveFlow, np.ndarray, torch.Tensor]:
         """Consume decoded chunks (``(indices, rgb uint8 [B, H, W, 3])`` on the GPU).
 
@@ -273,17 +274,31 @@ class ConsecutiveFlow:
         import time
 
         started = time.perf_counter()
-        fwd_parts: list[torch.Tensor] = []
-        bwd_parts: list[torch.Tensor] = []
+        store: dict[str, torch.Tensor] = {}
         cons: list[np.ndarray] = []
         sharp: list[np.ndarray] = []
         lmean: list[np.ndarray] = []
         lstd: list[np.ndarray] = []
         thumbs: list[torch.Tensor] = []
-        kept: list[torch.Tensor] = []
         indices: list[np.ndarray] = []
         prev_last: torch.Tensor | None = None
         seen = 0
+
+        def put(name: str, at: int, value: torch.Tensor) -> None:
+            # Buffers grow geometrically (capacity hint first), so the final
+            # result is a view, never a concatenated copy of every chunk.
+            buf = store.get(name)
+            need = at + len(value)
+            if buf is None or len(buf) < need:
+                size = max(need, capacity or 0, 2 * (len(buf) if buf is not None else 0))
+                grown = torch.empty(
+                    (size, *value.shape[1:]), dtype=value.dtype, device=value.device
+                )
+                if buf is not None:
+                    grown[: len(buf)] = buf
+                store[name] = buf = grown
+            buf[at:need] = value
+
         for idx, rgb in chunks:
             indices.append(idx)
             frames = rgb if prev_last is None else torch.cat([prev_last[None], rgb])
@@ -291,9 +306,11 @@ class ConsecutiveFlow:
                 a, b = frames[:-1], frames[1:]
                 both = flow(torch.cat([a, b]), torch.cat([b, a]))
                 f, r = both[: len(a)], both[len(a) :]
-                fwd_parts.append(f.half())
-                bwd_parts.append(r.half())
+                pairs_done = seen - 1 if prev_last is not None else 0
+                put("fwd", pairs_done, f.half())
+                put("bwd", pairs_done, r.half())
                 cons.append(consistency_mask(f, r).float().mean((1, 2)).cpu().numpy())
+                del both, f, r
             sharp.append(frame_sharpness(rgb).cpu().numpy())
             luma = rgb.float().mean(-1)
             lmean.append((luma.mean((1, 2)) / 255.0).cpu().numpy())
@@ -304,7 +321,7 @@ class ConsecutiveFlow:
                 .to(torch.uint8)
             )
             if keep_frames:
-                kept.append(rgb)
+                put("frames", seen, rgb)
             prev_last = rgb[-1]
             seen += len(rgb)
             if progress is not None:
@@ -312,13 +329,13 @@ class ConsecutiveFlow:
         if seen < 2:
             raise ValueError("need at least two frames")
         result = cls(
-            torch.cat(fwd_parts),
-            torch.cat(bwd_parts),
+            store["fwd"][: seen - 1],
+            store["bwd"][: seen - 1],
             np.concatenate(cons),
             np.concatenate(sharp),
             np.concatenate(lmean),
             np.concatenate(lstd),
             time.perf_counter() - started,
-            torch.cat(kept) if keep_frames else None,
+            store["frames"][:seen] if keep_frames else None,
         )
         return result, np.concatenate(indices), torch.cat(thumbs)

@@ -1,0 +1,114 @@
+\documentclass[10pt,a4paper,twocolumn]{article}
+\usepackage[margin=1.8cm,columnsep=0.7cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,microtype}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx,booktabs,multirow,xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\graphicspath{{figures/}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\ov}{\operatorname{ov}}
+\input{generated/macros.tex}
+
+\title{\textbf{Single-Pass Drone Video to 3D on One GPU:\\Overlap-Band Keyframes, a Parallax Test for ``Is It 3D?'',\\Monocular Depth Priors and Gaussian Splatting}}
+\author{Team SIH\_2D-to-3D\\\small Smart India Hackathon 2026 --- Problem Statement 26158 (NTRO)}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present an end-to-end system that turns a single drone pass --- one video, no flight planning, no ground control --- into a 3D Gaussian Splatting model, a textured mesh and, when a flight log is available, georeferenced metric outputs. Every stage runs on one GPU: hardware video decoding, a keyframe selector built on dense optical flow, GPU structure from motion, a diffusion-transformer depth prior and splat training. The selector formalises the intuition that consecutive views must be \emph{similar enough to match and different enough to triangulate}: it chains optical flow to measure co-visibility and picks the sharpest frame inside an overlap band $[\tau,\tau+\delta]$, so every surface point is seen by about $1/(1-\tau)$ keyframes. Before any reconstruction it answers whether a pass contains recoverable 3D structure at all, using rotation-compensated parallax measured with \emph{direct} keyframe-pair flow and normalised by an estimated noise floor; chained tracks are unsuitable because their error grows linearly with the gap and masquerades as parallax. On edited 4K footage the selector finds the individual camera moves, and the keyframes it chooses all register. On a straight single-pass track we show that the usual 7-DoF GPS alignment silently rolls the model about the flight axis; levelling on the ground plane and fitting four degrees of freedom removes the failure and keeps metric scale error below \ScaleErrMax\% in simulation. All numbers are produced by scripts in the repository from the run directories.
+\end{abstract}
+
+\section{Introduction}
+Operational mapping --- disaster response, inspection, reconnaissance --- often has one chance to fly over a site. Classical photogrammetry assumes the opposite: planned grids, high overlap, several passes and ground control points. Problem statement 26158 asks for an accurate, textured, georeferenced 3D model from \emph{a single pass} of a moving UAV~\cite{sih2026ps26158}.
+
+A single pass is hard for three distinct reasons, and each one maps to a component of our system.
+\begin{enumerate}
+\item \textbf{Which frames?} A video carries thousands of highly redundant frames and a few bad ones (motion blur, compression, fades). Sampling at a fixed rate is the common default; it either wastes compute or, where the drone moves fast, leaves gaps that break the reconstruction into pieces (\S\ref{sec:keyframes}).
+\item \textbf{Is it 3D at all?} A drone that yaws on the spot, or looks at a distant or planar scene, produces video in which a homography explains every frame pair. No amount of computation recovers depth from such footage; the system should say so before spending it (\S\ref{sec:verdict}).
+\item \textbf{Where is it?} A single pass is nearly a straight line. Aligning the model to GPS through camera centres alone leaves the roll about that line undetermined (\S\ref{sec:georef}).
+\end{enumerate}
+Around these we assemble a GPU pipeline: NVDEC decoding, RAFT optical flow~\cite{teed2020raft}, spirula-studio's GPU structure from motion and 3D Gaussian Splatting~\cite{spirulastudio,kerbl2023gaussians}, and the Marigold~v2 depth prior~\cite{pavlovic2026marigoldv2} aligned to, and scored against, the SfM points.
+
+\paragraph{Contributions.}
+(i) An overlap-band keyframe selector over chained dense flow with an explicit multiplicity model, and pass segmentation for edited footage.
+(ii) A per-pass 3D verdict from direct-flow residual parallax with a data-driven noise floor, validated on a synthetic pure-rotation control; we report where Torr's GRIC~\cite{torr1998gric} fails on flow correspondences.
+(iii) A measurement of chained versus direct optical-flow correspondence error against exact ground truth.
+(iv) A ground-levelled 4-DoF georeferencing rule with a significance test for sloped terrain, leave-one-out error and a jackknife scale uncertainty.
+(v) An engineering study of keeping an A100 busy: removing host synchronisation from RAFT, CUDA-Graph replay, GPU colour conversion and nvJPEG/NVENC, with utilisation recorded for every stage.
+
+\section{Related work}
+\paragraph{Structure from motion and splatting.}
+Incremental SfM as in COLMAP~\cite{schoenberger2016sfm} remains the reference for camera recovery; spirula-studio re-implements an incremental mapper on the GPU and adds sequence-aware matching for video~\cite{spirulastudio}. 3D Gaussian Splatting~\cite{kerbl2023gaussians} represents a scene as anisotropic Gaussians optimised by differentiable rasterisation; gsplat~\cite{ye2025gsplat} provides the rasteriser we use for fly-through rendering.
+\paragraph{Keyframe selection.}
+Visual SLAM systems insert keyframes by co-visibility and tracking quality, and ORB-SLAM chooses between homography and fundamental-matrix initialisation by model scores~\cite{murartal2015orbslam}; Torr's GRIC formalises that choice~\cite{torr1998gric}. We use dense flow with the forward--backward consistency test of Sundaram et al.~\cite{sundaram2010tracks}.
+\paragraph{Monocular depth.}
+Marigold~\cite{ke2024marigold} repurposed a latent diffusion model for affine-invariant depth; Marigold~v2~\cite{pavlovic2026marigoldv2} fine-tunes the Qwen-Image-Edit diffusion transformer~\cite{wu2025qwenimage} to predict affine-invariant log depth in one step. Depth Anything~V2~\cite{yang2024dav2} is a strong discriminative alternative.
+\paragraph{Compositional reconstruction.}
+WorldSculpt~\cite{niu2026worldsculpt} lifts per-object priors into cluttered scenes from posed, masked views; we discuss it as a downstream extension in \S\ref{sec:limits}.
+
+\section{Method}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{pipeline.pdf}
+\caption{Pipeline. Everything between the video and the outputs runs on one GPU; stages exchange files only, so any stage can be re-run alone.}
+\label{fig:pipeline}
+\end{figure*}
+
+\subsection{GPU ingest}
+Frames are decoded by NVDEC through ffmpeg (\texttt{-hwaccel cuda}), resized on the GPU (\texttt{scale\_cuda}) and leave the decoder as raw NV12; conversion to RGB (BT.709, limited range) runs in PyTorch on the GPU. A background thread streams chunks so decoding overlaps optical flow. Keyframes are later re-decoded at full resolution, selected by timestamp in groups of 48 on concurrent decoder sessions, and encoded with nvJPEG. Frame indices of the analysis and extraction passes agree exactly (\S\ref{sec:exp}).
+
+\subsection{Pass segmentation}
+For analysis frames $I_0,\dots,I_{N-1}$ (long side 640\,px, $\approx$12\,fps) we compute RAFT flow $\mathbf{f}_t$ from $t$ to $t{+}1$ and $\mathbf{b}_t$ back, and the share $c_t$ of pixels passing the forward--backward test $\lVert\mathbf{f}+\mathbf{b}\rVert^2 < 0.01(\lVert\mathbf{f}\rVert^2+\lVert\mathbf{b}\rVert^2)+0.5$~\cite{sundaram2010tracks}. Inside a continuous camera move $c_t$ stays high; a cut, fade or dissolve collapses it. A \emph{pass} is a maximal run with $c_t \ge 0.35$, no dark or flat frame, and at least 2\,s. Real footage is often edited; a true single pass yields one pass.
+
+\subsection{Overlap-band keyframes}\label{sec:keyframes}
+A grid $G$ of points (8\,px spacing) on keyframe $K$ is chained through the consecutive flows; a track dies when it fails the consistency test or leaves the frame. With $A_t\subseteq G$ the tracks alive at frame $t$,
+\begin{equation}
+\ov(K,t) = \min\Big(\tfrac{|A_t|}{|G|},\; \tfrac{|\mathcal{C}(A_t)|}{|\mathcal{C}|}\Big),
+\end{equation}
+where $\mathcal{C}$ are the 32\,px cells of frame $t$ and $\mathcal{C}(A_t)$ those containing a live track. The first term falls as $K$'s content leaves the view (forward motion), the second as new content enters it (backward motion), so the measure is symmetric in effect. The next keyframe is the sharpest frame (Laplacian variance relative to a 2\,s rolling median) among those with $\tau\le\ov(K,t)\le\tau+\delta$ before the curve first drops below $\tau$; defaults $\tau=0.75$, $\delta=0.1$. If the overlap drops below $\tau$ within one step, the next frame is taken to keep the chain connected.
+
+\paragraph{Multiplicity.} Under uniform motion a point stays in view for about $1/(1-\tau)$ keyframe spacings, so each surface point is observed by $m\approx 1/(1-\tau)$ keyframes ($m=4$ at $\tau=0.75$) --- the ``two or more frames with a proper threshold of similarity'' that triangulation needs, stated as a design parameter. We report the measured multiplicity, $1+2\bar L$ with $\bar L$ the mean forward track length in keyframes.
+
+\paragraph{Cost.} Only consecutive pairs are flowed, so analysis is linear in video length. An overlap matrix $M_{i,d}=\ov(i,i{+}d)$ for all frames and $d\le d_{\max}$ is built in one sweep: a fresh grid starts at every frame and all live grids advance together in a ring of $d_{\max}$ slots, one batched \texttt{grid\_sample} per frame and a single read-back; selection is then a CPU walk over $M$.
+
+\subsection{Is it 3D? A parallax test}\label{sec:verdict}
+For each keyframe $i$ we take its widest partner $j\le i+6$ with $\ov\ge0.3$, compute RAFT flow \emph{directly} between $I_{K_i}$ and $I_{K_j}$ in both directions, and keep consistent grid correspondences $(\mathbf{x}_n,\mathbf{y}_n)$. On a batch of all pairs we fit, by normalised DLT~\cite{hartley1997eightpoint} with Cauchy IRLS, a homography $H$ and a rank-2 fundamental matrix $F$. The residual $\lVert\mathbf{y}-H\mathbf{x}\rVert$ is rotation-compensated parallax: zero for pure rotation or a planar scene, growing with depth variation times baseline. We estimate the per-coordinate noise $\hat\sigma = 1.4826\,\operatorname{median}\sqrt{e_F^2}$ from $F$'s Sampson residuals $e_F$ --- pure noise whenever $F$ is correct, which includes degenerate motion --- and normalise
+\begin{equation}
+\mathrm{SNR} = \frac{\operatorname{median}_n\lVert\mathbf{y}_n-H\mathbf{x}_n\rVert}{\sqrt{2}\sqrt{2\ln2}\;\hat\sigma},
+\end{equation}
+where the denominator is the median transfer residual that isotropic noise in both views leaves, so SNR$=1$ means no measurable parallax. A pass is \emph{3D} when its median SNR over keyframe pairs is at least 2 and GRIC~\cite{torr1998gric} (both models scored on geometric error with $\hat\sigma$) prefers $F$ on at least 60\% of pairs; \emph{degenerate} when the SNR is below 1.5 and its 90th percentile below 2.
+
+\paragraph{Why direct flow.} Chaining consecutive flows makes long-range correspondence cheap but its error accumulates with a systematic per-step bias (\S\ref{sec:exp}, Fig.~\ref{fig:drift}); over a keyframe span the drift reaches the size of the parallax being measured and is correlated across points, which the extra freedom of $F$ partly absorbs. Direct flow keeps the error near 0.1\,px at the same gaps.
+
+\subsection{Structure from motion}
+Keyframes are written per pass (\texttt{images/pass\_$k$/}) and reconstructed by spirula-studio's GPU SfM with each pass declared a sequence, so neighbours are matched and trusted first, plus GPU pair selection for loop closure. We use a \emph{single-focal} radial camera per pass: drone cameras have square pixels, and with independent $f_x,f_y$ the weak geometry of forward or orbital motion let the two drift 10--20\% apart for no gain in reprojection error (\S\ref{sec:exp}). Separate passes of an edited video become separate models unless they share views.
+
+\subsection{Monocular depth prior}
+Marigold~v2~\cite{pavlovic2026marigoldv2} predicts, per keyframe, $p(\mathbf{u})$ with $\log d(\mathbf{u}) = a\,p(\mathbf{u})+b$ for unknown $a,b$. It runs as upstream: 4-bit NF4 base transformer (what its LoRA was trained on), rank-128 LoRA and fine-tuned VAE decoder, one rectified-flow step, bf16 autocast, at 1024\,px. For every registered image the SfM tie points give depths $z_n$ at pixels $\mathbf{u}_n$; a Cauchy-IRLS fit of $\log z_n = a\,p(\mathbf{u}_n)+b$ recovers the affine parameters and scores the prior against multi-view geometry (AbsRel, $\delta_1$). The aligned linear depth $\exp(a\,p+b)$ supervises splat training through spirula's Pearson-correlation depth loss; pixels predicted beyond $3\times$ the 99th-percentile SfM depth (sky) are left unsupervised. Because the loss is affine-invariant in \emph{linear} depth, the slope $a$ --- which only SfM can provide --- decides the supervision, not merely its reporting.
+
+\subsection{Gaussian splatting and meshing}
+Each SfM model with at least 8 images trains a 3DGS model in spirula-studio (30k steps, half resolution, bilateral-grid exposure correction), with every 8th keyframe held out for evaluation; meshes are extracted from the trained splats with vertex colour and texture atlases.
+
+\subsection{Georeferencing a straight pass}\label{sec:georef}
+With GPS positions $\mathbf{g}_n$ (local ENU) for camera centres $\mathbf{c}_n$, the usual fit is the 7-DoF similarity of Umeyama~\cite{umeyama1991}. If the $\mathbf{c}_n$ are nearly collinear the rotation about the line is unobservable and GPS noise sets it; the in-sample RMSE still looks like GPS noise because the unobservable direction does not affect it. We instead estimate the model's ground normal $\mathbf{n}$ by RANSAC on the sparse points (oriented towards the cameras), rotate $\mathbf{n}$ to $+z$, and fit yaw, scale and translation --- scale and yaw by complex least squares on horizontal coordinates, the vertical offset as a mean residual. The full similarity is used only if the track spans two dimensions \emph{and} its tilt against $\mathbf{n}$ exceeds $5^\circ$ by three jackknife standard errors, i.e.\ GPS proves the ground is sloped. We report leave-one-out RMSE rather than in-sample RMSE, and a jackknife relative standard error of the scale as the scale check.
+
+\subsection{Keeping the GPU busy}
+Stock torchvision RAFT rebuilds its correlation lookup offsets on the CPU in each of its 12 refinement iterations, divides by a CPU tensor, builds coordinate grids on the CPU, and upsamples the flow after every iteration although inference keeps only the last; at 640\,px a call cost roughly the same whatever the batch size, a sign of launch- and sync-bound execution. Removing these (identical arithmetic, differences $\le$ bf16 noise) and replaying the network from a CUDA Graph raised throughput \RaftSpeedup-fold. The selector's tracking avoids boolean-mask indexing, whose \texttt{nonzero} forces a host sync, in favour of scatter and redirected writes. Every stage runs under an NVML sampler recording utilisation, power, memory and the presence of other processes on the GPU, so no timing is reported without its context.
+
+\input{generated/results.tex}
+
+\section{Limitations}\label{sec:limits}
+\textbf{No flight logs in the public samples.} The fifteen sample videos are YouTube re-encodes without GPS; georeferencing is therefore evaluated in simulation (\S\ref{sec:exp}), and the georef stage runs on real data only when a DJI SRT, CSV, GPX or JSON log is supplied. \textbf{Edited footage.} The samples are edits of several shots; each pass becomes its own model, which a true single pass would not need. \textbf{Water and sky.} Reflections are reconstructed as mirrored geometry below the surface, as 3DGS always does, and single-frame flow-consistency dips on water add keyframes. \textbf{Shared GPU.} Timings were taken while other users' jobs shared the A100; each stage's record says so. \textbf{Compositional objects.} WorldSculpt~\cite{niu2026worldsculpt} could turn the splat scene into per-object meshes given instance masks and boxes; we have not integrated it.
+
+\section{Conclusion}
+A single drone pass can be turned into a splat model and mesh on one GPU in minutes, provided the system chooses its frames by what they see rather than by the clock, checks that the motion contains parallax before trusting it, and aligns to GPS with the constraint a straight line cannot provide. The code, configurations and the scripts that regenerate every number in this paper are in the repository.
+
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+\end{document}

@@ -218,6 +218,7 @@ class Pipeline:
             cut_consistency=cfg.cut_consistency,
             hfov_deg=cfg.hfov_deg,
             parallax_snr=cfg.parallax_snr,
+            relative_overlap=cfg.relative_overlap,
         )
         selection = select_keyframes(flow, indices, info.fps, selector, flow_model=flow_model)
         t2 = time.perf_counter()
@@ -455,6 +456,7 @@ class Pipeline:
             texture=cfg.texture,
             texture_views=cfg.texture_views,
             texture_size=cfg.texture_size,
+            max_triangles=cfg.max_triangles,
         )
         _write_json(self._stage_dir("export") / "result.json", payload)
         n_files = sum(len(m["files"]) for m in payload["models"])

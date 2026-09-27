@@ -128,7 +128,7 @@ def _write_textured(v: np.ndarray, f: np.ndarray, uv: np.ndarray, albedo: np.nda
 def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, mesh_formats: list[str],
                las: bool = True, geotiff: bool = True, raster_cell: float | None = None, viewer: bool = True,
                images: Path | None = None, texture: bool = True, texture_views: int = 16,
-               texture_size: int = 4096) -> dict:  # fmt: skip
+               texture_size: int = 4096, max_triangles: int = 600_000) -> dict:  # fmt: skip
     import open3d as o3d
     import pycolmap
 
@@ -152,6 +152,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         vc = (np.asarray(mesh.vertex_colors) * 255).astype(np.uint8) if mesh.has_vertex_colors() else None
         p = np.asarray(pcd.points)
         pc = (np.asarray(pcd.colors) * 255).astype(np.uint8) if pcd.has_colors() else None
+        if not len(p) or not len(f):  # nothing to deliver (or a cloud without surface): skip, do not fail
+            log.warning("export: model %s has %d points and %d triangles; skipped", name, len(p), len(f))
+            continue
         rec = pycolmap.Reconstruction(m["model"])
         posed = [im for im in sorted(rec.images.values(), key=lambda i: i.name) if im.has_pose]
         cams = np.array([im.projection_center() for im in posed])
@@ -160,12 +163,20 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         axis = mid.cam_from_world().rotation.matrix()[2]  # optical axis in world coordinates
         depth_med = float(np.median((p - cams[len(posed) // 2]) @ axis)) if len(p) else 1.0
         view = np.array([cams[len(posed) // 2], cams[len(posed) // 2] + depth_med * axis])
+        # The full-density mesh is the measurement deliverable (PLY); the viewable copies
+        # (GLB, textured OBJ/GLB, FBX) are capped: a 1.5M-triangle model made a 120 MB
+        # GLB that browsers load slowly and a 4096^2 soup atlas cannot texture finely.
+        dv, df, dvc = v, f, vc
+        if len(f) > max_triangles:
+            small = mesh.simplify_quadric_decimation(target_number_of_triangles=max_triangles)
+            dv, df = np.asarray(small.vertices), np.asarray(small.triangles)
+            dvc = (np.asarray(small.vertex_colors) * 255).astype(np.uint8) if small.has_vertex_colors() else None
         baked, tex_info = None, None
         if texture and images is not None:
             try:
-                res = bake_texture(v, f, vc, posed, rec, images, views=texture_views, size=texture_size)
+                res = bake_texture(dv, df, dvc, posed, rec, images, views=texture_views, size=texture_size)
                 if res is not None:
-                    baked, tex_info = (v, f, res[0], res[1]), res[2]
+                    baked, tex_info = (dv, df, res[0], res[1]), res[2]
             except (RuntimeError, ValueError) as exc:  # texturing improves the mesh; never lose the mesh over it
                 log.warning("texture baking failed for model %s: %s", name, exc)
         geo = geo_by_model.get(m["model"])
@@ -173,18 +184,21 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             tr = geo["transform"]
             t = SimilarityTransform(scale=tr["scale"], rotation=np.asarray(tr["rotation"]), translation=np.asarray(tr["translation"]))
             v, p, cams, view, scale = t.apply(v), t.apply(p), t.apply(cams), t.apply(view), float(t.scale)
+            dv = t.apply(dv)
             if baked is not None:
                 baked = (t.apply(baked[0]), *baked[1:])
             units, frame = "m", "ENU"
         else:
             rot = _level(p, cams)
             v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
+            dv = dv @ rot.T
             if baked is not None:
                 baked = (baked[0] @ rot.T, *baked[1:])
             units, frame = "model units", "SfM (levelled, not georeferenced)"
         # OBJ has no standard vertex colour: with a texture, OBJ is written textured only
-        plain = tuple(x for x in mesh_formats if x != "fbx" and not (x == "obj" and baked is not None))
-        files = write_mesh(v, f, vc, mdir / "mesh", plain)
+        plain = [x for x in mesh_formats if x != "fbx" and not (x == "obj" and baked is not None)]
+        files = write_mesh(v, f, vc, mdir / "mesh", tuple(x for x in plain if x == "ply"))
+        files += write_mesh(dv, df, dvc, mdir / "mesh", tuple(x for x in plain if x != "ply"))
         textured = _write_textured(*baked, mdir / "mesh_textured") if baked is not None else []
         files += textured
         if "fbx" in mesh_formats:
@@ -211,7 +225,8 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 files.append(write_geotiff(ortho, mdir / "ortho.tif", origin=org, cell=cell, epsg=epsg, nodata=None))
         rel = [str(x.relative_to(out_dir)) for x in files if x]
         rows.append({"model": m["model"], "frame": frame, "units": units, "epsg": epsg, "files": rel,
-                     "vertices": len(v), "triangles": len(f), "points": len(p), "texture": tex_info})  # fmt: skip
+                     "vertices": len(v), "triangles": len(f), "viewer_triangles": len(df), "points": len(p),
+                     "texture": tex_info})  # fmt: skip
         scene_models.append({
             "name": f"model {name}",
             "mesh": f"model_{name}/mesh_textured.glb" if textured else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),

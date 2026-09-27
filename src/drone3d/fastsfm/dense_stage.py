@@ -140,6 +140,10 @@ def run_dense(
         mesh = vbg.extract_triangle_mesh().to_legacy()
         pcd = vbg.extract_point_cloud().to_legacy()
         timing["tsdf"] = time.perf_counter() - t0
+        if not len(mesh.triangles) and not len(pcd.points):
+            results.append({"model": str(model_dir), "status": "empty", "keyframes": n})
+            log.info("dense %s: %d keyframes, the TSDF produced no surface", name, n)
+            continue
         mdir = out_dir / f"model_{name}"
         mdir.mkdir(parents=True, exist_ok=True)
         o3d.io.write_triangle_mesh(str(mdir / "mesh.ply"), mesh)

@@ -64,6 +64,7 @@ class SelectorConfig:
     span_max: int = 6  # keyframe pairs (i, i+k), k <= span_max, feed the verdict
     direct_min_overlap: float = 0.3  # widest partner for direct-flow geometry needs this overlap
     verdict_max_pairs: int = 24  # keyframe pairs flowed directly for the 3D verdict, per pass
+    relative_overlap: bool = False  # overlap relative to the points that survive the first step
     # A pass holds recoverable 3D structure when GRIC prefers F on at least
     # this share of its widest pairs AND the rotation-compensated parallax is
     # parallax_snr times what track noise alone leaves (median over those
@@ -276,6 +277,13 @@ def _select_in_pass(
     tau, delta = cfg.overlap_target, cfg.overlap_band
     max_gap = max(2, round(cfg.max_gap_s * fps))
     matrix = overlap_matrix(tr, s, e, max_gap)
+    if cfg.relative_overlap:
+        # Water, reflections and moving things fail the consistency test in the first step
+        # whatever the camera does; measured against what survived that step, overlap
+        # counts only content that actually leaves the view (Jal Mahal pass 3 had a
+        # keyframe at 2 of every 3 analysis frames because its lake died at once).
+        first = np.where(matrix[:, :1] > 0.05, matrix[:, :1], np.nan)
+        matrix = np.minimum(matrix / first, 1.0)
     head = min(e, s + max(1, round(0.25 * fps)))
     k = s + int(np.argmax(sharp_rel[s : head + 1]))
     chosen, overlaps = [k], [None]

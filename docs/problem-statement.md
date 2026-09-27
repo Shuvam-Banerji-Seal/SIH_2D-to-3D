@@ -8,7 +8,7 @@
 | Department | National Technical Research Organisation (NTRO) |
 | Category | Software |
 | Theme | Robotics and Drones |
-| Dataset | Provided in real time (additional details shared by NTRO) |
+| Dataset | Provided in real time at the event (no video link in the statement) |
 
 ## Background
 
@@ -48,7 +48,7 @@ analysis.
 | 3 | Variable illumination and shadows | spirula-studio's per-image bilateral-grid / PPISP exposure correction during training; fades trimmed from passes | implemented |
 | 4 | Dynamic objects | Not handled explicitly beyond the photometric robustness of training; spirula-studio's `--distraction-robustness` and SAM masking are available but not wired in | **open** |
 | 5 | GPS inaccuracies and sensor noise | Ground-levelled 4-DoF alignment, leave-one-out error, jackknife scale uncertainty (`geo/georef.py`) | implemented; evaluated in simulation (sample videos have no GPS) |
-| 6 | Real-time / near-real-time | GPU end to end; `configs/fast.yaml` | minutes per clip on a shared A100; not real-time |
+| 6 | Real-time / near-real-time | GPU end to end; official budget < 15 min per 10-min video | **not met** by the 3DGS profile (hours per 55 s clip); a fast mesh/point-cloud profile is being built |
 | 7 | Occluded surfaces | Depth prior supervision; 3DGS/mesh interpolation | partial |
 | 8 | Metric accuracy without GCPs | GPS-scaled similarity with reported uncertainty (≤ 0.6 % scale error in simulation) | implemented; needs a real flight log to validate |
 
@@ -71,31 +71,34 @@ analysis.
 | Camera intrinsics | pinhole `fx, fy, cx, cy` | `CameraIntrinsics` / camera-model config |
 | RTK/PPK corrections | high-accuracy GPS columns | `geo.*` |
 
-## Desired output
+## Desired output (official)
 
-| # | Output | Format | Definition of done |
-| --- | --- | --- | --- |
-| 1 | Sparse reconstruction | COLMAP model + `sparse.ply` | Camera poses and tie points registered for the majority of keyframes |
-| 2 | Dense point cloud | `fused.ply` / georeferenced PLY | Metric scale, colour per point, coverage of terrain, structures and vegetation |
-| 3 | Textured 3D mesh | `mesh.obj` + textures (`mesh.ply`, `mesh.glb`) | Watertight-enough surface with facade/roof/road detail suitable for visualization |
-| 4 | Georeferenced outputs | PLY in local ENU + `camera_track.geojson` | Horizontal/vertical RMSE reported against GPS; EPSG-tagged |
-| 5 | Measurement-ready artifacts | bounds/extent, voxel coverage, scale check | Extents and scale error reported in `metrics.json` |
-| 6 | Run report | `report.html`, `manifest.json` | Stage statuses, metrics, artifacts and config reproducible in one page |
+From the NTRO problem-statement document (SIH 2026, "Problem Statement – 17",
+linked in [`resources.md`](../resources.md)):
 
-## Evaluation criteria
+| Parameter | Target | This repository today |
+| --- | --- | --- |
+| Reconstruction type | 3D mesh / point cloud | Sparse SfM cloud; textured mesh extracted from the splat model; no dense point cloud yet |
+| Processing time | **< 15 minutes for a 10-minute video** | **Not met.** The 3DGS profile takes hours for a 55 s clip (30k-step training per model, 41 min meshing) |
+| Spatial accuracy | ≤ 1 m | Georeferencing implemented and tested in simulation only; the sample videos carry no GPS |
+| Coverage | Entire visible scene | Not measured |
+| Output formats | OBJ, PLY, LAS, GeoTIFF, .glb/.gltf, .fbx | OBJ, PLY, GLB; **LAS, GeoTIFF, FBX missing** |
+| Visualization | Web-based or desktop viewer | **Missing** (HTML run report only) |
 
-| # | Criterion | Metric | Target (indicative) |
-| --- | --- | --- | --- |
-| 1 | Geometric accuracy | RMSE vs. reference / GPS checkpoints | ≤ 1 × GSD horizontal, ≤ 2 × GSD vertical |
-| 2 | Metric scale correctness | Relative scale error | ≤ 2 % without GCPs |
-| 3 | Completeness | Fraction of reference points reconstructed | ≥ 80 % at 0.5 m threshold |
-| 4 | Visual quality | Texture quality, absence of holes/holes filled | Facades and rooftops recognizable |
-| 5 | Dynamic-object handling | Ghost artifacts in final model | No visible vehicle/person ghosting |
-| 6 | Georeferencing quality | Horizontal/vertical GPS RMSE | ≤ 3 m horizontal with consumer GPS |
-| 7 | Robustness | Successful runs on blurry / low-light passes | No crash, graceful degradation reported |
-| 8 | Latency | End-to-end processing time | Near-real-time on `fast` profile; batch on `accurate` |
-| 9 | Usability | One-command run + HTML report | `drone3d run --config ...` produces complete run directory |
-| 10 | Reproducibility | Same input + config → same metrics | Deterministic stage outputs, versioned `uv.lock` |
+## Evaluation criteria (official weights)
+
+| Criterion | Weight |
+| --- | --- |
+| Reconstruction accuracy | 30 % |
+| Model completeness | 20 % |
+| Processing speed | 20 % |
+| Innovation | 15 % |
+| Scalability | 10 % |
+| User interface | 5 % |
+
+An earlier version of this file listed numeric targets (GSD multiples, 2 %
+scale error, 80 % completeness at 0.5 m, ...). They are not in the official
+document and have been removed.
 
 ## Potential applications
 

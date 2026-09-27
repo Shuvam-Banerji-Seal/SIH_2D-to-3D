@@ -6,6 +6,7 @@
 \definecolor{geo}{HTML}{2E7D32}
 \definecolor{ai}{HTML}{6A1B9A}
 \definecolor{out}{HTML}{E65100}
+\definecolor{slow}{HTML}{8D8D8D}
 \tikzset{
   stage/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7, align=center,
                 minimum height=1.35cm, text width=2.5cm, font=\small},
@@ -14,36 +15,52 @@
 }
 \begin{document}
 \begin{tikzpicture}[node distance=0.55cm and 1.0cm]
+% shared front end
 \node[stage=io] (video) {\textbf{Drone video}\\ single pass, 4K\\[-1pt]\scriptsize + optional GPS log};
-\node[stage=gpu, right=of video] (dec) {\textbf{NVDEC decode}\\ NV12 $\to$ RGB\\ on the GPU};
-\node[stage=gpu, right=of dec] (flow) {\textbf{RAFT flow}\\ consecutive pairs,\\ CUDA Graphs};
+\node[stage=gpu, right=of video] (dec) {\textbf{One NVDEC decode}\\ 640\,px analysis +\\ 1920\,px candidates};
+\node[stage=gpu, right=of dec] (flow) {\textbf{RAFT flow}\\ adaptive rate,\\ CUDA Graphs};
 \node[stage=gpu, right=of flow] (pass) {\textbf{Passes}\\ cuts \& fades from\\ flow consistency};
 \node[stage=gpu, right=of pass] (kf) {\textbf{Overlap band}\\ $\mathrm{ov}\in[\tau,\tau{+}\delta]$,\\ sharpest frame};
 \node[stage=gpu, right=of kf] (verdict) {\textbf{Is it 3D?}\\ direct-flow parallax\\ SNR + GRIC};
 
-\node[stage=gpu, below=1.9cm of verdict] (sfm) {\textbf{GPU SfM}\\ spirula-studio\\ radial cam., sequences};
-\node[stage=ai, left=of sfm] (depth) {\textbf{Marigold v2}\\ log-depth, NF4 DiT\\ aligned to SfM};
-\node[stage=ai, left=of depth] (gs) {\textbf{3D Gaussian}\\ \textbf{Splatting}\\ depth-supervised};
-\node[stage=out, left=of gs] (mesh) {\textbf{Mesh}\\ vertex colour +\\ texture atlas};
-\node[stage=geo, left=of mesh] (georef) {\textbf{Georeference}\\ ground-levelled\\ 4-DoF + LOO};
-\node[stage=out, left=of georef] (report) {\textbf{Outputs}\\ splat, mesh, ENU\\ cloud, video, report};
+% fast profile (the deliverable)
+\node[stage=gpu, below=1.9cm of verdict] (fsfm) {\textbf{SfM from flow}\\ direct-flow tracks,\\ global mapper};
+\node[stage=ai, left=of fsfm] (fdense) {\textbf{Dense depth}\\ flow triangulation +\\ Depth Anything fill};
+\node[stage=gpu, left=of fdense] (tsdf) {\textbf{GPU TSDF}\\ mesh + point cloud,\\ wide band};
+\node[stage=geo, left=of tsdf] (georef) {\textbf{Georeference}\\ ground-levelled\\ 4-DoF + LOO};
+\node[stage=out, left=of georef] (fexp) {\textbf{Export}\\ GPU texture; OBJ PLY\\ LAS GeoTIFF GLB FBX};
+\node[stage=out, left=of fexp] (viewer) {\textbf{Web viewer}\\ measure, download,\\ report};
+
+% accurate profile
+\node[stage=slow, below=1.25cm of fsfm] (sfm) {\textbf{GPU SfM (SIFT)}\\ spirula-studio};
+\node[stage=slow, left=of sfm] (depth) {\textbf{Marigold v2}\\ aligned to SfM};
+\node[stage=slow, left=of depth] (gs) {\textbf{3D Gaussian}\\ \textbf{Splatting}};
+\node[stage=slow, left=of gs] (mesh) {\textbf{Mesh}\\ from splats};
 
 \draw[arr] (video) -- (dec);
-\draw[arr] (dec) -- node[above, lbl]{640\,px} (flow);
+\draw[arr] (dec) -- (flow);
 \draw[arr] (flow) -- (pass);
 \draw[arr] (pass) -- (kf);
 \draw[arr] (kf) -- (verdict);
-\draw[arr] (verdict) -- node[right, lbl]{4K keyframes\\(nvJPEG)} (sfm);
-\draw[arr] (sfm) -- node[above, lbl]{poses} (depth);
-\draw[arr] (depth) -- node[above, lbl]{depth} (gs);
-\draw[arr] (gs) -- (mesh);
-\draw[arr] (mesh) -- (georef);
-\draw[arr] (georef) -- (report);
+\draw[arr] (verdict) -- node[right, lbl]{keyframes\\(already written)} (fsfm);
+\draw[arr] (fsfm) -- node[above, lbl]{poses} (fdense);
+\draw[arr] (fdense) -- node[above, lbl]{depth maps} (tsdf);
+\draw[arr] (tsdf) -- (georef);
+\draw[arr] (georef) -- (fexp);
+\draw[arr] (fexp) -- (viewer);
 \draw[arr, dashed] (video.south) -- ++(0,-0.95) -| node[pos=0.25, above, lbl]{GPS / IMU log} (georef.north);
+\draw[arr, draw=slow] (verdict.east) -- ++(0.45,0) |- (sfm.east);
+\draw[arr, draw=slow] (sfm) -- (depth);
+\draw[arr, draw=slow] (depth) -- (gs);
+\draw[arr, draw=slow] (gs) -- (mesh);
 
 \begin{scope}[on background layer]
 \node[draw=gpu!40, dashed, rounded corners=5pt, inner sep=5pt, fit=(dec)(verdict),
       label={[font=\scriptsize\bfseries, text=gpu]above:keyframe selection (GPU)}] {};
+\node[draw=out!60, rounded corners=5pt, inner sep=5pt, fit=(viewer)(fsfm),
+      label={[font=\scriptsize\bfseries, text=out]above left:fast profile --- mesh + point cloud within the time budget}] {};
+\node[draw=slow!60, dashed, rounded corners=5pt, inner sep=5pt, fit=(mesh)(sfm),
+      label={[font=\scriptsize\bfseries, text=slow]below:accurate profile --- hours per clip}] {};
 \end{scope}
 \end{tikzpicture}
 \end{document}

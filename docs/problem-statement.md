@@ -41,16 +41,16 @@ analysis.
 
 ## Key challenges
 
-| # | Challenge | Where it is addressed in this repo |
-| --- | --- | --- |
-| 1 | Limited viewing angles from one flight path | Multi-stage SfM + dense MVS, monocular depth prior for occlusions |
-| 2 | Motion blur and video compression artifacts | Quality scoring + keyframe selection, Wiener/unsharp deblur (`preprocess/deblur.py`) |
-| 3 | Variable illumination and shadows | Exposure-aware frame scoring, exposure clipping masks, shadow suppression in dynamic masking |
-| 4 | Dynamic objects (vehicles, humans, animals) | Motion/background-subtraction masks, optional YOLO semantic masks (`preprocess/dynamic.py`) |
-| 5 | GPS inaccuracies and sensor noise | Robust similarity fit (Umeyama) on camera centers, RMSE reporting (`geo/georef.py`) |
-| 6 | Real-time / near-real-time requirements | `configs/fast.yaml` profile, streaming sampling and tiled outputs |
-| 7 | Reconstruction of occluded surfaces | Monocular depth completion + MVS fusion (`dense/`) |
-| 8 | Metric accuracy without extensive GCPs | GPS/IMU-prior alignment, scale estimation, optional reference-cloud metrics |
+| # | Challenge | Where it is addressed | Status |
+|---|---|---|---|
+| 1 | Limited viewing angles from one flight path | Overlap-band keyframes (~1/(1−τ) views per point); per-pass "is it 3D?" parallax test; depth prior for weakly observed surfaces (`keyframes/`, `depth/`) | implemented, evaluated |
+| 2 | Motion blur and compression artefacts | Keyframe choice prefers the sharpest frame inside the overlap band (Laplacian variance vs a rolling median) | implemented; no explicit deblurring |
+| 3 | Variable illumination and shadows | spirula-studio's per-image bilateral-grid / PPISP exposure correction during training; fades trimmed from passes | implemented |
+| 4 | Dynamic objects | Not handled explicitly beyond the photometric robustness of training; spirula-studio's `--distraction-robustness` and SAM masking are available but not wired in | **open** |
+| 5 | GPS inaccuracies and sensor noise | Ground-levelled 4-DoF alignment, leave-one-out error, jackknife scale uncertainty (`geo/georef.py`) | implemented; evaluated in simulation (sample videos have no GPS) |
+| 6 | Real-time / near-real-time | GPU end to end; `configs/fast.yaml` | minutes per clip on a shared A100; not real-time |
+| 7 | Occluded surfaces | Depth prior supervision; 3DGS/mesh interpolation | partial |
+| 8 | Metric accuracy without GCPs | GPS-scaled similarity with reported uncertainty (≤ 0.6 % scale error in simulation) | implemented; needs a real flight log to validate |
 
 ## Input data
 

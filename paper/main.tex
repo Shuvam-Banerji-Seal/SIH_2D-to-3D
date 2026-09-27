@@ -59,7 +59,7 @@ WorldSculpt~\cite{niu2026worldsculpt} lifts per-object priors into cluttered sce
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{pipeline.pdf}
-\caption{Pipeline. Everything between the video and the outputs runs on one GPU; stages exchange files only, so any stage can be re-run alone.}
+\caption{Pipeline. The keyframe selection is shared; the fast profile (the deliverable) reuses its optical flow for poses and depth and fuses a textured mesh and point cloud, the accurate profile trains Gaussian splats. Everything runs on one GPU; stages exchange files only, so any stage can be re-run alone.}
 \label{fig:pipeline}
 \end{figure*}
 

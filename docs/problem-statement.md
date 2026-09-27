@@ -43,14 +43,14 @@ analysis.
 
 | # | Challenge | Where it is addressed | Status |
 |---|---|---|---|
-| 1 | Limited viewing angles from one flight path | Overlap-band keyframes (~1/(1−τ) views per point); per-pass "is it 3D?" parallax test; depth prior for weakly observed surfaces (`keyframes/`, `depth/`) | implemented, evaluated |
+| 1 | Limited viewing angles from one flight path | Overlap-band keyframes (~1/(1−τ) views per point); per-pass "is it 3D?" parallax test; flow triangulation against neighbours up to 12 keyframes away (single-pass baselines are 0.1–1°); Depth Anything V2 fill calibrated to the triangulated depth (`keyframes/`, `fastsfm/`) | implemented, evaluated (completeness 0.75–0.78) |
 | 2 | Motion blur and compression artefacts | Keyframe choice prefers the sharpest frame inside the overlap band (Laplacian variance vs a rolling median) | implemented; no explicit deblurring |
-| 3 | Variable illumination and shadows | spirula-studio's per-image bilateral-grid / PPISP exposure correction during training; fades trimmed from passes | implemented |
+| 3 | Variable illumination and shadows | Fades trimmed from passes; per-triangle best-view texturing (fast profile); bilateral-grid exposure correction in 3DGS training (accurate profile) | implemented; no photometric harmonisation across views in the fast profile |
 | 4 | Dynamic objects | Not handled explicitly beyond the photometric robustness of training; spirula-studio's `--distraction-robustness` and SAM masking are available but not wired in | **open** |
 | 5 | GPS inaccuracies and sensor noise | Ground-levelled 4-DoF alignment, leave-one-out error, jackknife scale uncertainty (`geo/georef.py`) | implemented; evaluated in simulation (sample videos have no GPS) |
-| 6 | Real-time / near-real-time | GPU end to end; official budget < 15 min per 10-min video | **not met** by the 3DGS profile (hours per 55 s clip); a fast mesh/point-cloud profile is being built |
-| 7 | Occluded surfaces | Depth prior supervision; 3DGS/mesh interpolation | partial |
-| 8 | Metric accuracy without GCPs | GPS-scaled similarity with reported uncertainty (≤ 0.6 % scale error in simulation) | implemented; needs a real flight log to validate |
+| 6 | Real-time / near-real-time | Fast profile: one NVDEC decode, motion-adaptive analysis rate, SfM from optical flow (no SIFT), GPU TSDF and texture baking | Qutub Minar (187 s): 243 s, within the 281 s budget; Jal Mahal (55 s edited clip): 147 s vs 82 s (shared GPU) |
+| 7 | Occluded surfaces | Monocular depth fill where flow cannot triangulate; TSDF with a wide truncation band | partial: surfaces the pass never faced are absent |
+| 8 | Metric accuracy without GCPs | Ground-levelled GPS fit with leave-one-out error and jackknife scale uncertainty | synthetic GPS on real models: scale error ≤ 0.5 %, mesh error < 1 m within 100 m of the track; needs a real flight log |
 
 ## Input data
 
@@ -78,12 +78,12 @@ linked in [`resources.md`](../resources.md)):
 
 | Parameter | Target | This repository today |
 | --- | --- | --- |
-| Reconstruction type | 3D mesh / point cloud | Sparse SfM cloud; textured mesh extracted from the splat model; no dense point cloud yet |
-| Processing time | **< 15 minutes for a 10-minute video** | **Not met.** The 3DGS profile takes hours for a 55 s clip (30k-step training per model, 41 min meshing) |
-| Spatial accuracy | ≤ 1 m | Georeferencing implemented and tested in simulation only; the sample videos carry no GPS |
-| Coverage | Entire visible scene | Not measured |
-| Output formats | OBJ, PLY, LAS, GeoTIFF, .glb/.gltf, .fbx | OBJ, PLY, GLB; **LAS, GeoTIFF, FBX missing** |
-| Visualization | Web-based or desktop viewer | **Missing** (HTML run report only) |
+| Reconstruction type | 3D mesh / point cloud | Textured mesh + dense point cloud (fast profile); 3DGS + mesh (accurate profile) |
+| Processing time | **< 15 minutes for a 10-minute video** | Fast profile: 1.3 s per video second on Qutub Minar (budget 1.5), 2.7 on the edited Jal Mahal clip; shared A100 |
+| Spatial accuracy | ≤ 1 m | < 1 m within 100 m of the flight track with 1.5 m GPS noise (synthetic GPS on real models, `experiments/georef_e2e.py`); error grows with distance (7–18 m at 300 m+) |
+| Coverage | Entire visible scene | Measured as the share of each keyframe's non-sky pixels the mesh covers: 0.75 (Qutub Minar), 0.78 (Jal Mahal) |
+| Output formats | OBJ, PLY, LAS, GeoTIFF, .glb/.gltf, .fbx | All: OBJ (textured), PLY, LAS (UTM + EPSG), GeoTIFF (DSM + orthophoto), GLB, FBX |
+| Visualization | Web-based or desktop viewer | Self-contained three.js viewer with distance/height measurement (`drone3d view <run>`) + HTML run report |
 
 ## Evaluation criteria (official weights)
 

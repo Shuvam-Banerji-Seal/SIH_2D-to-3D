@@ -37,7 +37,7 @@ log = get_logger(__name__)
 
 
 def recorder_command(
-    ffmpeg: str, source: str, seg_dir: Path, segment_s: float, *, simulate: bool = False
+    ffmpeg: str, source: str, seg_dir: Path, segment_s: float, *, simulate: bool = False, encoder: str = "h264_nvenc"
 ) -> list[str]:
     """ffmpeg arguments that record ``source`` into ``seg_dir/seg_%04d.mkv`` plus ``segments.csv``."""
     cmd = [ffmpeg, "-hide_banner", "-loglevel", "warning", "-nostdin", "-y"]
@@ -51,8 +51,10 @@ def recorder_command(
     if source.split(":", 1)[0] in ("rtsp", "rtmp", "srt", "udp", "http", "https", "tcp"):
         cmd += ["-rw_timeout", "15000000"]  # give up on a dead link after 15 s instead of hanging
     cmd += ["-i", source, "-map", "0:v:0", "-an"]
-    if raw:  # a camera delivers raw frames: encode on NVENC with a keyframe every second
+    if raw and encoder == "h264_nvenc":  # a camera delivers raw frames: encode, a keyframe every second
         cmd += ["-c:v", "h264_nvenc", "-preset", "p2", "-g", "30", "-b:v", "40M"]
+    elif raw:  # no hardware encoder (an A100 has none): x264 on the CPU, tuned for latency
+        cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-g", "30", "-crf", "16"]
     else:
         cmd += ["-c", "copy"]  # cut at the stream's own keyframes, no re-encode
     cmd += ["-f", "segment", "-segment_time", f"{segment_s:g}", "-segment_format", "matroska",
@@ -103,16 +105,16 @@ class LiveSession:
     def start(self) -> None:
         import yaml
 
-        from drone3d.io.nvdec import ffmpeg_bin
+        from drone3d.io.nvdec import ffmpeg_bin, h264_encoder
 
         self.seg_dir.mkdir(parents=True, exist_ok=True)
         (self.seg_dir / "segments.csv").unlink(missing_ok=True)
         (self.run_dir / "ui_config.yaml").write_text(yaml.safe_dump(self.config, sort_keys=False))
         if self.telemetry:
             self.origin = _first_fix(self.telemetry)
-        cmd = recorder_command(
-            ffmpeg_bin(), self.source, self.seg_dir, self.segment_s, simulate=self.simulate
-        )
+        encoder = h264_encoder() if self.source.startswith("/dev/video") else "copy"
+        cmd = recorder_command(ffmpeg_bin(), self.source, self.seg_dir, self.segment_s, simulate=self.simulate,
+                               encoder=encoder)  # fmt: skip
         log_path = self.run_dir / "logs" / "recorder.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("w") as out:

@@ -25,7 +25,7 @@ const cdp = await context.newCDPSession(page);
 
 // ffmpeg reads JPEG frames with their wall-clock timestamps and emits constant-rate video.
 const enc = spawn(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'image2pipe', '-c:v', 'mjpeg', '-use_wallclock_as_timestamps', '1', '-i', '-',
-  '-vf', `fps=${FPS},scale=${W}:${H}:flags=lanczos,format=yuv420p`, '-c:v', arg('codec', 'h264_nvenc'), '-preset', 'p5', '-b:v', '16M', '-movflags', '+faststart', OUT],
+  '-vf', `fps=${FPS},scale=${W}:${H}:flags=lanczos,format=yuv420p`, ...(arg('codec', 'libx264') === 'h264_nvenc' ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-b:v', '16M'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18']), '-movflags', '+faststart', OUT],
 { stdio: ['pipe', 'inherit', 'inherit'] });
 let frames = 0;
 cdp.on('Page.screencastFrame', async ({ data, sessionId }) => {

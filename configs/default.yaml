@@ -1,90 +1,87 @@
-# drone3d default configuration.
+# drone3d default configuration (every key optional; these are the built-in defaults).
 #
-# All keys are optional; this file documents built-in defaults.
-# Override any key from the CLI, e.g.:
-#   drone3d run --config configs/default.yaml --set preprocess.max_frames=400
+#   uv run drone3d run --config configs/default.yaml --set ingest.video=/data/pass.mp4
+#
+# Override any key from the CLI with --set section.key=value.
 
-run_name: run            # run directory prefix under output_root
-output_root: outputs     # generated artifacts (git-ignored)
-stages:                  # pipeline stages to execute, in order
-  - ingest
-  - preprocess
-  - sfm
-  - dense
-  - mesh
-  - georef
-  - metrics
-  - report
+run_name: run
+output_root: outputs
+stages: [ingest, keyframes, sfm, depth, splat, mesh, georef, render, metrics, report]
 log_level: INFO
-seed: 0
 
-# ---------------------------------------------------------------- input data
 ingest:
-  video: null            # path to the single-pass drone video (1080p/4K)
-  telemetry: null        # .csv | .srt (DJI) | .gpx | .json flight log
-  frames_dir: frames     # frames are written under <run_dir>/<frames_dir>
-  image_format: jpg
-  jpeg_quality: 92
+  video: null            # single-pass drone video (any codec ffmpeg reads; NVDEC when available)
+  telemetry: null        # .csv | .srt (DJI) | .gpx | .json flight log for georeferencing
 
-# ------------------------------------------- frame sampling & preprocessing
-preprocess:
-  sample_fps: 2.0        # target sampling rate; 0 keeps every source frame
-  max_frames: 600        # keyframes handed to reconstruction
-  oversample: 3          # extract max_frames * oversample candidates, rank by quality
-  min_sharpness: 20.0    # Laplacian-variance threshold for usable frames
-  min_spacing_s: 0.2     # minimum temporal separation between keyframes
-  resize_width: null     # optional downscale, e.g. 1920
-  selection: sharpness   # sharpness | uniform
-  deblur: false          # focus-aware Wiener + unsharp masking
-  deblur_sigma: 1.4
-  deblur_amount: 0.8
-  stabilize: false       # feature-based trajectory smoothing
-  dynamic_masking: false # mask vehicles/people so they do not enter the model
+keyframes:               # GPU pass segmentation + overlap-band selection + 3D verdict
+  analysis_long_side: 640
+  analysis_fps: 12.0
+  flow_model: raft_large # raft_large | raft_small
+  flow_batch: 32
+  overlap_target: 0.75   # tau: each keyframe keeps >= 75 % co-visibility with the previous one
+  overlap_band: 0.10     # candidates in [tau, tau + delta]; ~1 / (1 - tau) views per point
+  max_gap_s: 2.0
+  min_pass_s: 2.0
+  cut_consistency: 0.35  # flow consistency below this between neighbours = a cut
+  hfov_deg: 72.0
+  parallax_snr: 2.0      # residual parallax must be 2x what flow noise alone leaves
+  output_long_side: null # null keeps the source resolution for the keyframe images
+  jpeg_quality: 95
+  passes: []             # restrict to these pass ids (empty = all)
+  skip_degenerate: true
+  hwaccel: true
 
-# ------------------------------------------------- structure from motion
-sfm:
-  backend: colmap        # colmap | none
-  binary: colmap
-  matcher: sequential    # sequential | exhaustive | vocab_tree
-  camera_model: OPENCV
-  single_camera: true
-  max_features: 8192
-  use_gps_priors: true
-  allow_missing: true    # skip instead of failing when COLMAP is absent
+sfm:                     # spirula-studio GPU SfM
+  backend: spirula
+  quality: high
+  camera_model: radial   # one focal length: drone cameras have square pixels
+  camera_mode: folder    # one camera per pass (edited footage may re-crop between shots)
+  features: sift
   extra_args: []
 
-# ------------------------------------------------- dense reconstruction
-dense:
-  backend: mvs           # mvs | mono | none
-  max_image_size: 2000
-  geom_consistency: true
-  mono_depth_model: depth-anything/Depth-Anything-V2-Small-hf
-  allow_missing: true
+depth:                   # Marigold v2 monocular depth, aligned to SfM
+  backend: marigold
+  checkpoint: depth/Log-stage2
+  long_side: 1024
+  batch: 4
+  quantization: 4bit
+  far_factor: 3.0
+  out_long_side: 1920
 
-# ------------------------------------------------- mesh & texturing
+splat:                   # spirula-studio 3D Gaussian Splatting
+  backend: spirula
+  preset: 3dgs
+  iterations: 30000
+  quality: high
+  resolution_divisor: 2
+  depth_weight: 0.05
+  eval_interval: 8       # every 8th keyframe is held out for evaluation
+  models: all
+  min_model_images: 8
+  flags: {}
+
 mesh:
-  backend: poisson       # poisson | delaunay | open3d | none
-  depth: 11
-  trim: 10.0
-  texture: true
-  target_faces: null
-  allow_missing: true
+  backend: spirula
+  formats: [ply, glb, obj]
+  colors: [vertex, texture]
 
-# ------------------------------------------- georeferencing (GPS/IMU priors)
 geo:
   enabled: true
-  origin_lat: null       # null -> median of frame GPS fixes
+  origin_lat: null
   origin_lon: null
   origin_alt: 0.0
-  epsg: 4326
-  align_mode: similarity # similarity | translation | none
+  align_mode: auto       # auto | similarity | yaw-scale | translation
   min_correspondences: 3
   write_geojson: true
 
-# ------------------------------------------------- metrics & reporting
+render:
+  enabled: true
+  seconds: 12.0
+  fps: 30
+  long_side: 1920
+
 metrics:
   voxel_size: 0.5
-  reference_cloud: null  # optional ground-truth cloud for accuracy/completeness
-  expected_extent_m: null
+  reference_cloud: null
   report_thumbnails: 12
-  make_contact_sheet: true
+  gpu_telemetry: true

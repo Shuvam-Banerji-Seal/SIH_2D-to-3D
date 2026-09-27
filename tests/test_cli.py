@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -28,9 +29,9 @@ def test_doctor_runs_and_reports(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["doctor"]) == 0
 
     out = capsys.readouterr().out
-    assert "colmap" in out
+    assert "spirula" in out
     assert "ffmpeg" in out
-    assert "optional backends" in out
+    assert "optional extras" in out
 
 
 def test_init_config_writes_yaml(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -81,9 +82,7 @@ def test_run_on_synthetic_clip_completes(tmp_path: Path) -> None:
     writer.release()
 
     config = tmp_path / "cfg.yaml"
-    config.write_text(
-        f"ingest:\n  video: {clip}\npreprocess:\n  sample_fps: 0\nsfm:\n  backend: none\n"
-    )
+    config.write_text(f"ingest:\n  video: {clip}\n")
     run_dir = tmp_path / "run"
 
     code = main(
@@ -94,13 +93,15 @@ def test_run_on_synthetic_clip_completes(tmp_path: Path) -> None:
             "--run-dir",
             str(run_dir),
             "--stages",
-            "ingest,preprocess",
+            "ingest",
             "--quiet",
         ]
     )
 
     assert code == 0
     assert (run_dir / "manifest.json").is_file()
+    info = json.loads((run_dir / "ingest" / "result.json").read_text())["video"]
+    assert (info["width"], info["height"], info["num_frames"]) == (64, 48, 6)
 
 
 def test_unknown_stage_is_rejected(tmp_path: Path) -> None:

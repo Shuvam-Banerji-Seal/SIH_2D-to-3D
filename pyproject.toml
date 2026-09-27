@@ -48,7 +48,7 @@ gpu = [
 # Marigold v2 monocular depth (third_party/marigold-v2 is imported from source).
 depth = [
   "torch>=2.14",
-  "diffusers>=0.40",
+  "diffusers==0.38.0",  # marigold-v2 calls the 0.38 QwenImage transformer API (txt_seq_lens)
   "transformers>=5.4",
   "accelerate>=1.13",
   "peft>=0.18",
@@ -61,6 +61,9 @@ depth = [
   "pillow>=12.0",
 ]
 sfm = ["pycolmap>=4.2"]
+# Fly-through rendering of trained splats. gsplat JIT-compiles its CUDA
+# kernels on first use: set CUDA_HOME to a toolkit >= torch's CUDA (13.x).
+render = ["gsplat>=1.5.3", "ninja>=1.11"]
 mesh = ["open3d>=0.20", "trimesh>=5.0", "plyfile>=1.1"]
 geo = ["pyproj>=3.7", "laspy>=2.5"]
 api = [

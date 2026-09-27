@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import platform
 import sys
 from pathlib import Path
@@ -14,21 +15,21 @@ from drone3d.config import ALL_STAGES, PipelineConfig, load_config
 from drone3d.exceptions import ConfigError, Drone3DError
 from drone3d.logging_utils import setup_logging
 from drone3d.pipeline import Pipeline
-from drone3d.utils.shell import which
 from drone3d.version import __version__
 
 _OPTIONAL_MODULES = (
-    "torch",
-    "transformers",
-    "ultralytics",
-    "open3d",
-    "pycolmap",
-    "trimesh",
-    "pyproj",
-    "laspy",
-    "fastapi",
+    ("torch", "gpu"),
+    ("torchvision", "gpu"),
+    ("pynvml", "gpu"),
+    ("diffusers", "depth"),
+    ("bitsandbytes", "depth"),
+    ("peft", "depth"),
+    ("pycolmap", "sfm"),
+    ("gsplat", "render"),
+    ("open3d", "mesh"),
+    ("trimesh", "mesh"),
+    ("pyproj", "geo"),
 )
-_EXTERNAL_BINARIES = ("colmap", "ffmpeg", "ffprobe", "exiftool")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -58,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="KEY=VALUE",
-        help="Override any config key, e.g. --set preprocess.max_frames=300",
+        help="Override any config key, e.g. --set splat.iterations=7000",
     )
     run_parser.add_argument("--run-dir", type=Path, default=None, help="Explicit run directory")
     run_parser.add_argument(
@@ -140,27 +141,62 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"executable     {sys.executable}")
 
     print("\ncore dependencies:")
-    for module in ("numpy", "cv2", "yaml", "tqdm"):
+    for module in ("numpy", "cv2", "yaml"):
         spec = importlib.util.find_spec(module)
         print(f"  {'OK ' if spec else 'MISSING'} {module}")
 
-    print("\noptional backends (install extras via uv sync --extra <name>):")
-    for module in _OPTIONAL_MODULES:
+    print("\noptional extras (uv sync --extra <name>):")
+    for module, extra in _OPTIONAL_MODULES:
         spec = importlib.util.find_spec(module)
-        print(f"  {'OK ' if spec else '-- '} {module}")
+        print(f"  {'OK ' if spec else '-- '} {module:<13} [{extra}]")
 
     print("\nexternal tools:")
-    for binary in _EXTERNAL_BINARIES:
-        location = which(binary)
-        print(f"  {'OK ' if location else '-- '} {binary:<9} {location or '(not on PATH)'}")
+    try:
+        from drone3d.io.nvdec import ffmpeg_bin
+
+        ff = ffmpeg_bin()
+        import subprocess
+
+        version = subprocess.run(
+            [ff, "-hide_banner", "-version"], capture_output=True, text=True
+        ).stdout.split("\n")[0]
+        hw = subprocess.run(
+            [ff, "-hide_banner", "-hwaccels"], capture_output=True, text=True
+        ).stdout
+        print(
+            f"  OK  ffmpeg    {ff} ({version.split(' Copyright')[0]}; cuda hwaccel: {'cuda' in hw})"
+        )
+    except Drone3DError as exc:
+        print(f"  --  ffmpeg    {exc}")
+    try:
+        from drone3d.splat.spirula import spirula_binary
+
+        print(f"  OK  spirula   {spirula_binary()}")
+    except Drone3DError as exc:
+        print(f"  --  spirula   {str(exc).splitlines()[0]}")
+    from drone3d.depth.marigold import _DEFAULT_ASSETS
+
+    assets = Path(os.environ.get("DEPTH_ASSETS_DIR", _DEFAULT_ASSETS)) / "checkpoints"
+    ok = (assets / "Qwen-Image-Edit-2509" / "transformer").is_dir() and (
+        assets / "Marigold-V2"
+    ).is_dir()
+    print(f"  {'OK ' if ok else '-- '} marigold  {assets}")
 
     print("\ngpu:")
     try:
         import torch
 
-        print(f"  torch {torch.__version__}, cuda available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            print(
+                f"  torch {torch.__version__} (CUDA {torch.version.cuda}): {props.name}, {props.total_memory / 2**30:.0f} GiB"
+            )
+        else:
+            print(
+                f"  torch {torch.__version__}: no CUDA device (keyframes, depth and splats need one)"
+            )
     except ImportError:
-        print("  torch not installed (CPU-only pipeline)")
+        print("  torch not installed (uv sync --extra gpu)")
     return 0
 
 

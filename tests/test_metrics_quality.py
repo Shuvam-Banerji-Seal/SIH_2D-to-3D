@@ -184,42 +184,38 @@ def test_summarize_cloud_with_reference_includes_criterion_metrics() -> None:
     assert summary["accuracy_vs_reference"]["chamfer_mean_m"] == pytest.approx(0.0, abs=1e-6)
 
 
-def test_georef_scale_is_reported_as_scale_check(tmp_path: Path) -> None:
-    """F32: PS deliverable 5 asks for a 'scale check' in metrics.json.
+def test_scale_check_reports_metric_scale_and_its_uncertainty(tmp_path: Path) -> None:
+    """PS deliverable 5: the scale check is the GPS-derived metric scale and its spread.
 
-    The code only emitted one when metrics.expected_extent_m was configured
-    (null by default), so a default run reported no scale at all -- even though
-    the Umeyama fit already recovers a genuine similarity scale.
+    The previous check reported |s - 1| for an SfM model whose units are
+    arbitrary, which is meaningless; this one reports metres per model unit
+    and the jackknife uncertainty from leave-one-out refits.
     """
     import json as _json
 
-    from drone3d.config import load_config
-    from drone3d.pipeline import Pipeline
-    from drone3d.types import PipelineResult, StageReport
+    import numpy as np
+
+    from drone3d.geo.georef import SimilarityTransform, solve_georef
+    from drone3d.pipeline import _summary_metrics
+
+    rng = np.random.default_rng(0)
+    s = np.linspace(-100, 100, 40)
+    world = np.c_[s, 60 * np.sin(s / 50), np.full_like(s, 70.0)]
+    ground = np.c_[
+        rng.uniform(-150, 150, 2000), rng.uniform(-150, 150, 2000), rng.normal(0, 0.2, 2000)
+    ]
+    to_model = SimilarityTransform(0.25, np.eye(3), np.zeros(3))
+    gps = world + rng.normal(0, 1.0, world.shape)
+    transform, info = solve_georef(to_model.apply(world), gps, to_model.apply(ground))
 
     run_dir = tmp_path / "run"
-    (run_dir / "georef").mkdir(parents=True, exist_ok=True)
+    (run_dir / "georef").mkdir(parents=True)
     (run_dir / "georef" / "result.json").write_text(
         _json.dumps(
-            {
-                "transform": {"scale": 1.0007, "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]},
-                "gps_accuracy": {"rmse_horizontal_m": 0.01},
-            }
-        ),
-        encoding="utf-8",
+            {"models": [{"model": "sparse/0", "transform": transform.to_dict(), **info}]},
+            default=float,
+        )
     )
-
-    pipeline = object.__new__(Pipeline)
-    pipeline.run_dir = run_dir
-    pipeline.config = load_config(None, [])  # expected_extent_m stays None
-    pipeline._result = PipelineResult(run_dir=run_dir)
-    pipeline._result.stages = [StageReport("metrics", "ok", "summarised")]
-    pipeline._collect_metrics()
-
-    # run the stage body to write metrics.json
-    pipeline._stage_metrics()
-
-    written = _json.loads((run_dir / "metrics" / "metrics.json").read_text(encoding="utf-8"))
-    assert "scale_check" in written
-    assert written["scale_check"]["kind"] == "georef_similarity_scale"
-    assert written["scale_check"]["relative_error"] >= 0.0
+    check = _summary_metrics(run_dir)["scale_check"][0]
+    assert abs(check["metres_per_model_unit"] - 4.0) / 4.0 < 0.01  # true scale is 1 / 0.25
+    assert 0.0 < check["relative_std"] < 0.02  # 200 m track, 1 m GPS noise: sub-2 %

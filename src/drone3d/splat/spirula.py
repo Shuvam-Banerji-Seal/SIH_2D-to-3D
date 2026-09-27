@@ -135,6 +135,8 @@ def run_sfm(
     quality: str = "high",
     data_type: str = "video",
     camera_mode: str = "folder",
+    camera_model: str = "radial",
+    features: str = "sift",
     extra: Sequence[str] = (),
     log_path: Path | None = None,
 ) -> SfmRunResult:
@@ -148,11 +150,15 @@ def run_sfm(
     if not images.is_dir():
         raise ReconstructionError(f"no images/ under {dataset}")
     sparse = dataset / "sparse"
-    if sparse.exists():
-        shutil.rmtree(sparse)  # never reconstruct on top of a stale model
+    for stale in (sparse, dataset / "features", dataset / "matches.bin"):
+        if stale.is_dir():
+            shutil.rmtree(stale)  # never reconstruct on top of a stale run
+        elif stale.exists():
+            stale.unlink()
     cmd: list[str | Path] = [binary, "sfm", "auto", dataset, "-o", dataset,
                              "--data-type", data_type, "--quality", quality,
-                             "--camera-mode", camera_mode]  # fmt: skip
+                             "--camera-mode", camera_mode, "--camera-model", camera_model,
+                             "--features", features]  # fmt: skip
     if sequences:
         cmd += ["--sequence", ",".join(sequences)]
     cmd += list(extra)

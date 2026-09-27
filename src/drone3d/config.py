@@ -12,25 +12,29 @@ from drone3d.exceptions import ConfigError
 
 __all__ = [
     "ALL_STAGES",
-    "DenseConfig",
+    "DepthConfig",
     "GeoConfig",
     "IngestConfig",
+    "KeyframeConfig",
     "MeshConfig",
     "MetricsConfig",
     "PipelineConfig",
-    "PreprocessConfig",
+    "RenderConfig",
     "SfMConfig",
+    "SplatConfig",
     "apply_override",
     "load_config",
 ]
 
 ALL_STAGES: tuple[str, ...] = (
     "ingest",
-    "preprocess",
+    "keyframes",
     "sfm",
-    "dense",
+    "depth",
+    "splat",
     "mesh",
     "georef",
+    "render",
     "metrics",
     "report",
 )
@@ -42,79 +46,101 @@ class IngestConfig:
 
     video: str | None = None
     telemetry: str | None = None
-    frames_dir: str = "frames"
-    image_format: str = "jpg"
-    jpeg_quality: int = 92
 
 
 @dataclass
-class PreprocessConfig:
-    """Frame sampling, quality filtering and image restoration."""
+class KeyframeConfig:
+    """GPU pass segmentation, overlap-band keyframe selection and 3D verdict."""
 
-    sample_fps: float = 2.0
-    max_frames: int = 600
-    oversample: int = 3
-    min_sharpness: float = 20.0
-    min_spacing_s: float = 0.2
-    resize_width: int | None = None
-    selection: str = "sharpness"  # sharpness | uniform
-    deblur: bool = False
-    deblur_sigma: float = 1.4
-    deblur_amount: float = 0.8
-    stabilize: bool = False
-    dynamic_masking: bool = False
+    analysis_long_side: int = 640  # RAFT analysis resolution (long side, px)
+    analysis_fps: float = 12.0  # frames analysed per second of video
+    flow_model: str = "raft_large"  # raft_large | raft_small
+    flow_batch: int = 32
+    overlap_target: float = 0.75  # tau: co-visibility with the previous keyframe
+    overlap_band: float = 0.10  # delta: candidates lie in [tau, tau + delta]
+    max_gap_s: float = 2.0
+    min_pass_s: float = 2.0
+    cut_consistency: float = 0.35
+    hfov_deg: float = 72.0
+    parallax_snr: float = 2.0
+    output_long_side: int | None = None  # None keeps the source resolution
+    jpeg_quality: int = 95
+    passes: list[int] = field(default_factory=list)  # restrict to these pass ids
+    skip_degenerate: bool = True  # drop passes with no recoverable 3D structure
+    hwaccel: bool = True
 
 
 @dataclass
 class SfMConfig:
-    """Structure-from-motion backend settings."""
+    """Structure from motion (spirula-studio's GPU SfM)."""
 
-    backend: str = "colmap"  # colmap | none
-    binary: str = "colmap"
-    matcher: str = "sequential"  # sequential | exhaustive | vocab_tree
-    camera_model: str = "OPENCV"
-    single_camera: bool = True
-    max_features: int = 8192
-    use_gps_priors: bool = True
-    allow_missing: bool = True
+    backend: str = "spirula"  # spirula | none
+    quality: str = "high"  # low | medium | high | extreme
+    camera_model: str = "radial"  # one focal: drone cameras have square pixels
+    camera_mode: str = "folder"  # one camera per pass folder (edits may re-crop)
+    features: str = "sift"  # sift | aliked-n16rot | aliked-n32 | loma-b128 | loma-b
     extra_args: list[str] = field(default_factory=list)
 
 
 @dataclass
-class DenseConfig:
-    """Dense reconstruction / depth estimation settings."""
+class DepthConfig:
+    """Monocular depth prior aligned to SfM."""
 
-    backend: str = "mvs"  # mvs | mono | none
-    max_image_size: int = 2000
-    geom_consistency: bool = True
-    mono_depth_model: str = "depth-anything/Depth-Anything-V2-Small-hf"
-    allow_missing: bool = True
+    backend: str = "marigold"  # marigold | none
+    checkpoint: str = "depth/Log-stage2"
+    long_side: int = 1024
+    batch: int = 4
+    quantization: str = "4bit"  # 4bit | 8bit | none
+    far_factor: float = 3.0  # beyond this x the SfM depth range counts as sky
+    out_long_side: int | None = 1920
+
+
+@dataclass
+class SplatConfig:
+    """3D Gaussian Splatting (spirula-studio trainer)."""
+
+    backend: str = "spirula"  # spirula | none
+    preset: str = "3dgs"
+    iterations: int = 30000
+    quality: str = "high"
+    resolution_divisor: int = 2  # train on 1/divisor of the keyframe resolution
+    depth_weight: float = 0.05  # Pearson depth-prior weight; 0 disables
+    eval_interval: int = 8  # hold out every n-th keyframe for evaluation
+    models: str = "all"  # all | largest: which SfM models to train
+    min_model_images: int = 8
+    flags: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
 class MeshConfig:
-    """Surface extraction and texturing settings."""
+    """Mesh extraction from the trained splats."""
 
-    backend: str = "poisson"  # poisson | delaunay | none
-    depth: int = 11
-    trim: float = 10.0
-    texture: bool = True
-    target_faces: int | None = None
-    allow_missing: bool = True
+    backend: str = "spirula"  # spirula | none
+    formats: list[str] = field(default_factory=lambda: ["ply", "glb", "obj"])
+    colors: list[str] = field(default_factory=lambda: ["vertex", "texture"])
 
 
 @dataclass
 class GeoConfig:
-    """Georeferencing from GPS/IMU priors."""
+    """Georeferencing from GPS priors."""
 
     enabled: bool = True
     origin_lat: float | None = None
     origin_lon: float | None = None
     origin_alt: float = 0.0
-    epsg: int | None = 4326
-    align_mode: str = "similarity"  # similarity | translation | none
+    align_mode: str = "auto"  # auto | similarity | yaw-scale | translation
     min_correspondences: int = 3
     write_geojson: bool = True
+
+
+@dataclass
+class RenderConfig:
+    """Fly-through renders of the trained splats."""
+
+    enabled: bool = True
+    seconds: float = 12.0
+    fps: int = 30
+    long_side: int = 1920
 
 
 @dataclass
@@ -123,9 +149,8 @@ class MetricsConfig:
 
     voxel_size: float = 0.5
     reference_cloud: str | None = None
-    expected_extent_m: float | None = None
     report_thumbnails: int = 12
-    make_contact_sheet: bool = True
+    gpu_telemetry: bool = True  # sample NVML utilisation/power during the run
 
 
 @dataclass
@@ -136,33 +161,49 @@ class PipelineConfig:
     output_root: str = "outputs"
     stages: list[str] = field(default_factory=lambda: list(ALL_STAGES))
     log_level: str = "INFO"
-    seed: int = 0
 
     ingest: IngestConfig = field(default_factory=IngestConfig)
-    preprocess: PreprocessConfig = field(default_factory=PreprocessConfig)
+    keyframes: KeyframeConfig = field(default_factory=KeyframeConfig)
     sfm: SfMConfig = field(default_factory=SfMConfig)
-    dense: DenseConfig = field(default_factory=DenseConfig)
+    depth: DepthConfig = field(default_factory=DepthConfig)
+    splat: SplatConfig = field(default_factory=SplatConfig)
     mesh: MeshConfig = field(default_factory=MeshConfig)
     geo: GeoConfig = field(default_factory=GeoConfig)
+    render: RenderConfig = field(default_factory=RenderConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def validate(self) -> None:
+        if not self.stages:
+            raise ConfigError("stages must not be empty")
         unknown = [stage for stage in self.stages if stage not in ALL_STAGES]
         if unknown:
             raise ConfigError(f"unknown stage(s): {', '.join(unknown)}")
-        if self.preprocess.sample_fps < 0:
-            raise ConfigError("preprocess.sample_fps must be >= 0 (0 = every frame)")
-        if self.preprocess.max_frames < 1:
-            raise ConfigError("preprocess.max_frames must be >= 1")
-        if self.preprocess.oversample < 1:
-            raise ConfigError("preprocess.oversample must be >= 1")
-        if self.geo.align_mode not in {"similarity", "translation", "none"}:
-            raise ConfigError("geo.align_mode must be one of: similarity, translation, none")
-        if self.sfm.matcher not in {"sequential", "exhaustive", "vocab_tree"}:
-            raise ConfigError("sfm.matcher must be one of: sequential, exhaustive, vocab_tree")
+        k = self.keyframes
+        if not 0.0 < k.overlap_target < 1.0:
+            raise ConfigError("keyframes.overlap_target must be in (0, 1)")
+        if k.overlap_band <= 0 or k.overlap_target + k.overlap_band >= 1.0:
+            raise ConfigError("keyframes.overlap_band must be > 0 with overlap_target + band < 1")
+        if k.analysis_fps <= 0 or k.analysis_long_side < 64:
+            raise ConfigError("keyframes.analysis_fps must be > 0 and analysis_long_side >= 64")
+        if k.flow_model not in {"raft_large", "raft_small"}:
+            raise ConfigError("keyframes.flow_model must be raft_large or raft_small")
+        if self.sfm.backend not in {"spirula", "none"}:
+            raise ConfigError("sfm.backend must be spirula or none")
+        if self.depth.backend not in {"marigold", "none"}:
+            raise ConfigError("depth.backend must be marigold or none")
+        if self.splat.backend not in {"spirula", "none"}:
+            raise ConfigError("splat.backend must be spirula or none")
+        if self.splat.models not in {"all", "largest"}:
+            raise ConfigError("splat.models must be all or largest")
+        if self.mesh.backend not in {"spirula", "none"}:
+            raise ConfigError("mesh.backend must be spirula or none")
+        if self.geo.align_mode not in {"auto", "similarity", "yaw-scale", "translation"}:
+            raise ConfigError(
+                "geo.align_mode must be one of: auto, similarity, yaw-scale, translation"
+            )
 
 
 def _build(cls: type, data: Any, path: str = "") -> Any:

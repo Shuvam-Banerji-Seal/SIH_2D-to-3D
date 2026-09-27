@@ -30,6 +30,8 @@ export function mountExplorer(el, { imageBase = null, height = null } = {}) {
         <div class="row" style="font-size:12px"><span class="muted">photo</span><input type="range" min="0" max="1" step="0.05" value="0.5" id="xpOpacity" style="flex:1"><span class="muted">model</span></div></div>
     </div>
     <div class="pip" id="xpPip" hidden><video id="xpVideo" muted playsinline preload="metadata"></video><div class="pipbar"><span id="xpVt">—</span><button class="btn tiny ghost" id="xpVplay">play</button></div></div>
+    <div class="zoom"><button class="btn small" id="xpIn" title="zoom in">+</button><button class="btn small" id="xpOut" title="zoom out">−</button>
+      <button class="btn small" id="xpFit" title="fit the model">⤢</button><button class="btn small" id="xpAll" title="every model">◎</button></div>
     <div class="topright"><button class="btn small" id="xpShot">${icon.cam}Screenshot</button><button class="btn small" id="xpFull">${icon.full}Fullscreen</button></div>
     <div class="hud" id="xpHud"></div>`;
   const x = new Explorer($('.stagebox', el), { background: BACKGROUNDS.dark });
@@ -99,6 +101,10 @@ export function mountExplorer(el, { imageBase = null, height = null } = {}) {
   $('#xpIs', el).addEventListener('input', (e) => x.setImageScale(+e.target.value));
   $('#xpMeasure', el).addEventListener('click', (e) => { x.setMeasuring(!x.measuring); e.currentTarget.classList.toggle('primary', x.measuring); });
   $('#xpClear', el).addEventListener('click', () => x.clearMeasures());
+  $('#xpIn', el).addEventListener('click', () => x.zoom(0.7));
+  $('#xpOut', el).addEventListener('click', () => x.zoom(1.45));
+  $('#xpFit', el).addEventListener('click', () => { x.follow = null; x.setNavigation('orbit'); setNavButtons('orbit'); x.frame(x.models.findIndex((m) => m.visible)); });
+  $('#xpAll', el).addEventListener('click', () => { x.showAll(); setNavButtons('orbit'); });
   $('#xpShot', el).addEventListener('click', async () => {
     const blob = await x.screenshot();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `drone3d_${Date.now()}.png`; a.click();

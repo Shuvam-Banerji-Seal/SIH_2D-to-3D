@@ -27,6 +27,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+from fastapi import (  # module level: the handlers' annotations resolve here
+    Body,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
+
 from drone3d.app.engine_client import EngineClient, EngineError
 from drone3d.app.jobs import JobManager, run_status
 from drone3d.app.schema import config_schema, profiles
@@ -99,7 +107,7 @@ def _host() -> dict:
 def create_app(
     repo: Path, outputs: Path | None = None, *, engine_port: int = 8770, engine_slots: int = 1
 ):  # type: ignore[no-untyped-def]
-    from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
+    from fastapi import FastAPI
     from fastapi.responses import FileResponse, Response
     from fastapi.staticfiles import StaticFiles
 
@@ -134,10 +142,11 @@ def create_app(
         from drone3d.io.nvdec import probe_stream
 
         out = []
-        for root, origin in ((repo / "datasets", "sample"), (uploads, "upload")):
+        for root, origin in ((uploads, "upload"), (repo / "datasets", "sample")):  # a fresh upload first
             if not root.is_dir():
                 continue
-            for p in sorted(root.iterdir()):
+            files = sorted(root.iterdir(), key=lambda p: -p.stat().st_mtime) if origin == "upload" else sorted(root.iterdir())
+            for p in files:
                 if p.suffix.lower() not in kind or not p.is_file():
                     continue
                 entry = {"path": str(p.relative_to(repo)), "name": p.name, "origin": origin,
@@ -238,7 +247,7 @@ def create_app(
         name, config = build_config(req)
         if req.get("engine", True) and engine.online():
             try:
-                job = engine.submit(name, config)
+                job = engine.submit(name, config, front=bool(req.get("next")))  # "run next": ahead of a queued batch
             except EngineError as exc:
                 raise fail(exc) from exc
             return {"name": name, "via": "engine", "job": job}

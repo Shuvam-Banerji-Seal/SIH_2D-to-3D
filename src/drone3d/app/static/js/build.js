@@ -1,8 +1,8 @@
 // Build: one drone video in, a complete 3D model out. Source, profile, resolution, modules, every option.
 import { $, $$, api, esc, fmtS, post, prettyVideo, toast } from './util.js';
-import { Options, renderModules, renderOptions, renderProfiles, renderResolution, renderStages } from './options.js';
+import { MODULES, Options, renderModules, renderOptions, renderProfiles, renderResolution, renderStages } from './options.js';
 
-const keep = { video: null, telemetry: '', opts: null };
+const keep = { video: null, telemetry: '', opts: null, next: true };
 
 export async function viewNew(main) {
   main.innerHTML = '<div class="note">loading…</div>';
@@ -10,7 +10,16 @@ export async function viewNew(main) {
   try {
     [schema, profiles, videos, logs, engine] = await Promise.all([api('/api/schema'), api('/api/profiles'), api('/api/videos'), api('/api/telemetry'), api('/api/engine')]);
   } catch (e) { main.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-  const o = keep.opts && keep.opts.profiles.length === profiles.length ? keep.opts : new Options(schema, profiles, profiles.some((p) => p.name === 'fast') ? 'fast' : profiles[0]?.name);
+  let o = keep.opts && keep.opts.profiles.length === profiles.length ? keep.opts : null;
+  const defaults = (opts) => { // a new build makes everything: mesh, cloud, depth, texture, Gaussian splats, STL and Blender files
+    if (!opts.stages().includes('splat')) MODULES.find((m) => m.key === 'splat').set(opts, true);
+    if (opts.profile === 'fast') opts.override('splat.models', 'all');
+  };
+  if (!o) {
+    o = new Options(schema, profiles, profiles.some((p) => p.name === 'fast') ? 'fast' : profiles[0]?.name);
+    defaults(o);
+  }
+  o.onProfile = () => defaults(o);
   o.schema = schema; o.profiles = profiles; keep.opts = o;
   const st = { videos, logs, engine };
 
@@ -83,21 +92,24 @@ export async function viewNew(main) {
       <div class="note">problem statement: under 15 minutes of processing per 10 minutes of video</div>
       <div class="hr"></div>
       <div class="between"><span class="muted">Profile</span><b class="mono">${esc(o.profile)} · ${esc(o.resolution())}</b></div>
-      <div class="between" style="margin-top:6px"><span class="muted">Runs on</span><span class="row" style="gap:6px"><span class="led ${st.engine.online ? 'ok' : ''}"></span><span class="mono" style="font-size:12px">${st.engine.online ? `warm engine${warm.length ? ` · ${esc(warm.join(', '))}` : ''}` : 'cold subprocess'}</span></span></div>
+      <div style="margin-top:6px"><div class="between"><span class="muted">Runs on</span><span class="row" style="gap:6px;flex-wrap:nowrap"><span class="led ${st.engine.online ? 'ok' : ''}"></span><b class="mono" style="font-size:12px">${st.engine.online ? 'warm engine' : 'cold subprocess'}</b></span></div>
+        ${warm.length ? `<div class="note mono" style="text-align:right;margin-top:2px">${esc(warm.join(' · '))}</div>` : ''}</div>
       <div style="margin-top:12px"><div class="muted" style="margin-bottom:6px">Stages</div><div class="chips" id="stages"></div></div>
       <div class="hr"></div>
+      <label class="row" style="gap:8px;margin-bottom:8px;font-size:13px"><span class="sw"><input type="checkbox" id="runnext" ${keep.next ? 'checked' : ''}><span></span></span>Run next — ahead of anything queued</label>
       <input type="text" id="runname" placeholder="run name (optional)" value="${esc($('#runname')?.value || '')}">
       <button class="btn primary" id="start" style="width:100%;justify-content:center;margin-top:10px;padding:12px" ${v ? '' : 'disabled'}>Build the 3D model</button>
       <div id="starterr"></div>
       <details class="fold" style="margin-top:12px"><summary class="muted">Changes against the profile</summary><pre class="yaml">${esc(o.summary())}</pre></details>`;
     renderStages($('#stages'), o, redraw);
     $('#start').onclick = start;
+    $('#runnext').onchange = (e) => { keep.next = e.target.checked; };
   }
 
   async function start() {
     $('#start').disabled = true; $('#starterr').innerHTML = '';
     try {
-      const r = await post('/api/runs', { name: $('#runname').value.trim(), video: keep.video, telemetry: keep.telemetry || null, ...o.payload() });
+      const r = await post('/api/runs', { name: $('#runname').value.trim(), video: keep.video, telemetry: keep.telemetry || null, next: !!keep.next, ...o.payload() });
       toast(`${r.name}: ${r.via === 'engine' ? 'started on the warm engine' : 'queued as a subprocess'}`, 'ok');
       location.hash = `#/run/${encodeURIComponent(r.name)}`;
     } catch (e) { $('#starterr').innerHTML = `<div class="err">${esc(e.message)}</div>`; $('#start').disabled = false; }

@@ -627,7 +627,7 @@ def create_engine_app(engine: Engine):  # type: ignore[no-untyped-def]
     @app.post("/jobs")
     def submit(body: dict) -> dict:
         try:
-            job = engine.submit(body["name"], body["config"], run_dir=body.get("run_dir"))
+            job = engine.submit(body["name"], body["config"], run_dir=body.get("run_dir"), front=bool(body.get("front")))
         except (KeyError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:  # ConfigError and friends

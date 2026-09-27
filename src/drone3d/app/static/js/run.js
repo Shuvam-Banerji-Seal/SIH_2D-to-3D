@@ -18,6 +18,11 @@ export async function viewRun(main, name) {
         <div class="film" id="film"></div>
         <div class="note">Click a keyframe to look through it: the camera moves to where the drone was, with its field of view, and the photo lies over the model.</div>
       </section>
+      <section class="panel s12 rise" style="--i:5" id="depthPanel" hidden>
+        <h2>Depth <span class="tag">fused per keyframe: flow triangulation, Depth Anything fill, sky left empty — drag across to compare</span><span class="grow"></span>
+          <button class="btn tiny" id="dPrev">‹</button><span class="mono" id="dIdx" style="font-size:12px"></span><button class="btn tiny" id="dNext">›</button></h2>
+        <div class="compare" id="compare"><img id="cPhoto" alt="keyframe"><div class="clip" id="cClip"><img id="cDepth" alt="depth"></div><div class="handle" id="cHandle"></div></div>
+      </section>
       <section class="panel s12 rise" style="--i:5" id="downloads" hidden></section>
       <section class="panel s12 rise" style="--i:6"><details class="fold" id="logFold"><summary><h2 style="margin:0">Log</h2></summary><div class="log" id="log" style="margin-top:12px"></div></details></section>
     </div>`;
@@ -37,7 +42,8 @@ export async function viewRun(main, name) {
     log.textContent = (r.log_tail || []).join('\n'); if (atEnd) log.scrollTop = log.scrollHeight;
     if (!live && r.summary.viewer && !seen.scene) { seen.scene = true; await loadScene(); results(r); downloads(r); }
     if (!live && !ACTIVE.includes(r.status) && seen.scene) { results(r); }
-    if (seen.frames === 0 || live) await frames();
+    if (seen.frames === 0 || live || ACTIVE.includes(r.status) || !seen.depthDone) await frames(); // keyframes, then depth, appear as stages finish
+    if (!ACTIVE.includes(r.status)) seen.depthDone = true;
   }
 
   function head(r, live) {
@@ -102,15 +108,39 @@ export async function viewRun(main, name) {
   async function frames() {
     try {
       const f = await api(`/api/runs/${enc}/frames?limit=600`);
-      if (f.frames.length === seen.frames && seen.films) return;
+      const depthN = f.frames.filter((x) => x.depth).length;
+      if (f.frames.length === seen.frames && depthN === seen.depthN && seen.films) return;
+      seen.depthN = depthN;
       seen.films = f.frames; seen.frames = f.frames.length;
       drawFilm();
     } catch { /* no frames yet */ }
   }
 
+  function drawCompare() {
+    const withDepth = (seen.films || []).filter((f) => f.depth);
+    if (!withDepth.length) return;
+    $('#depthPanel').hidden = false;
+    seen.ci = Math.min(seen.ci ?? Math.floor(withDepth.length / 2), withDepth.length - 1);
+    const f = withDepth[seen.ci];
+    $('#cPhoto').src = f.full; $('#cDepth').src = f.depth;
+    $('#dIdx').textContent = `${seen.ci + 1} / ${withDepth.length} · ${f.pass}`;
+  }
+  function bindCompare() {
+    const box = $('#compare'), set = (x) => { const r = box.getBoundingClientRect(); const k = Math.max(0, Math.min(1, (x - r.left) / r.width));
+      $('#cClip').style.clipPath = `inset(0 ${100 - 100 * k}% 0 0)`; $('#cHandle').style.left = `${100 * k}%`; };
+    let drag = false;
+    box.addEventListener('pointerdown', (e) => { drag = true; box.setPointerCapture(e.pointerId); set(e.clientX); });
+    box.addEventListener('pointermove', (e) => { if (drag) set(e.clientX); });
+    box.addEventListener('pointerup', () => { drag = false; });
+    $('#dPrev').onclick = () => { seen.ci = Math.max(0, (seen.ci || 0) - 1); drawCompare(); };
+    $('#dNext').onclick = () => { seen.ci = (seen.ci || 0) + 1; drawCompare(); };
+  }
+  bindCompare();
+
   function drawFilm() {
     const list = seen.films || [];
     if (!list.length) return;
+    drawCompare();
     $('#filmPanel').hidden = false;
     const withDepth = list.filter((f) => f.depth).length;
     $('#filmTag').textContent = `${list.length} keyframes · ${withDepth} with fused depth`;

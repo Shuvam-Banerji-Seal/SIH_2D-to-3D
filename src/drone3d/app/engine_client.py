@@ -158,8 +158,8 @@ class EngineClient:
     def unload_all(self) -> Any:
         return self._call("POST", "/models/unload", {}, timeout=60)
 
-    def submit(self, name: str, config: dict) -> Any:
-        return self._call("POST", "/jobs", {"name": name, "config": config}, timeout=15)
+    def submit(self, name: str, config: dict, *, front: bool = False) -> Any:
+        return self._call("POST", "/jobs", {"name": name, "config": config, "front": front}, timeout=15)
 
     def cancel(self, name: str) -> Any:
         return self._call("POST", f"/jobs/{name}/cancel", {}, timeout=10)

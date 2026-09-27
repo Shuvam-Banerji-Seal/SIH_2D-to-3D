@@ -163,7 +163,9 @@ def main() -> None:
     parts.append(table("Pass segmentation and keyframes per run. Overlap: mean co-visibility with the previous keyframe; views: measured views per point; SNR: median direct-flow parallax SNR (1 = none).",
                        "tab:keyframes", ["Run", "Pass", "Time (s)", "KF", "Overlap", "Views", "SNR", "Verdict"], kf_rows, "llrrrrrl", wide=True))  # fmt: skip
 
-    control = load(ROOT / "outputs" / "controls" / "pure_rotation_selection.json")
+    control = load(
+        ROOT / "outputs" / "controls" / "pure_rotation_run" / "keyframes" / "result.json"
+    )
     if control and control.get("passes"):
         c = control["passes"][0]
         macros["ControlSNR"] = fmt(c.get("parallax_snr"), 2)

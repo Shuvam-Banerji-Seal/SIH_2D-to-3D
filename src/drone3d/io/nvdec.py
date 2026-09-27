@@ -236,10 +236,35 @@ def _color_args(info: StreamInfo) -> dict[str, bool]:
     return {"bt709": bt709, "full_range": info.color_range.lower() in ("pc", "jpeg", "full")}
 
 
-def _reader(cmd: list[str], frame_bytes: int, chunk: int, out: queue.Queue) -> None:
-    """Thread body: read ``chunk``-frame blocks from ffmpeg into ``out``; ``None`` ends."""
+def _reader(
+    cmd: list[str],
+    frame_bytes: int,
+    chunk: int,
+    out: queue.Queue,
+    stop: threading.Event | None = None,
+    handle: list | None = None,
+) -> None:
+    """Thread body: read ``chunk``-frame blocks from ffmpeg into ``out``; ``None`` ends.
+
+    ``stop`` lets a consumer that quits early end the thread without it
+    blocking on a full queue; ``handle`` receives the ffmpeg process so the
+    consumer can kill it.
+    """
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+    if handle is not None:
+        handle.append(process)
     assert process.stdout is not None
+
+    def put(item: object) -> bool:
+        while True:
+            if stop is not None and stop.is_set():
+                return False
+            try:
+                out.put(item, timeout=0.2)
+                return True
+            except queue.Full:
+                continue
+
     try:
         while True:
             block = bytearray(frame_bytes * chunk)
@@ -251,15 +276,16 @@ def _reader(cmd: list[str], frame_bytes: int, chunk: int, out: queue.Queue) -> N
                     break
                 filled += read
             frames = filled // frame_bytes
-            if frames:
-                out.put(np.frombuffer(block, dtype=np.uint8, count=frames * frame_bytes))
+            if frames and not put(np.frombuffer(block, dtype=np.uint8, count=frames * frame_bytes)):
+                return
             if filled < len(block):
                 break
     finally:
         process.stdout.close()
         err = process.stderr.read().decode(errors="replace") if process.stderr else ""
         code = process.wait()
-        out.put(IngestionError(f"ffmpeg exited {code}: {err.strip()[-400:]}") if code else None)
+        if not (stop is not None and stop.is_set()):
+            put(IngestionError(f"ffmpeg exited {code}: {err.strip()[-400:]}") if code else None)
 
 
 def stream_analysis_chunks(
@@ -288,26 +314,37 @@ def stream_analysis_chunks(
     cmd = _ffmpeg_cmd(info, size, pre, hwaccel)
     frame_bytes = width * height * 3 // 2
     q: queue.Queue = queue.Queue(maxsize=prefetch)
-    thread = threading.Thread(target=_reader, args=(cmd, frame_bytes, chunk, q), daemon=True)
+    stop, handle = threading.Event(), []
+    thread = threading.Thread(target=_reader, args=(cmd, frame_bytes, chunk, q, stop, handle), daemon=True)
     thread.start()
     color = _color_args(info)
     produced = 0
-    while True:
-        item = q.get()
-        if item is None:
-            break
-        if isinstance(item, Exception):
-            if produced == 0:
-                raise item
-            log.warning("%s", item)
-            break
-        n = len(item) // frame_bytes
-        nv12 = torch.from_numpy(item).view(n, height * 3 // 2, width).to(device, non_blocking=True)
-        rgb = nv12_to_rgb(nv12, height, width, **color)
-        indices = (np.arange(produced, produced + n) * stride).astype(np.int64)
-        produced += n
-        yield indices, rgb
-    thread.join()
+    try:
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            if isinstance(item, Exception):
+                if produced == 0:
+                    raise item
+                log.warning("%s", item)
+                break
+            n = len(item) // frame_bytes
+            nv12 = torch.from_numpy(item).view(n, height * 3 // 2, width).to(device, non_blocking=True)
+            rgb = nv12_to_rgb(nv12, height, width, **color)
+            indices = (np.arange(produced, produced + n) * stride).astype(np.int64)
+            produced += n
+            yield indices, rgb
+    finally:
+        # Reached on exhaustion and on early exit (break / close / exception):
+        # never leave a decoder running behind the caller.
+        stop.set()
+        for process in handle:
+            if process.poll() is None:
+                process.kill()
+        while not q.empty():
+            q.get_nowait()
+        thread.join(timeout=10)
 
 
 def _decode_group(cmd: list[str], frame_bytes: int, expect: int) -> list[np.ndarray]:
@@ -331,10 +368,13 @@ def extract_frames(
     quality: int = 95,
     hwaccel: bool = True,
     device: str = "cuda",
-    group_size: int = 48,
-    workers: int = 3,
+    group_size: int = 24,
+    workers: int = 2,
 ) -> list[Path]:
     """Write source frames ``indices`` (0-based decode order) to ``out_paths``.
+
+    Host memory is bounded by ``workers x group_size`` raw frames (about
+    12 MB each at 4K NV12: ~0.6 GB with the defaults).
 
     The frames are split into groups of ``group_size``; each group is one
     ffmpeg process that seeks just before its first frame and selects its

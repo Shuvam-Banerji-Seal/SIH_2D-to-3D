@@ -34,6 +34,7 @@ class GpuSummary:
     own_memory_peak_gb: float | None = None
     foreign_processes_max: int = 0
     decoder_util_mean: float | None = None
+    host_rss_peak_gb: float | None = None  # this process + its children (spirula, ffmpeg)
     timeline: list[tuple[float, float, float]] = field(default_factory=list)  # (t, util %, W)
 
     def to_dict(self, with_timeline: bool = False) -> dict:
@@ -56,7 +57,7 @@ class GpuMonitor:
         self.interval = interval
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._rows: list[tuple[float, float, float, float, float, int, float]] = []
+        self._rows: list[tuple[float, float, float, float, float, int, float, float]] = []
         self._limit: float | None = None
         self._ok = False
 
@@ -91,8 +92,9 @@ class GpuMonitor:
                 children = _descendants(me) | {me}
                 own = sum((p.usedGpuMemory or 0) for p in procs if p.pid in children) / 1e9
                 foreign = sum(1 for p in procs if p.pid not in children)
+                rss = sum(_rss_bytes(pid) for pid in children) / 1e9
                 self._rows.append(
-                    (time.perf_counter() - self._t0, float(util.gpu), power, mem, own, foreign, dec)
+                    (time.perf_counter() - self._t0, float(util.gpu), power, mem, own, foreign, dec, rss)
                 )
             except Exception:  # a transient NVML error must not kill the stage
                 pass
@@ -118,8 +120,19 @@ class GpuMonitor:
             own_memory_peak_gb=float(a[:, 4].max()),
             foreign_processes_max=int(a[:, 5].max()),
             decoder_util_mean=float(a[:, 6].mean()),
+            host_rss_peak_gb=float(a[:, 7].max()),
             timeline=[(float(t), float(u), float(w)) for t, u, w in a[:, :3]],
         )
+
+
+def _rss_bytes(pid: int) -> int:
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError):
+        pass
+    return 0
 
 
 def _descendants(pid: int) -> set[int]:

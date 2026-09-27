@@ -1,0 +1,132 @@
+\section{Experiments}\label{sec:exp}
+
+\paragraph{Setup.} One NVIDIA A100 80\,GB PCIe, shared with other users' jobs throughout (each stage's record states the GPU's occupancy); PyTorch 2.14 with CUDA 13.2, Python 3.14, ffmpeg 9.0 (NVDEC/NVENC), spirula-studio 2026.9.24 (Vulkan backend). Data: fifteen public drone videos (Table~\ref{tab:data}); they carry no flight logs.
+
+\begin{table}[t]
+\centering\small
+\caption{Sample footage (public YouTube re-encodes, VP9).}\label{tab:data}
+\begin{tabular}{lrrr}
+\toprule
+Video & Resolution & fps & s \\
+\midrule
+ANGKOR WAT Breathtaking  Cinemati & 3840$\times$2160 & 24.00 & 193 \\
+Above clouds & 2560$\times$1440 & 50.00 & 115 \\
+Aerial Views of Rural Riches & 2560$\times$1440 & 23.98 & 19 \\
+Breathtaking Aerial Views of Hanoi & 3840$\times$2160 & 29.97 & 103 \\
+Colosseum like never before & 3840$\times$2160 & 29.97 & 135 \\
+Eiffel Tower Drone 4k & 3840$\times$2160 & 29.97 & 306 \\
+FPV Drone Flight through Beautiful & 3840$\times$2160 & 30.00 & 67 \\
+GoPro & 1080$\times$1920 & 29.97 & 18 \\
+HAGIA SOPHIA 4K & 3840$\times$2160 & 29.97 & 85 \\
+Jal Mahal, Jaipur, India, Drone Ci & 3840$\times$2160 & 24.00 & 55 \\
+Notre Dame Drone Paris 4k & 3840$\times$2160 & 29.97 & 214 \\
+Petronas Twin Tower in FPV drone & 3840$\times$2160 & 59.94 & 35 \\
+Qutub Minar, New Delhi, India 4K D & 3840$\times$2160 & 29.97 & 187 \\
+Reichstag Berlin  in 4K & 3840$\times$2160 & 30.00 & 130 \\
+The Messiah & 3840$\times$2160 & 29.97 & 94 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Passes, keyframes and the 3D verdict}
+
+\begin{table*}[t]
+\centering\small
+\caption{Pass segmentation and keyframes per run. Overlap: mean co-visibility with the previous keyframe; views: measured views per point; SNR: median direct-flow parallax SNR (1 = none).}\label{tab:keyframes}
+\begin{tabular}{llrrrrrl}
+\toprule
+Run & Pass & Time (s) & KF & Overlap & Views & SNR & Verdict \\
+\midrule
+\multicolumn{8}{c}{no data} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\paragraph{Negative control.} A synthetic clip of a camera rotating about its centre over one real 4K frame (\texttt{tools/make\_degenerate\_clip.py}) has no parallax by construction. It yields SNR 1.95 (median residual 0.09$^\circ$) and the verdict \emph{weak-3d}; GRIC nonetheless preferred $F$ on 100\% of its pairs, which is why GRIC only confirms the SNR decision.
+
+\subsection{Structure from motion}
+
+\begin{table}[t]
+\centering\small
+\caption{Structure from motion on the selected keyframes.}\label{tab:sfm}
+\begin{tabular}{lrrrrr}
+\toprule
+Run & KF & Registered & Models & Reproj. (px) & Time (s) \\
+\midrule
+\multicolumn{6}{c}{no data} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Monocular depth prior}
+
+\begin{table}[t]
+\centering\small
+\caption{Marigold~v2 against SfM tie points, after per-image log-affine alignment. AbsRel: median over images of the per-image median relative error.}\label{tab:depth}
+\begin{tabular}{llrrrr}
+\toprule
+Run & Model & Images & AbsRel & $\delta_1$ & Valid \\
+\midrule
+\multicolumn{6}{c}{no data} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Gaussian splatting}
+
+\begin{table*}[t]
+\centering\small
+\caption{3DGS on held-out keyframes (every 8th keyframe never used in training).}\label{tab:splat}
+\begin{tabular}{llrrrrr}
+\toprule
+Run & Model & Splats & PSNR & SSIM & LPIPS & Train (s) \\
+\midrule
+\multicolumn{7}{c}{no data} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Georeferencing a straight pass}
+
+\begin{figure*}[t]\centering\includegraphics[width=0.85\textwidth]{georef_study.pdf}\caption{Error of ground 100\,m off-track after GPS alignment (median of 20 synthetic scenes per point). The 7-DoF similarity is off by up to 221\,m on a straight pass while its in-sample RMSE (dotted) only reflects GPS noise; the ground-levelled fit stays near the GPS noise.}\label{fig:georef}\end{figure*}
+
+\begin{table*}[t]
+\centering\small
+\caption{Georeferencing study (medians over 20 trials): off-track error of the similarity and of our rule, in-sample RMSE of the similarity, held-out RMSE of ours, metric scale error.}\label{tab:georef}
+\begin{tabular}{rrrrrrr}
+\toprule
+GPS $\sigma$ (m) & Lateral (m) & Sim. (m) & Ours (m) & Sim. in-sample & Ours LOO & Scale err. \\
+\midrule
+0.5 & 0 & 149.9 & 0.21 & 0.71 & 0.73 & 0.1\% \\
+0.5 & 5 & 5.5 & 0.19 & 0.69 & 0.71 & 0.0\% \\
+0.5 & 20 & 2.1 & 0.19 & 0.68 & 0.70 & 0.0\% \\
+0.5 & 60 & 0.7 & 0.17 & 0.72 & 0.74 & 0.1\% \\
+1.5 & 0 & 180.0 & 0.62 & 2.08 & 2.16 & 0.1\% \\
+1.5 & 5 & 19.5 & 0.54 & 2.10 & 2.18 & 0.1\% \\
+1.5 & 20 & 5.0 & 0.58 & 2.16 & 2.24 & 0.2\% \\
+1.5 & 60 & 1.9 & 0.63 & 2.08 & 2.16 & 0.2\% \\
+3.0 & 0 & 220.7 & 0.92 & 4.15 & 4.29 & 0.2\% \\
+3.0 & 5 & 27.0 & 1.11 & 4.00 & 4.15 & 0.2\% \\
+3.0 & 20 & 7.6 & 1.29 & 4.28 & 4.44 & 0.3\% \\
+3.0 & 60 & 2.8 & 1.14 & 4.29 & 4.44 & 0.2\% \\
+5.0 & 0 & 146.9 & 1.77 & 7.08 & 7.32 & 0.3\% \\
+5.0 & 5 & 24.4 & 2.13 & 7.13 & 7.37 & 0.5\% \\
+5.0 & 20 & 11.0 & 1.59 & 6.92 & 7.14 & 0.4\% \\
+5.0 & 60 & 5.4 & 2.08 & 6.83 & 7.07 & 0.6\% \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Throughput and GPU use}
+
+\begin{table*}[t]
+\centering\small
+\caption{Per-stage wall time and GPU use (NVML, 0.5\,s samples). Own/host: peak GPU memory and host RSS of our process tree.}\label{tab:gpu}
+\begin{tabular}{llrrrrrl}
+\toprule
+Run & Stage & s & Util.\% & W & Own GPU (GB) & Host (GB) & Shared \\
+\midrule
+\multicolumn{8}{c}{no data} \\
+\bottomrule
+\end{tabular}
+\end{table*}

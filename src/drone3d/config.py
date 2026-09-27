@@ -108,6 +108,7 @@ class SplatConfig:
     eval_interval: int = 8  # hold out every n-th keyframe for evaluation
     models: str = "all"  # all | largest: which SfM models to train
     min_model_images: int = 8
+    cache_images: str = "disk"  # disk | cpu: cpu is faster but holds every decoded image in RAM
     flags: dict[str, object] = field(default_factory=dict)
 
 

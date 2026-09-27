@@ -72,11 +72,25 @@ export async function viewRun(main, name) {
     $('#pipe').innerHTML = `<h2>Pipeline <span class="tag">every stage writes its own files; any subset can be re-run</span></h2>
       <div class="timeline">${planned.map((st) => {
         const x = r.stages[st] || { status: 'pending' };
-        return `<div class="stage ${esc(x.status)}"><div class="n">${esc(st)}</div><div class="s">${x.status === 'running' ? 'running…' : x.seconds != null ? fmtS(x.seconds) : esc(x.status)}</div>
+        return `<div class="stage ${esc(x.status)}" title="${esc(x.message || '')}"><div class="n">${esc(st)}</div><div class="s">${x.status === 'running' ? 'running…' : x.seconds != null ? fmtS(x.seconds) : esc(x.status)}</div>
           ${x.seconds ? `<div class="fill" style="width:${Math.min(100, (100 * x.seconds) / total)}%"></div>` : ''}</div>`;
       }).join('')}</div>
       <div class="budget-meter" style="margin-top:14px"><div class="used ${frac > 1 ? 'over' : ''}" style="width:${frac != null ? Math.min(100, 100 * frac) : 0}%"></div>
-        <div class="lbl"><span>time vs budget · 15 min per 10-min video</span><span><b>${fmtS(used)}</b> of ${fmtS(budget)}${frac != null ? ` · ${Math.round(100 * frac)}%` : ''}</span></div></div>`;
+        <div class="lbl"><span>time vs budget · 15 min per 10-min video</span><span><b>${fmtS(used)}</b> of ${fmtS(budget)}${frac != null ? ` · ${Math.round(100 * frac)}%` : ''}</span></div></div>
+      ${planned.filter((st) => r.stages[st]?.status === 'failed').map((st) => `<div class="err"><b>${esc(st)} failed:</b> ${esc(r.stages[st].message || 'see the log below')}${hint(r.stages[st].message) ? `\n${esc(hint(r.stages[st].message))}` : ''}</div>`).join('')}`;
+    if (!ACTIVE.includes(r.status) && !s.viewer) { // finished without a model: say so, not "appears when export finishes"
+      const failed = planned.find((st) => r.stages[st]?.status === 'failed');
+      const empty = $('#xpEmpty'); if (empty) empty.textContent = failed ? `This run made no 3D model: the ${failed} stage failed (see above).` : `This run made no 3D model (${r.status}).`;
+    }
+  }
+
+  // What a user can do about the failures a single pass can meet.
+  function hint(msg = '') {
+    if (/recoverable 3D structure|no pass/i.test(msg)) return 'The camera did not move enough relative to the scene — a pan or hover on the spot, a very distant or flat scene, or a clip too short. A single pass needs parallax: fly past or around the subject.';
+    if (/no SfM model|registered/i.test(msg)) return 'Too few keyframes could be placed together; footage with more overlap between views (slower flight, less motion blur) helps.';
+    if (/out of memory|CUDA/i.test(msg)) return 'The GPU ran out of memory or faulted; the engine restarts itself — run it again, or choose the draft resolution.';
+    if (/ffprobe|decode|stream/i.test(msg)) return 'The video could not be decoded; re-encode it to H.264 or HEVC.';
+    return '';
   }
 
   function results(r) {

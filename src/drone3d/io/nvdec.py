@@ -491,6 +491,39 @@ def sample_frames(
         return [f for f in pool.map(one, times_s) if f is not None]
 
 
+def sample_pairs(
+    info: StreamInfo,
+    times_s: Sequence[float],
+    size: tuple[int, int],
+    gap_frames: int,
+    *,
+    hwaccel: bool = True,
+    workers: int = 3,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Frame pairs ``gap_frames`` apart starting near each timestamp, as NV12 arrays.
+
+    One seek per pair (``gap + 1`` frames decoded), so both frames of a pair come
+    from the same decode and a failed sample drops the whole pair, never half.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    frame_bytes = size[0] * size[1] * 3 // 2
+    need = gap_frames + 1
+
+    def one(t: float) -> tuple[np.ndarray, np.ndarray] | None:
+        cmd = _ffmpeg_cmd(info, size, [], hwaccel, ("-ss", f"{max(0.0, t):.3f}"))
+        at = cmd.index("-f")
+        cmd = [*cmd[:at], "-frames:v", str(need), *cmd[at:]]
+        out = subprocess.run(cmd, capture_output=True, check=False).stdout
+        if len(out) < need * frame_bytes:
+            return None
+        return (np.frombuffer(out[:frame_bytes], dtype=np.uint8),
+                np.frombuffer(out[(need - 1) * frame_bytes : need * frame_bytes], dtype=np.uint8))  # fmt: skip
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return [p for p in pool.map(one, times_s) if p is not None]
+
+
 def detect_letterbox(
     info: StreamInfo,
     *,

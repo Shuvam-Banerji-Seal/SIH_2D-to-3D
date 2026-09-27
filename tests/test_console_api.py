@@ -149,6 +149,13 @@ def test_upload_never_overwrites_and_reuses_identical_bytes(client: TestClient, 
     assert sorted(p.name for p in (tmp_path / "repo" / "uploads").iterdir()) == ["log-2.srt", "log.srt"]  # no .part left
 
 
+def test_upload_refuses_a_file_that_is_not_a_video(client: TestClient, tmp_path: Path) -> None:
+    r = client.post("/api/upload", files={"file": ("flight.mp4", b"\x00\x01garbage" * 1000, "video/mp4")})
+    assert r.status_code == 400 and "not a readable video" in r.json()["detail"]
+    assert not (tmp_path / "repo" / "uploads" / "flight.mp4").exists()
+    assert not list((tmp_path / "repo" / "uploads").iterdir())  # nor its .part
+
+
 def test_upload_rejects_other_files(client: TestClient) -> None:
     r = client.post("/api/upload", files={"file": ("notes.exe", b"MZ", "application/octet-stream")})
     assert r.status_code == 400

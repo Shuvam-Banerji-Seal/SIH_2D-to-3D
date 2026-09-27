@@ -98,7 +98,7 @@ export async function viewNew(main) {
     const budget = v?.duration_s ? 1.5 * v.duration_s : null;
     $('#launch').innerHTML = `
       <h2>Launch</h2>
-      ${v ? `<div class="n" style="font-weight:600">${esc(prettyVideo(v.name))}</div><div class="note mono">${v.width}×${v.height} · ${v.fps} fps · ${esc(v.codec)} · ${fmtS(v.duration_s)}</div>` : '<div class="note">Choose a video.</div>'}
+      ${v ? `<div class="n" style="font-weight:600">${esc(prettyVideo(v.name))}</div>${v.width ? `<div class="note mono">${v.width}×${v.height} · ${v.fps} fps · ${esc(v.codec)} · ${fmtS(v.duration_s)}</div>` : '<div class="err" style="margin-top:6px">This file cannot be read as a video.</div>'}` : '<div class="note">Choose a video.</div>'}
       <div class="hr"></div>
       <div class="between"><span class="muted">Time budget</span><span class="fig sm">${budget ? fmtS(budget) : '—'}</span></div>
       <div class="note">problem statement: under 15 minutes of processing per 10 minutes of video</div>
@@ -110,7 +110,7 @@ export async function viewNew(main) {
       <div class="hr"></div>
       <label class="row" style="gap:8px;margin-bottom:8px;font-size:13px"><span class="sw"><input type="checkbox" id="runnext" ${keep.next ? 'checked' : ''}><span></span></span>Run next — ahead of anything queued</label>
       <input type="text" id="runname" placeholder="run name (optional)" value="${esc($('#runname')?.value || '')}">
-      <button class="btn primary" id="start" style="width:100%;justify-content:center;margin-top:10px;padding:12px" ${v ? '' : 'disabled'}>Build the 3D model</button>
+      <button class="btn primary" id="start" style="width:100%;justify-content:center;margin-top:10px;padding:12px" ${v?.width ? '' : 'disabled'}>Build the 3D model</button>
       <div id="starterr"></div>
       <details class="fold" style="margin-top:12px"><summary class="muted">Changes against the profile</summary><pre class="yaml">${esc(o.summary())}</pre></details>`;
     renderStages($('#stages'), o, redraw);

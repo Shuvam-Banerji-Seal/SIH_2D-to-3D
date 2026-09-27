@@ -131,6 +131,12 @@ FAST_RUNS = {  # run -> (video, analysis rate, overlap)
 }
 
 
+def short_title_run(run: str) -> str:
+    """``map_the_messiah_cristo_redentor_4k_drone_foo`` -> a short name for tables."""
+    names = {"messiah": "Cristo Redentor", "jal_mahal": "Jal Mahal", "qutub": "Qutub Minar"}
+    return next((v for k, v in names.items() if k in run), tex(run.removeprefix("map_")[:18]))
+
+
 def short_title(video: str) -> str:
     """A sample video's name for a table: before the first separator, whole words, at most 26 characters."""
     name = re.split(r"[｜|：:,]| - |\[|\(", video)[0].strip()
@@ -174,14 +180,42 @@ def fast_section(macros: dict[str, str]) -> list[str]:
         rows = [[r["model"], fmt(r["trunc"], 0), fmt(r["completeness"], 3), fmt(100 * r["depth_err_vs_triangulated"], 2),
                  fmt(int(r["triangles"]))] for r in sweep if r["voxel_px"] == 3.0]  # fmt: skip
         parts.append(
-            "\\paragraph{Fusion.} The depth maps (triangulated, then filled by the calibrated prior) cover every non-sky pixel "
-            "of the references, yet a TSDF with the usual 4-voxel truncation band keeps only part of the view: neighbouring "
+            "\\paragraph{Fusion.} The depth maps (triangulated, then filled by the calibrated prior) cover nearly every non-sky "
+            "pixel of a scene at the pass's own range, yet a TSDF with the usual 4-voxel truncation band keeps only part of the view: neighbouring "
             "views disagree slightly and their signed distances cancel. Widening the band recovers most of it at a small cost "
             "in depth error against the triangulated geometry (Table~\\ref{tab:tsdf}); the profile uses 12 voxels.\n"
         )
         parts.append(table("TSDF truncation band on Jal Mahal's two largest models (voxel = 3 pixel footprints at the median "
                            "depth): view completeness, median depth error against the triangulated depth, triangles.",
                            "tab:tsdf", ["Model", "Band (vox.)", "Completeness", "Depth err. (\\%)", "Triangles"], rows, "lrrrr"))  # fmt: skip
+    far = load(FIG / "far_field.json")
+    if far:
+        bins = [e["ratio"] for e in far[0]["extrapolation"] if e["ratio"] != "0-1"]
+        rows = []
+        for r in far:
+            sh, ex = r["shares"], {e["ratio"]: e["median_rel_err"] for e in r["extrapolation"]}
+            rows.append([f"{short_title_run(r['run'])} {r['model']}", *(fmt(100 * sh[k], 0) for k in ("sky", "triangulated", "filled", "empty_far")),
+                         *(fmt(100 * ex[b], 0) if ex.get(b) is not None else DASH for b in bins)])  # fmt: skip
+        worst = max((r for r in far), key=lambda r: r["shares"]["empty_far"])
+        macros["FarEmptyMax"] = f"{100 * worst['shares']['empty_far']:.0f}"
+        near_err = [e["median_rel_err"] for r in far for e in r["extrapolation"] if e["ratio"] == "1-1.25" and e["median_rel_err"] is not None]
+        beyond = [e["median_rel_err"] for r in far for e in r["extrapolation"] if e["ratio"] == "3-99" and e["median_rel_err"] is not None]
+        parts.append(
+            "\\paragraph{The far field.} On footage with a distant background the far field is the largest gap. The fill writes a "
+            "pixel only where the calibrated prior puts it within three times the 99th-percentile triangulated depth; beyond, the "
+            f"pixel stays empty --- {macros['FarEmptyMax']}\\,\\% of the pixels of Cristo Redentor's largest model on average, whose "
+            "hills and city lie kilometres behind a statue filmed from tens of metres. Raising the cut is not free: calibrating each keyframe on its nearer 80\\,\\% of "
+            "triangulated pixels and predicting the farthest 20\\,\\% measures how the prior extrapolates (Table~\\ref{tab:far}). "
+            f"Just past the calibrated range the median error is {100 * min(near_err):.0f}--{100 * max(near_err):.0f}\\,\\%; beyond three "
+            f"times it, {100 * min(beyond):.0f}--{100 * max(beyond):.0f}\\,\\%, which would place those surfaces at the wrong distance "
+            "altogether. The profile keeps the cut; the lake model (Jal Mahal 1) shows that water, whose triangulated depth "
+            "includes reflections, calibrates the prior badly even at short range.\n"
+        )
+        parts.append(table("Far field: share of keyframe pixels that are sky, triangulated, filled by the prior, or left empty "
+                           "beyond the far cut (\\%), and the prior's median relative error on held-out triangulated pixels by "
+                           "distance past the calibrated range (\\%).", "tab:far",
+                           ["Model", "Sky", "Tri.", "Fill", "Beyond", *(f"{b.replace('-99', '+').replace('-', '--')}$\\times$" for b in bins)],
+                           rows, "l" + "r" * (4 + len(bins)), wide=True))  # fmt: skip
     ab = load(FIG / "fast_ablation.json")
     if ab:
         rows = [[tex(r["video"]), tex(r["rate"]), r["overlap"], fmt(r["keyframes"]), fmt(r["registered"]), fmt(r["completeness"], 2),

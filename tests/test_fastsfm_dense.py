@@ -68,3 +68,11 @@ def test_fuse_depths_needs_agreeing_views() -> None:
     out = fuse_depths(d, wts, rel_tol=0.03, min_views=2)
     assert abs(float(out[0, 0]) - 10.1) < 1e-4  # the 30 m outlier is ignored
     assert float(out[0, 1]) == 0.0  # one view only
+
+
+def test_extraction_weight_asks_for_min_views() -> None:
+    from drone3d.fastsfm.dense_stage import extraction_weight
+
+    assert extraction_weight("auto", 5) == 1.5 and extraction_weight("auto", 12) == 1.5  # two views
+    assert extraction_weight("auto", 13) == 2.5 and extraction_weight("auto", 200) == 2.5  # three
+    assert extraction_weight("4", 5) == 3.5 and extraction_weight(1, 40) == 0.5

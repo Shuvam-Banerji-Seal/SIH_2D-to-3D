@@ -1,0 +1,302 @@
+[
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 0,
+  "keyframes": 21,
+  "weight": 1.0,
+  "triangles": 591167,
+  "completeness": 0.9713,
+  "depth_err": 0.01324,
+  "min_views": 2
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 0,
+  "keyframes": 21,
+  "weight": 2.0,
+  "triangles": 507772,
+  "completeness": 0.9388,
+  "depth_err": 0.01313,
+  "min_views": 3
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 0,
+  "keyframes": 21,
+  "weight": 3.0,
+  "triangles": 453693,
+  "completeness": 0.905,
+  "depth_err": 0.01296,
+  "min_views": 4
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 1,
+  "keyframes": 39,
+  "weight": 1.0,
+  "triangles": 2993713,
+  "completeness": 0.944,
+  "depth_err": 0.00703,
+  "min_views": 2
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 1,
+  "keyframes": 39,
+  "weight": 2.0,
+  "triangles": 1392422,
+  "completeness": 0.8756,
+  "depth_err": 0.00634,
+  "min_views": 3
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 1,
+  "keyframes": 39,
+  "weight": 3.0,
+  "triangles": 713096,
+  "completeness": 0.8254,
+  "depth_err": 0.00581,
+  "min_views": 4
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 2,
+  "keyframes": 19,
+  "weight": 1.0,
+  "triangles": 974496,
+  "completeness": 0.8021,
+  "depth_err": 0.01344,
+  "min_views": 2
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 2,
+  "keyframes": 19,
+  "weight": 2.0,
+  "triangles": 292139,
+  "completeness": 0.7262,
+  "depth_err": 0.0133,
+  "min_views": 3
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 2,
+  "keyframes": 19,
+  "weight": 3.0,
+  "triangles": 102949,
+  "completeness": 0.6769,
+  "depth_err": 0.01322,
+  "min_views": 4
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 4,
+  "keyframes": 10,
+  "weight": 1.0,
+  "triangles": 145230,
+  "completeness": 0.88,
+  "depth_err": 0.00414,
+  "min_views": 2
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 4,
+  "keyframes": 10,
+  "weight": 2.0,
+  "triangles": 85539,
+  "completeness": 0.7284,
+  "depth_err": 0.00385,
+  "min_views": 3
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "model": 4,
+  "keyframes": 10,
+  "weight": 3.0,
+  "triangles": 33804,
+  "completeness": 0.2278,
+  "depth_err": 0.0037,
+  "min_views": 4
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 0,
+  "keyframes": 10,
+  "weight": 1.0,
+  "triangles": 309938,
+  "completeness": 0.8701,
+  "depth_err": 0.01045,
+  "min_views": 2
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 0,
+  "keyframes": 10,
+  "weight": 2.0,
+  "triangles": 202502,
+  "completeness": 0.8136,
+  "depth_err": 0.01035,
+  "min_views": 3
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 0,
+  "keyframes": 10,
+  "weight": 3.0,
+  "triangles": 149972,
+  "completeness": 0.7508,
+  "depth_err": 0.0102,
+  "min_views": 4
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 4,
+  "keyframes": 6,
+  "weight": 1.0,
+  "triangles": 316115,
+  "completeness": 0.7396,
+  "depth_err": 0.00554,
+  "min_views": 2
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 4,
+  "keyframes": 6,
+  "weight": 2.0,
+  "triangles": 110635,
+  "completeness": 0.622,
+  "depth_err": 0.00527,
+  "min_views": 3
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 4,
+  "keyframes": 6,
+  "weight": 3.0,
+  "triangles": 36829,
+  "completeness": 0.4158,
+  "depth_err": 0.00505,
+  "min_views": 4
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 5,
+  "keyframes": 5,
+  "weight": 1.0,
+  "triangles": 103933,
+  "completeness": 0.6496,
+  "depth_err": 0.00442,
+  "min_views": 2
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 5,
+  "keyframes": 5,
+  "weight": 2.0,
+  "triangles": 40794,
+  "completeness": 0.4406,
+  "depth_err": 0.00422,
+  "min_views": 3
+ },
+ {
+  "run": "ui_test_kinbane",
+  "model": 5,
+  "keyframes": 5,
+  "weight": 3.0,
+  "triangles": 0,
+  "completeness": 0.0,
+  "depth_err": null,
+  "min_views": 4
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 0,
+  "keyframes": 26,
+  "weight": 1.0,
+  "triangles": 947111,
+  "completeness": 0.692,
+  "depth_err": 0.02691,
+  "min_views": 2
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 0,
+  "keyframes": 26,
+  "weight": 2.0,
+  "triangles": 268187,
+  "completeness": 0.5304,
+  "depth_err": 0.02588,
+  "min_views": 3
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 0,
+  "keyframes": 26,
+  "weight": 3.0,
+  "triangles": 76941,
+  "completeness": 0.4095,
+  "depth_err": 0.02577,
+  "min_views": 4
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 3,
+  "keyframes": 10,
+  "weight": 1.0,
+  "triangles": 21246,
+  "completeness": 0.6373,
+  "depth_err": 0.00348,
+  "min_views": 2
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 3,
+  "keyframes": 10,
+  "weight": 2.0,
+  "triangles": 18786,
+  "completeness": 0.5958,
+  "depth_err": 0.00336,
+  "min_views": 3
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 3,
+  "keyframes": 10,
+  "weight": 3.0,
+  "triangles": 16863,
+  "completeness": 0.554,
+  "depth_err": 0.00321,
+  "min_views": 4
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 5,
+  "keyframes": 6,
+  "weight": 1.0,
+  "triangles": 13870,
+  "completeness": 0.2203,
+  "depth_err": 0.00293,
+  "min_views": 2
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 5,
+  "keyframes": 6,
+  "weight": 2.0,
+  "triangles": 0,
+  "completeness": 0.0,
+  "depth_err": null,
+  "min_views": 3
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "model": 5,
+  "keyframes": 6,
+  "weight": 3.0,
+  "triangles": 0,
+  "completeness": 0.0,
+  "depth_err": null,
+  "min_views": 4
+ }
+]

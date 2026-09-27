@@ -1,12 +1,12 @@
-"""TSDF extraction weight threshold: how many depth maps must see a voxel before it becomes surface.
+"""TSDF extraction: how many depth maps must see a voxel before it becomes surface.
 
     uv run python experiments/tsdf_weight.py outputs/RUN [model indices...]   (writes paper/figures/tsdf_weight.json)
 
-Open3D extracts a voxel only once its integration weight -- here, the number of
-depth maps that saw it -- reaches ``weight_threshold`` (default 3). That removes
-single-view floaters but also every surface seen by fewer than three keyframes:
-the edges of each model's coverage, and small models entirely. Same depth maps,
-same grid, thresholds 1 / 2 / 3: view completeness, the mesh's median depth error
+Open3D extracts a voxel only when its integration weight -- the number of depth
+maps that saw it -- is greater than ``weight_threshold`` (default 3, i.e. four
+views). That removes floaters but also every surface fewer keyframes saw: the
+edges of each model's coverage, and small models entirely. Same depth maps, same
+grid, at least 2 / 3 / 4 views: view completeness, the mesh's median depth error
 against the triangulated depth, triangles.
 """
 
@@ -43,16 +43,17 @@ def main() -> None:
         rgb = frames.cpu().numpy()
         have = [d[d > 0] for d in r["depths"] if (d > 0).any()]
         if not have:
-            rows.append({"run": run.name, "model": k, "keyframes": n, "weight": None, "status": "no-depth"})
+            rows.append({"run": run.name, "model": k, "keyframes": n, "min_views": None, "status": "no-depth"})
             continue
         valid = np.concatenate(have)
         voxel = 3.0 * float(np.median(valid)) / cams[0].f
         vbg, _ = tsdf_fuse([(r["depths"][i], rgb[i], cams[i]) for i in range(n)], voxel=voxel,
                            depth_max=float(np.percentile(valid, 99.5)), trunc_voxels=12.0, memory_gb=8.0)  # fmt: skip
-        for wt in (1.0, 2.0, 3.0):
+        for views in (2, 3, 4):
+            wt = views - 0.5
             mesh = vbg.extract_triangle_mesh(weight_threshold=wt).to_legacy()
             v, t = np.asarray(mesh.vertices), np.asarray(mesh.triangles)
-            row = {"run": run.name, "model": k, "keyframes": n, "weight": wt, "triangles": len(t),
+            row = {"run": run.name, "model": k, "keyframes": n, "min_views": views, "triangles": len(t),
                    "completeness": round(view_coverage(v, t, cams, (w, h), sky), 4) if len(t) else 0.0,
                    "depth_err": round(mesh_depth_error(v, t, cams, (w, h), r["tri_depths"]), 5) if len(t) else None}  # fmt: skip
             rows.append(row)

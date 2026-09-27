@@ -220,10 +220,20 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
             "tri_cov": tri_cov, "fill_info": fill_info, "timing": timing}  # fmt: skip
 
 
+def extraction_weight(min_views: str | int, depth_maps: int) -> float:
+    """Open3D's extraction ``weight_threshold`` for ``dense.min_views``.
+
+    A voxel's weight counts the depth maps that saw it, and Open3D keeps it when the
+    weight is *greater* than the threshold: its default, 3, asks for four views.
+    """
+    views = (2 if depth_maps <= 12 else 3) if str(min_views) == "auto" else int(min_views)
+    return max(views, 1) - 0.5
+
+
 def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, long_side: int,
                  gaps: tuple[int, ...], keyframe_stride: int, min_angle_deg: float, rel_tol: float,
                  voxel_px: float, trunc_voxels: float = 12.0, tsdf_memory_gb: float = 8.0, fusion=None,
-                 refine: str = "none") -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+                 refine: str = "none", min_views: str | int = "auto") -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Depth, fusion and mesh for one SfM model -> its result record."""
     import open3d as o3d
 
@@ -243,8 +253,9 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     fused_frames = [(depths[i], rgb[i], cams[i]) for i in range(n)]
     tsdf_kw = {"voxel": voxel, "depth_max": float(np.percentile(valid, 99.5)), "trunc_voxels": trunc_voxels,
                "memory_gb": tsdf_memory_gb}  # fmt: skip
+    wt = extraction_weight(min_views, n)
     if fusion is not None:  # in a child process: an Open3D CUDA fault cannot poison this one
-        f = fusion.fuse(fused_frames, **tsdf_kw)
+        f = fusion.fuse(fused_frames, weight_threshold=wt, **tsdf_kw)
         voxel = f["voxel"]
         mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(f["vertices"]), o3d.utility.Vector3iVector(f["triangles"]))
         if f["vertex_colors"] is not None:
@@ -256,8 +267,8 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     else:
         vbg, voxel = tsdf_fuse(fused_frames, **tsdf_kw)
         active, capacity = int(vbg.hashmap().size()), int(vbg.hashmap().capacity())
-        mesh = vbg.extract_triangle_mesh().to_legacy()
-        pcd = vbg.extract_point_cloud().to_legacy()
+        mesh = vbg.extract_triangle_mesh(weight_threshold=wt).to_legacy()
+        pcd = vbg.extract_point_cloud(weight_threshold=wt).to_legacy()
         del vbg
     log.info("dense %s: TSDF voxel %.4g, %d active blocks of %d", name, voxel, active, capacity)
     timing["tsdf"] = time.perf_counter() - t0
@@ -277,7 +288,7 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
         "coverage_triangulated": round(tri_cov, 4),
         "coverage": round(float(np.mean([(d > 0).mean() for d in depths])), 4),
         "view_completeness": round(completeness, 4),
-        "voxel": round(voxel, 6), "mesh": str(mdir / "mesh.ply"), "points": str(mdir / "points.ply"),
+        "voxel": round(voxel, 6), "weight_threshold": wt, "mesh": str(mdir / "mesh.ply"), "points": str(mdir / "points.ply"),
         "depth_previews": str(mdir / "depth"),
         "mesh_vertices": len(mesh.vertices), "mesh_triangles": len(mesh.triangles), "num_points": len(pcd.points),
         "mono": fill_info, "timing_s": {k: round(v, 2) for k, v in timing.items()},
@@ -303,6 +314,7 @@ def run_dense(
     tsdf_memory_gb: float = 8.0,
     isolate_fusion: str = "auto",
     refine: str = "none",
+    min_views: str | int = "auto",
 ) -> dict:
     import torch
 
@@ -325,7 +337,8 @@ def run_dense(
             results.append(_dense_model(model_dir, images, out_dir, raft, mono, long_side=long_side, gaps=gaps,
                                         keyframe_stride=keyframe_stride, min_angle_deg=min_angle_deg, rel_tol=rel_tol,
                                         voxel_px=voxel_px, trunc_voxels=trunc_voxels,
-                                        tsdf_memory_gb=tsdf_memory_gb, fusion=fusion, refine=refine))  # fmt: skip
+                                        tsdf_memory_gb=tsdf_memory_gb, fusion=fusion, refine=refine,
+                                        min_views=min_views))  # fmt: skip
         except RuntimeError as exc:  # a CUDA / Open3D failure on one model must not lose the others (FusionError too)
             log.warning("dense %s failed: %s", model_dir.name, str(exc)[:300])
             results.append({"model": str(model_dir), "status": "failed", "error": str(exc)[:300]})

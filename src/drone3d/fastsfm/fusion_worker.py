@@ -46,10 +46,11 @@ def _serve(conn) -> None:  # type: ignore[no-untyped-def]
         try:
             import open3d.core as o3c
 
+            wt = float(kw.pop("weight_threshold", 3.0))  # Open3D's default
             vbg, voxel = tsdf_fuse(frames, **kw)
             active, capacity = int(vbg.hashmap().size()), int(vbg.hashmap().capacity())
-            mesh = vbg.extract_triangle_mesh().to_legacy()
-            pcd = vbg.extract_point_cloud().to_legacy()
+            mesh = vbg.extract_triangle_mesh(weight_threshold=wt).to_legacy()
+            pcd = vbg.extract_point_cloud(weight_threshold=wt).to_legacy()
             out = {
                 "voxel": float(voxel), "active": active, "capacity": capacity,
                 "vertices": np.asarray(mesh.vertices, dtype=np.float64),

@@ -124,6 +124,11 @@ class DenseConfig:
     # none | guided | fgs: edge-aware refinement of the fused depth (OpenCV ximgproc) before fusion; on Jal Mahal it
     # cost completeness (0.83 -> 0.66-0.72 on the lake model), so it is off (experiments/depth_refine_ab.py)
     refine: str = "none"
+    # Depth maps that must see a voxel before it becomes surface. Open3D's default extraction asks for 4 (weight
+    # > 3); then Jal Mahal's models covered 0.23-0.91 of their views and small montage shots came out empty.
+    # auto: 2 for models of up to 12 depth maps, else 3 -- 8-65 / 3-12 points of completeness for <= 0.1 % more
+    # depth error; 2 on large models stacks layers in the far field (experiments/tsdf_weight.py).
+    min_views: str = "auto"
     min_model_images: int = 3  # SfM models with fewer registered keyframes are skipped
 
 

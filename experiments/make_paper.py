@@ -200,6 +200,27 @@ def fast_section(macros: dict[str, str]) -> list[str]:
                            "time and budget (1.5$\\times$ video length). The adopted setting is the adaptive rate with absolute overlap.",
                            "tab:fastruns", ["Video", "Analysis", "Overlap", "KF", "Reg.", "Compl.", "Time (s)", "Budget (s)"],
                            rows, "lllrrrrr", wide=True))  # fmt: skip
+    ded = load(FIG / "fast_dedicated_runs.json")
+    if ded:
+        rows, ok_n = [], 0
+        for _run, r in sorted(ded.items(), key=lambda kv: kv[1]["processing"]["video_seconds"]):
+            p = r["processing"]
+            ok = p["seconds"] <= p["budget_seconds"]
+            ok_n += ok
+            name = re.split(r"[｜|：:]| - |\\[", r["video"])[0].strip()[:30]
+            rows.append([tex(name), f"{p['video_seconds']:.0f}", fmt(r["keyframes"]), f"{r['registered']}/{r['keyframes']}",
+                         fmt(r["models"]), fmt(r["view_completeness"], 2), f"{p['seconds']:.0f}", f"{p['budget_seconds']:.0f}",
+                         f"{p['seconds'] / p['video_seconds']:.2f}" + (" \\checkmark" if ok else "")])  # fmt: skip
+        macros["DedWithinBudget"] = f"{ok_n} of {len(rows)}"
+        parts.append(
+            "\\paragraph{All sample videos, idle GPU.} With the A100 to itself, the fast profile processed "
+            f"{macros['DedWithinBudget']} sample videos within the budget (Table~\\ref{{tab:dedicated}}); the last column is "
+            "processing seconds per second of video, against the budget's 1.5.\n"
+        )
+        parts.append(table("Fast profile on the sample videos, idle A100: length, keyframes, registration, models (one per "
+                           "pass), view completeness, processing time, budget and seconds per video second.",
+                           "tab:dedicated", ["Video", "s", "KF", "Reg.", "Models", "Compl.", "Time (s)", "Budget (s)", "s/s"],
+                           rows, "lrrrrrrrr", wide=True))  # fmt: skip
     geo = load(FIG / "fast_georef_e2e.json")
     if geo:
         rows, near = [], []
@@ -491,7 +512,7 @@ def main() -> None:
             f"\\providecommand{{\\{k}}}{{{DASH}}}\n"
             for k in ("ScaleErrMax", "RaftSpeedup", "ControlSNR", "DriftChained", "DriftDirect", "FastQutubSeconds",
                       "FastQutubBudget", "FastQutubCompl", "FastJalSeconds", "FastJalBudget", "FastJalCompl",
-                      "GeoNearTrack", "FlowSfmCentre", "FlowSfmRot")
+                      "GeoNearTrack", "FlowSfmCentre", "FlowSfmRot", "DedWithinBudget")
             if k not in macros
         )
     )

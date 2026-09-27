@@ -781,7 +781,14 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
         if "gpu" in stored:
             gpu[stage] = {
                 k: stored["gpu"].get(k)
-                for k in ("util_mean", "power_mean_w", "memory_peak_gb", "shared_gpu")
+                for k in (
+                    "util_mean",
+                    "power_mean_w",
+                    "memory_peak_gb",
+                    "own_memory_peak_gb",
+                    "host_rss_peak_gb",
+                    "shared_gpu",
+                )
             }
             gpu[stage]["duration_s"] = stored.get("duration_s")
     if gpu:

@@ -14,7 +14,7 @@ run_name: fast
 stages: [ingest, keyframes, sfm, dense, georef, export, metrics, report]
 keyframes:
   output_long_side: 1920
-  # View completeness (exact, ray cast) vs processing time, shared A100:
+  # View completeness (exact, ray cast) vs processing time (A100, warm engine):
   #                         Jal Mahal 55 s (budget 82)   Qutub Minar 187 s (budget 281)
   #   absolute, 12 fps      0.82 / 262 s                 0.81 / 307 s
   #   absolute, adaptive    0.78 / 147 s  (3.0 fps)      0.75 / 243 s  (3.3 fps)

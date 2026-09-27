@@ -132,7 +132,7 @@ def fuse_depths(depths: torch.Tensor, weights: torch.Tensor, *, rel_tol: float =
 
 def _surface_blocks(frames: list[tuple[np.ndarray, np.ndarray, Camera]], block: float, depth_max: float, step: int = 1) -> int:
     """Number of distinct TSDF blocks the depth maps' surface points fall into (subsampled pixels)."""
-    keys = set()
+    keys = []
     for depth, _, cam in frames:
         d = depth[::step, ::step]
         ys, xs = np.nonzero((d > 0) & (d < depth_max))
@@ -141,8 +141,9 @@ def _surface_blocks(frames: list[tuple[np.ndarray, np.ndarray, Camera]], block: 
         z = d[ys, xs].astype(np.float64)
         pc = np.stack([(xs * step + 0.5 - cam.cx) / cam.f * z, (ys * step + 0.5 - cam.cy) / cam.f * z, z], 1)
         pw = (pc - cam.translation) @ cam.rotation  # R^T (pc - t)
-        keys.update(map(tuple, np.unique(np.floor(pw / block).astype(np.int64), axis=0)))
-    return len(keys)
+        b = np.floor(pw / block).astype(np.int64) + (1 << 20)  # 21 bits per axis, packed into one int64
+        keys.append(np.unique((b[:, 0] << 42) | (b[:, 1] << 21) | b[:, 2]))
+    return int(len(np.unique(np.concatenate(keys)))) if keys else 0
 
 
 def tsdf_fuse(

@@ -82,16 +82,22 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         p = np.asarray(pcd.points)
         pc = (np.asarray(pcd.colors) * 255).astype(np.uint8) if pcd.has_colors() else None
         rec = pycolmap.Reconstruction(m["model"])
-        cams = np.array([im.projection_center() for im in sorted(rec.images.values(), key=lambda i: i.name) if im.has_pose])
+        posed = [im for im in sorted(rec.images.values(), key=lambda i: i.name) if im.has_pose]
+        cams = np.array([im.projection_center() for im in posed])
+        # initial viewer pose: the middle keyframe's camera, looking at the model's median depth
+        mid = posed[len(posed) // 2]
+        axis = mid.cam_from_world().rotation.matrix()[2]  # optical axis in world coordinates
+        depth_med = float(np.median((p - cams[len(posed) // 2]) @ axis)) if len(p) else 1.0
+        view = np.array([cams[len(posed) // 2], cams[len(posed) // 2] + depth_med * axis])
         geo = geo_by_model.get(m["model"])
         if geo is not None:
             tr = geo["transform"]
             t = SimilarityTransform(scale=tr["scale"], rotation=np.asarray(tr["rotation"]), translation=np.asarray(tr["translation"]))
-            v, p, cams, scale = t.apply(v), t.apply(p), t.apply(cams), float(t.scale)
+            v, p, cams, view, scale = t.apply(v), t.apply(p), t.apply(cams), t.apply(view), float(t.scale)
             units, frame = "m", "ENU"
         else:
             rot = _level(p, cams)
-            v, p, cams, scale = v @ rot.T, p @ rot.T, cams @ rot.T, 1.0
+            v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
             units, frame = "model units", "SfM (levelled, not georeferenced)"
         files = write_mesh(v, f, vc, mdir / "mesh", tuple(x for x in mesh_formats if x != "fbx"))
         if "fbx" in mesh_formats:
@@ -122,6 +128,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             "name": f"model {name}", "mesh": f"model_{name}/mesh.glb" if "glb" in mesh_formats else None,
             "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units,
             "georeferenced": geo is not None, "up": [0, 0, 1],
+            # frame the view on the bulk of the model, not on stray far-field fragments
+            "view": {"eye": view[0].round(4).tolist(), "target": view[1].round(4).tolist()},
+            "bounds": np.vstack([np.percentile(v if len(v) else p, [2, 98], axis=0), cams.min(0), cams.max(0)]).round(4).tolist() if len(cams) else None,
             "files": [{"label": Path(r).name, "path": r} for r in rel],
             "stats": {"keyframes": m.get("keyframes"), "triangles": f"{len(f):,}", "points": f"{len(p):,}",
                       "depth coverage": f"{100 * m.get('coverage', 0):.0f} %", "frame": frame, **({"EPSG": epsg} if epsg else {})},

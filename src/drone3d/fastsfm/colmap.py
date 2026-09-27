@@ -81,7 +81,15 @@ def write_database(
 
 
 def map_tracks(
-    db_path: Path, image_dir: Path, out_dir: Path, *, mapper: str = "global", num_threads: int = 12
+    db_path: Path,
+    image_dir: Path,
+    out_dir: Path,
+    *,
+    mapper: str = "global",
+    num_threads: int = 12,
+    init_min_tri_angle: float = 2.0,
+    min_tri_angle: float = 0.5,
+    verify: bool = True,
 ) -> tuple[dict, dict]:
     """Verify the matched pairs and map them -> ``({model_id: Reconstruction}, timing)``."""
     import pycolmap
@@ -89,7 +97,8 @@ def map_tracks(
     out_dir.mkdir(parents=True, exist_ok=True)
     timing = {}
     t0 = time.perf_counter()
-    pycolmap.geometric_verification(str(db_path))
+    if verify:
+        pycolmap.geometric_verification(str(db_path))
     timing["verification_s"] = round(time.perf_counter() - t0, 2)
     t0 = time.perf_counter()
     if mapper == "global":
@@ -99,6 +108,12 @@ def map_tracks(
     elif mapper == "incremental":
         opts = pycolmap.IncrementalPipelineOptions()
         opts.num_threads = num_threads
+        # A single pass sees the scene through 0.1-1 deg between keyframes a few
+        # apart; COLMAP's defaults (16 deg to initialise, 1.5 deg to triangulate)
+        # are for photo collections and refused whole passes of our footage.
+        opts.mapper.init_min_tri_angle = init_min_tri_angle
+        opts.mapper.filter_min_tri_angle = min_tri_angle
+        opts.triangulation.min_angle = min_tri_angle
         recs = pycolmap.incremental_mapping(str(db_path), str(image_dir), str(out_dir), opts)
     else:
         raise ValueError(f"unknown mapper {mapper!r} (global | incremental)")

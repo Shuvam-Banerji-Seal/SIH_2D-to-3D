@@ -113,6 +113,7 @@ class ModelCache:
         self._wrappers: dict[tuple, Any] = {}
         self._loaders = _loaders(device)
         self.busy = 0  # runs in progress; unloading waits for zero
+        self._loading: dict[str, threading.Event] = {}
         self._pending_unload: set[str] = set()
 
     # ------------------------------------------------------------- lifecycle
@@ -129,41 +130,59 @@ class ModelCache:
             return out
 
     def load(self, key: str) -> _Entry:
-        """Load ``key`` if needed; raises :class:`InsufficientMemory` when the GPU lacks room."""
+        """Load ``key`` if needed; raises :class:`InsufficientMemory` when the GPU lacks room.
+
+        The network is built outside the cache lock (seconds for Depth Anything,
+        a minute for Marigold) so status requests never wait on it; a second
+        request for the same model waits for the first load instead of starting one.
+        """
         if key not in SPECS:
             raise KeyError(f"unknown model {key!r} ({', '.join(SPECS)})")
-        with self._lock:
-            e = self._entries[key]
-            self._pending_unload.discard(key)
-            if e.status == "loaded":
-                return e
-            free = free_bytes()
-            need = (SPECS[key].need_gb + self.reserve_gb) * GiB
-            if free is not None and free < need:
-                e.status, e.error = (
-                    "unloaded",
-                    f"needs {need / GiB:.1f} GiB free, {free / GiB:.1f} GiB is",
-                )
-                raise InsufficientMemory(f"{SPECS[key].title}: {e.error}")
-            e.status, e.error = "loading", None
-            import torch
+        while True:
+            with self._lock:
+                e = self._entries[key]
+                self._pending_unload.discard(key)
+                if e.status == "loaded":
+                    return e
+                pending = self._loading.get(key)
+                if pending is None:
+                    free = free_bytes()
+                    need = (SPECS[key].need_gb + self.reserve_gb) * GiB
+                    if free is not None and free < need:
+                        e.status, e.error = (
+                            "unloaded",
+                            f"needs {need / GiB:.1f} GiB free, {free / GiB:.1f} GiB is",
+                        )
+                        raise InsufficientMemory(f"{SPECS[key].title}: {e.error}")
+                    e.status, e.error = "loading", None
+                    done = self._loading[key] = threading.Event()
+                    break
+            pending.wait()  # someone else is loading it; then look again
+        import torch
 
-            before = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
-            t0 = time.perf_counter()
-            try:
-                e.obj = self._loaders[key]()
-                if torch.cuda.is_available():
-                    torch.cuda.synchronize()
-            except Exception as exc:
+        before = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
+        t0 = time.perf_counter()
+        try:
+            obj = self._loaders[key]()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+        except Exception as exc:
+            with self._lock:
                 e.status, e.obj, e.error = "error", None, f"{type(exc).__name__}: {exc}"
-                raise
+                self._loading.pop(key, None)
+            done.set()
+            raise
+        with self._lock:
+            e.obj = obj
             e.load_seconds = round(time.perf_counter() - t0, 2)
             e.vram_bytes = (
                 (torch.cuda.memory_allocated() - before) if torch.cuda.is_available() else 0
             )
             e.status, e.loaded_at = "loaded", time.time()
-            log.info("model %s loaded in %.2fs (%.2f GiB)", key, e.load_seconds, e.vram_bytes / GiB)
-            return e
+            self._loading.pop(key, None)
+        done.set()
+        log.info("model %s loaded in %.2fs (%.2f GiB)", key, e.load_seconds, e.vram_bytes / GiB)
+        return e
 
     def unload(self, key: str) -> str:
         """``"unloaded"``, ``"pending"`` (freed when the running job ends) or ``"not-loaded"``."""
@@ -215,17 +234,18 @@ class ModelCache:
                     self._pending_unload.clear()
 
     def _use(self, key: str) -> Any:
-        e = self.load(key)
-        e.uses += 1
-        e.last_used = time.time()
-        return e.obj
+        e = self.load(key)  # outside the lock: see load()
+        with self._lock:
+            e.uses += 1
+            e.last_used = time.time()
+            return e.obj
 
     # ------------------------------------------------------------- accessors
     def raft(self, model: str, *, batch: int, iters: int) -> Any:
         from drone3d.keyframes.flow import RaftFlow
 
+        net = self._use(model)
         with self._lock:
-            net = self._use(model)
             k = (model, batch, iters, threading.get_ident())
             if (
                 k not in self._wrappers
@@ -238,17 +258,15 @@ class ModelCache:
     def mono(self, model: str, *, long_side: int, batch: int) -> Any:
         from drone3d.fastsfm.mono import MonoDepth
 
-        with self._lock:
-            key = _MONO_KEYS.get(model)
-            if key is None:  # another checkpoint: load it uncached rather than evict the warm one
-                return MonoDepth(model, device=self.device, long_side=long_side, batch=batch)
-            return MonoDepth(
-                model, device=self.device, long_side=long_side, batch=batch, net=self._use(key)
-            )
+        key = _MONO_KEYS.get(model)
+        if key is None:  # another checkpoint: load it uncached rather than evict the warm one
+            return MonoDepth(model, device=self.device, long_side=long_side, batch=batch)
+        return MonoDepth(
+            model, device=self.device, long_side=long_side, batch=batch, net=self._use(key)
+        )
 
     def marigold(self) -> Any:
-        with self._lock:
-            return self._use("marigold_v2")
+        return self._use("marigold_v2")
 
 
 _ACTIVE: ModelCache | None = None

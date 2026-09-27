@@ -314,3 +314,33 @@ def test_restart_drains_and_keeps_the_queue(
     assert [
         r["name"] for r in json.loads((tmp_path / "outputs" / ".engine_queue.json").read_text())
     ] == ["next"]
+
+
+def test_status_is_not_blocked_by_a_slow_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    cache = _fake_cache(monkeypatch, free_gb=40.0)
+    gate = threading.Event()
+
+    def slow() -> object:
+        gate.wait(5)
+        return _Net("depth")
+
+    cache._loaders["depth_anything_v2_large"] = slow
+    loads = [
+        threading.Thread(target=cache.load, args=("depth_anything_v2_large",)) for _ in range(2)
+    ]
+    for t in loads:
+        t.start()
+    time.sleep(0.2)
+    t0 = time.time()
+    row = next(m for m in cache.status() if m["key"] == "depth_anything_v2_large")
+    assert time.time() - t0 < 0.5 and row["status"] == "loading"  # answered while the load runs
+    gate.set()
+    for t in loads:
+        t.join(5)
+    row = next(m for m in cache.status() if m["key"] == "depth_anything_v2_large")
+    assert row["status"] == "loaded"
+    assert (
+        cache._entries["depth_anything_v2_large"].obj.key == "depth"
+    )  # one load, shared by both requests

@@ -20,6 +20,8 @@ Codecs NVDEC cannot decode fall back to multithreaded CPU decoding.
 
 from __future__ import annotations
 
+import contextlib
+import functools
 import json
 import os
 import queue
@@ -36,6 +38,8 @@ from drone3d.exceptions import IngestionError
 from drone3d.logging_utils import get_logger
 
 __all__ = [
+    "letterbox_from_frames",
+    "snap_to_keyframes",
     "StreamInfo",
     "analysis_size",
     "detect_letterbox",
@@ -463,22 +467,58 @@ def scaled_crop(
     return x0, y0, x0 + w, y0 + h
 
 
+@functools.lru_cache(maxsize=64)
+def keyframe_times(path: str) -> tuple[float, ...]:
+    """Presentation times of the video's key frames, from the packet index (nothing is decoded)."""
+    out = subprocess.run([ffmpeg_bin("ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "packet=pts_time,flags", "-of", "csv=p=0", path], capture_output=True, text=True, check=False).stdout  # fmt: skip
+    keys = []
+    for line in out.splitlines():
+        t, _, flags = line.partition(",")
+        if "K" in flags:
+            with contextlib.suppress(ValueError):
+                keys.append(float(t))
+    return tuple(sorted(keys))
+
+
+def snap_to_keyframes(info: StreamInfo, times_s: Sequence[float]) -> list[float]:
+    """Move each sample time to the nearest key frame (distinct where possible).
+
+    An input seek decodes from the preceding key frame up to the requested
+    time; the sample videos' GOPs are 5.3 s, so twelve arbitrary samples of a
+    4K VP9 clip decoded ~1500 frames (6 s) to deliver twelve. On a key frame
+    a sample costs the frames it asks for.
+    """
+    keys = np.asarray(keyframe_times(str(info.path)))
+    if len(keys) < 2:
+        return list(times_s)
+    out, used = [], set()
+    for t in times_s:
+        order = np.argsort(np.abs(keys - t))
+        k = next((int(i) for i in order[:4] if int(i) not in used), int(order[0]))
+        used.add(k)
+        out.append(float(keys[k]) + 1e-3)  # just inside the key frame's display interval
+    return out
+
+
 def sample_frames(
     info: StreamInfo,
     times_s: Sequence[float],
     size: tuple[int, int],
     *,
-    hwaccel: bool = True,
-    workers: int = 3,
+    hwaccel: bool = False,
+    workers: int = 6,
 ) -> list[np.ndarray]:
-    """Decode one frame near each timestamp (fast input seek), as NV12 arrays.
+    """Decode one frame at the key frame nearest each timestamp, as NV12 arrays.
 
-    Each sample seeks to the nearest preceding key frame and decodes one frame,
-    so a dozen samples cost a few seconds however long the clip is.
+    On the CPU by default: each sample is its own ffmpeg process, and creating
+    an NVDEC context per process cost more than decoding a key frame (twelve
+    4K VP9 samples: 5.2 s with NVDEC, 2.2 s on six CPU workers).
     """
     from concurrent.futures import ThreadPoolExecutor
 
     frame_bytes = size[0] * size[1] * 3 // 2
+    times_s = snap_to_keyframes(info, times_s)
 
     def one(t: float) -> np.ndarray | None:
         cmd = _ffmpeg_cmd(info, size, [], hwaccel, ("-ss", f"{max(0.0, t):.3f}"))
@@ -497,18 +537,20 @@ def sample_pairs(
     size: tuple[int, int],
     gap_frames: int,
     *,
-    hwaccel: bool = True,
-    workers: int = 3,
+    hwaccel: bool = False,
+    workers: int = 6,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
     """Frame pairs ``gap_frames`` apart starting near each timestamp, as NV12 arrays.
 
-    One seek per pair (``gap + 1`` frames decoded), so both frames of a pair come
-    from the same decode and a failed sample drops the whole pair, never half.
+    One seek per pair, starting on the key frame nearest each timestamp
+    (``gap + 1`` frames decoded), so both frames of a pair come from the same
+    decode and a failed sample drops the whole pair, never half.
     """
     from concurrent.futures import ThreadPoolExecutor
 
     frame_bytes = size[0] * size[1] * 3 // 2
     need = gap_frames + 1
+    times_s = snap_to_keyframes(info, times_s)
 
     def one(t: float) -> tuple[np.ndarray, np.ndarray] | None:
         cmd = _ffmpeg_cmd(info, size, [], hwaccel, ("-ss", f"{max(0.0, t):.3f}"))
@@ -529,7 +571,7 @@ def detect_letterbox(
     *,
     samples: int = 12,
     threshold: float = 24.0,
-    hwaccel: bool = True,
+    hwaccel: bool = False,
 ) -> tuple[int, int, int, int] | None:
     """Source-pixel rectangle inside black letterbox / pillarbox bars, or ``None``.
 
@@ -539,10 +581,15 @@ def detect_letterbox(
     more than half the frame (a dark video, not bars).
     """
     size = analysis_size(info.width, info.height, 640, multiple=2)
-    w, h = size
     duration = info.duration_s or info.num_frames / max(info.fps, 1e-9)
     times = [duration * (k + 0.5) / samples for k in range(samples)]
-    frames = sample_frames(info, times, size, hwaccel=hwaccel)
+    return letterbox_from_frames(info, sample_frames(info, times, size, hwaccel=hwaccel), size, threshold=threshold)
+
+
+def letterbox_from_frames(info: StreamInfo, frames: Sequence[np.ndarray], size: tuple[int, int], *,
+                          threshold: float = 24.0) -> tuple[int, int, int, int] | None:  # fmt: skip
+    """:func:`detect_letterbox` on NV12 frames already decoded at ``size`` (e.g. the motion probe's)."""
+    w, h = size
     if not frames:
         return None
     luma = np.stack([f[: w * h].reshape(h, w) for f in frames]).astype(np.float32)

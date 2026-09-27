@@ -67,7 +67,9 @@ browser ──HTTP── drone3d ui (FastAPI, no torch) ──HTTP── drone3d
   `models.marigold()`. Outside the engine these build and free a network per use,
   exactly as before; inside it the network stays on the GPU, one network serves
   every batch size and slot, and RAFT's CUDA graphs are captured once per
-  resolution and slot. A model loads only if NVML shows its footprint plus
+  resolution and slot -- the three most recently used shapes are kept, since
+  each graph holds a private memory pool (1-1.5 GB at 16 pairs of 480 px) that
+  `empty_cache` cannot return. A model loads only if NVML shows its footprint plus
   `--reserve-gb` free; loading happens outside the cache lock; unloading waits
   for the runs using it.
 - **Jobs** (`engine/service.py`): `--slots N` runs at once (1 is how a video's

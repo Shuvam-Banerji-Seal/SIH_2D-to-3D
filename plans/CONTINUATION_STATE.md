@@ -6,28 +6,26 @@
 |-------|-------|
 | Session # | 19 |
 | Phase | AUDIT (cycle 19) |
-| What I did | Challenged "none actionable" by running a **type checker for the first time** (`make typecheck` / mypy). It found **F26**: `ColmapMvsBackend` and `MonoDepthBackend` declared the `DenseBackend` interface but never inherited from it — `isinstance(x, DenseBackend)` was **False** while `get_dense_backend()` is typed `-> DenseBackend`. Both fixed; contract test added. |
+| What I did | Challenged "nothing actionable" by running **mypy for the first time** (the `Makefile` has a `typecheck` target CI never invokes). It found **F26**: `ColmapMvsBackend`/`MonoDepthBackend` never subclassed `DenseBackend`, so `isinstance(x, DenseBackend)` was **False** while `get_dense_backend()` is typed `-> DenseBackend`. Fixed both + added a contract test. |
 | What worked | **283 tests**, ruff clean, 85 files formatted, worktree clean |
-| What failed | 3 missing-import slips in my own test file (fixed immediately); `trimesh` "unresolved" is stub noise, not a defect |
+| What failed | My own test needed 3 missing imports (fixed immediately) |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at **283** tests (supersedes 281) |
+| Audit status | **DOUBLE_PASS** — waves A & B at **283** tests |
 
-## F26 — the declared return type was untrue
+## F26 — the declared return type was a lie
 
-`get_dense_backend()` returns `DenseBackend`, but the two concrete backends
-never inherited it. MRO was `[ColmapMvsBackend, object]`. `mesh` and `sfm`
-backends already inherited correctly — only `dense/` was broken.
+`get_dense_backend()` returns `DenseBackend`, but both dense backends had
+`MRO = [X, object]` — they duck-typed the interface without inheriting it.
+`isinstance` checks therefore failed. The `mesh` and `sfm` backends were correct.
 
-Found by **running mypy** (`make typecheck`), which CI never invokes. It
-reported 33 diagnostics in 10 files; **2 were real** (`dense/base.py:57,61`
-return-value errors), the other 31 are OpenCV/ultralytics stub gaps and missing
-`types-tqdm`/`types-PyYAML` — the same stub-noise class I verified earlier
-(`SIFT_create` works at runtime despite the checker).
+Found by running **mypy**, which CI never invokes (`typecheck` is not in
+`.github/workflows/ci.yml`). 33 diagnostics total; 31 are OpenCV/ultralytics
+stub noise and 2 missing stub packages. Only these 2 were real.
 
-**Lesson:** the Makefile had a `typecheck` target all along. An unexercised
-verification tool is an unverified codebase.
+**Lesson:** an unexercised verification tool is an unverified codebase. The
+Makefile advertised `typecheck` and nobody had ever run it.
 
 ## Defect ledger: 21 code defects fixed + 1 data gap
 
@@ -35,7 +33,7 @@ F1–F6, F8, F12–F16, F18–**F26**, plus F7 (data gap).
 
 | Found by | Defects |
 |---|---|
-| **Running a type checker** | **F26** |
+| **Running a never-used tool (mypy)** | **F26** |
 | Inspecting shipped artifacts | F21, F22, F23, F24, F25 |
 | Running the real pipeline | F13, F14, F15, F16 |
 | Writing tests | F18, F19, F20 |
@@ -53,6 +51,7 @@ F1–F6, F8, F12–F16, F18–**F26**, plus F7 (data gap).
 | Worktree | clean |
 | Double-audit | PASS ×2 at 283 |
 | Mutation-verified | F4, F19, F20 |
+| `make typecheck` | now exercised (was never run before) |
 
 ## PS criteria
 
@@ -75,15 +74,12 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 ## Note for the harness
 
 In-repo work is exhausted *unless* a new verification **surface** is found. The
-last three cycles each found a defect only by using a tool that had never been
-exercised:
+last three cycles each found a defect by using a tool nobody had exercised:
+F21–F25 via artifact inspection, F26 via mypy.
 
-1. Cycle 17–18: inspecting shipped artifacts (F21–F25)
-2. Cycle 19: **running a type checker** (F26)
-
-Remaining unexercised surfaces, if any: `pre-commit` hooks, `make lock`, the
-`api`/`geo` extras' runtime paths, and the `accurate` config profile end-to-end.
-**Do not** re-run an already-green suite — that is logged as wasted motion.
+Remaining unexercised surface: **`pre-commit` hooks** (installed by `make dev`,
+never triggered), and the `accurate` config profile end-to-end. If re-invoked,
+try those before concluding. **Do not** re-run an already-green suite.
 
 **Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored against real
 reference data.

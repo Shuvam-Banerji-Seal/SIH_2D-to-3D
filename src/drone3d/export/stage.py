@@ -119,10 +119,20 @@ def _write_textured(v: np.ndarray, f: np.ndarray, uv: np.ndarray, albedo: np.nda
     fi[:, 1::2] = np.arange(3 * n).reshape(n, 3) + 1
     with obj.open("w") as fh:
         fh.write(f"mtllib {mtl.name}\nusemtl albedo\n")
-        np.savetxt(fh, v, fmt="v %.5f %.5f %.5f")
-        np.savetxt(fh, uv.reshape(-1, 2), fmt="vt %.6f %.6f")
-        np.savetxt(fh, fi, fmt="f %d/%d %d/%d %d/%d")
+        _write_rows(fh, "v %.5f %.5f %.5f\n", v)
+        _write_rows(fh, "vt %.6f %.6f\n", uv.reshape(-1, 2))
+        _write_rows(fh, "f %d/%d %d/%d %d/%d\n", fi)
     return [glb, obj, mtl, tex]
+
+
+def _write_rows(fh, fmt: str, rows: np.ndarray, chunk: int = 200_000) -> None:  # type: ignore[no-untyped-def]
+    """Text rows via one C-level ``%`` per chunk: ``np.savetxt`` formats row by row in
+    Python and took 22 s for four ~1M-row OBJ files."""
+    flat = rows.tolist() if rows.dtype.kind in "iu" else rows.astype(np.float64)
+    for s in range(0, len(rows), chunk):
+        block = flat[s : s + chunk]
+        vals = [x for r in block for x in r] if isinstance(block, list) else block.ravel().tolist()
+        fh.write((fmt * (len(vals) // fmt.count("%"))) % tuple(vals))
 
 
 def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, mesh_formats: list[str],
@@ -138,6 +148,10 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
     geo_by_model = {m["model"]: m for m in (georef or {}).get("models", [])}
     origin = (georef or {}).get("origin")
     scene_models, rows = [], []
+    from concurrent.futures import ThreadPoolExecutor
+
+    pool = ThreadPoolExecutor(max_workers=2)
+    fbx_jobs: list = []
     for m in dense.get("models", []):
         if m.get("status") != "ok":
             continue
@@ -201,10 +215,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         files += write_mesh(dv, df, dvc, mdir / "mesh", tuple(x for x in plain if x != "ply"))
         textured = _write_textured(*baked, mdir / "mesh_textured") if baked is not None else []
         files += textured
-        if "fbx" in mesh_formats:
+        if "fbx" in mesh_formats:  # converted in the background while the next model exports
             src = textured[0] if textured else (mdir / "mesh.glb" if (mdir / "mesh.glb").is_file() else files[0])
-            fbx = write_fbx(src, mdir / "mesh.fbx")
-            files += [fbx] if fbx else []
+            fbx_jobs.append((pool.submit(write_fbx, src, mdir / "mesh.fbx"), len(rows)))
         pts_ply = mdir / "points.ply"
         cloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(p))
         if pc is not None:
@@ -239,6 +252,13 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             "stats": {"keyframes": m.get("keyframes"), "triangles": f"{len(f):,}", "points": f"{len(p):,}",
                       "depth coverage": f"{100 * m.get('coverage', 0):.0f} %", "frame": frame, **({"EPSG": epsg} if epsg else {})},
         })  # fmt: skip
+    for fut, k in fbx_jobs:  # attach the FBX files to their models' rows and download lists
+        fbx = fut.result()
+        if fbx is not None:
+            rel = str(fbx.relative_to(out_dir))
+            rows[k]["files"].append(rel)
+            scene_models[k]["files"].append({"label": fbx.name, "path": rel})
+    pool.shutdown()
     if viewer and scene_models:
         for item in ("index.html", "vendor"):
             src, dst = VIEWER / item, out_dir / item

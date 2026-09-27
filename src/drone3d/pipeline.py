@@ -418,6 +418,7 @@ class Pipeline:
             rel_tol=cfg.rel_tol,
             mono_model=cfg.mono_model,
             voxel_px=cfg.voxel_px,
+            trunc_voxels=cfg.trunc_voxels,
         )
         _write_json(self._stage_dir("dense") / "result.json", payload)
         ok = [m for m in payload["models"] if m.get("status") == "ok"]

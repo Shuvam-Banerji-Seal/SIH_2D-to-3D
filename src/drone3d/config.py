@@ -109,7 +109,13 @@ class DenseConfig:
     min_angle_deg: float = 0.5
     rel_tol: float = 0.05
     mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf"  # null: triangulated depth only
-    voxel_px: float = 2.0  # TSDF voxel in pixel footprints at the median depth
+    # TSDF: the truncation band drives completeness. Jal Mahal's two largest models, band 4 -> 12
+    # voxels: completeness 0.47 -> 0.80 and 0.75 -> 0.91 (depth maps cover all non-sky pixels, but
+    # neighbouring views disagree slightly and a narrow band lets them cancel), median depth error
+    # against the triangulated depth 0.42 -> 0.60 % and 0.92 -> 1.09 %. 3 px voxels match 2 px with
+    # fewer triangles.
+    voxel_px: float = 3.0  # TSDF voxel in pixel footprints at the median depth
+    trunc_voxels: float = 12.0
     min_model_images: int = 3
 
 

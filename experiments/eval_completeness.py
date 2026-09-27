@@ -52,7 +52,8 @@ def main() -> None:
             disp = mono(frames).cpu().numpy()
             sky = disp <= 0.005 * np.maximum(disp.reshape(len(disp), -1).max(1), 1e-6)[:, None, None]
             mesh = o3d.io.read_triangle_mesh(m["mesh"])
-            share = view_coverage(np.asarray(mesh.vertices), cams, (frames.shape[2], frames.shape[1]), sky)
+            share = view_coverage(np.asarray(mesh.vertices), np.asarray(mesh.triangles), cams,
+                                  (frames.shape[2], frames.shape[1]), sky)  # fmt: skip
             weighted += share * len(ims)
             views += len(ims)
             tris += len(mesh.triangles)

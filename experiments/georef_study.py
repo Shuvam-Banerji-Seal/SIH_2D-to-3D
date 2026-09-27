@@ -19,7 +19,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-
+import drone3d  # noqa: E402, F401  (first: undoes OpenMP thread binding before torch loads)
 from drone3d.geo.georef import SimilarityTransform, solve_georef, solve_similarity  # noqa: E402
 
 TRIALS = 20

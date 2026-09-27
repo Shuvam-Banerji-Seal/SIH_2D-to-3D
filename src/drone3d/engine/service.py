@@ -386,6 +386,95 @@ class Engine:
         self.cache.unload_all()
 
 
+def _check(fn) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+    t0 = time.perf_counter()
+    try:
+        detail = fn()
+        return {"ok": True, "detail": detail, "ms": round(1e3 * (time.perf_counter() - t0), 1)}
+    except Exception as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {str(exc)[:160]}"}
+
+
+def capabilities(repo: Path) -> dict[str, Any]:
+    """What this machine can do, checked for real: codecs, libraries, binaries and weights."""
+    import subprocess
+
+    def torch_cuda() -> str:
+        import torch
+
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA not available")
+        p = torch.cuda.get_device_properties(0)
+        return f"torch {torch.__version__}, CUDA {torch.version.cuda}, {p.name}, {p.total_memory / GiB:.0f} GiB"
+
+    def nvjpeg() -> str:
+        import cv2
+        import numpy as np
+        import torch
+        from torchvision.io import decode_jpeg
+
+        ok, buf = cv2.imencode(".jpg", np.zeros((64, 64, 3), np.uint8))
+        decode_jpeg(torch.from_numpy(buf.ravel()), device="cuda")
+        return "GPU JPEG decode (torchvision / nvJPEG)"
+
+    def ffmpeg(kind: str) -> str:
+        from drone3d.io.nvdec import ffmpeg_bin
+
+        exe = ffmpeg_bin()
+        if kind == "nvdec":
+            out = subprocess.run([exe, "-hide_banner", "-hwaccels"], capture_output=True, text=True, timeout=10).stdout
+            if "cuda" not in out:
+                raise RuntimeError("ffmpeg has no cuda hwaccel")
+            return f"{Path(exe).parent.parent.name or 'ffmpeg'}: -hwaccel cuda"
+        out = subprocess.run([exe, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=10).stdout
+        if "h264_nvenc" not in out:
+            raise RuntimeError("ffmpeg has no h264_nvenc")
+        return "h264_nvenc, hevc_nvenc"
+
+    def open3d() -> str:
+        import open3d as o3d
+
+        if not o3d.core.cuda.is_available():
+            raise RuntimeError(f"Open3D {o3d.__version__} without CUDA")
+        return f"Open3D {o3d.__version__}, CUDA TSDF"
+
+    def pycolmap() -> str:
+        import pycolmap as pc
+
+        return f"pycolmap {pc.__version__}, global mapper {'yes' if hasattr(pc, 'global_mapping') else 'no'}"
+
+    def spirula() -> str:
+        from drone3d.splat.spirula import spirula_binary
+
+        return str(spirula_binary().relative_to(repo)) if spirula_binary().is_relative_to(repo) else str(spirula_binary())
+
+    def meshconv() -> str:
+        exe = repo / ".tools" / "bin" / "meshconv"
+        if not exe.is_file():
+            raise FileNotFoundError("build with tools/build_meshconv.sh")
+        return "assimp FBX writer (.tools/bin/meshconv)"
+
+    def weights(path: Path, what: str) -> str:
+        if not path.exists():
+            raise FileNotFoundError(str(path))
+        return what
+
+    hf = Path(os.environ.get("HF_HUB_CACHE", "/store/huggingface"))
+    return {
+        "cuda": _check(torch_cuda),
+        "nvdec": _check(lambda: ffmpeg("nvdec")),
+        "nvenc": _check(lambda: ffmpeg("nvenc")),
+        "nvjpeg": _check(nvjpeg),
+        "open3d": _check(open3d),
+        "pycolmap": _check(pycolmap),
+        "spirula": _check(spirula),
+        "meshconv": _check(meshconv),
+        "depth_anything": _check(lambda: weights(hf / "models--depth-anything--Depth-Anything-V2-Large-hf",
+                                                 "Depth Anything V2 Large weights")),  # fmt: skip
+        "marigold": _check(lambda: weights(Path("/store/huggingface/marigold-v2"), "Marigold v2 + Qwen weights")),
+    }
+
+
 def create_engine_app(engine: Engine):  # type: ignore[no-untyped-def]
     """The engine's HTTP control API (FastAPI)."""
     from fastapi import FastAPI, HTTPException
@@ -399,6 +488,14 @@ def create_engine_app(engine: Engine):  # type: ignore[no-untyped-def]
     @app.get("/status")
     def status() -> dict:
         return engine.status()
+
+    caps: dict[str, Any] = {}
+
+    @app.get("/capabilities")
+    def get_capabilities() -> dict:
+        if not caps:
+            caps.update(capabilities(engine.repo))
+        return caps
 
     @app.post("/models/{key}/load")
     def load(key: str) -> dict:

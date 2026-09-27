@@ -70,6 +70,36 @@ def facts(run: Path) -> tuple[dict, dict]:
     if geo:
         f["scale_err"] = f"{100 * max(r['scale_rel_err'] for r in geo):.1f} %"
         src["scale_err"] = "paper/figures/georef_study.json (simulation)"
+    # fast profile (the deliverable): poses from flow, fused textured mesh, time vs budget
+    ff = load(ROOT / "paper" / "figures" / "fast_flow_sfm.json")
+    if ff and ff.get("rows"):
+        final = next((r for r in ff["rows"] if r["tracks"].startswith("960") and r["mapper"] == "global"), ff["rows"][-1])
+        f["pose_agreement"] = f"{100 * final['centre_rmse_rel_extent']:.1f} %"
+        src["pose_agreement"] = "paper/figures/fast_flow_sfm.json (camera centres vs SIFT SfM, share of the flight extent)"
+    dense = load(run / "dense" / "result.json")
+    if dense and dense.get("models"):
+        tri = sum(m.get("mesh_triangles") or 0 for m in dense["models"] if m.get("status") == "ok")
+        f["triangles"] = f"{tri / 1e6:.1f} million" if tri >= 1e6 else f"{tri:,}"
+        src["triangles"] = str(run / "dense/result.json")
+    for name in ("dedicated_completeness.json", "fast_completeness.json"):
+        comp = (load(ROOT / "paper" / "figures" / name) or {}).get(run.name)
+        if comp and comp.get("view_completeness") is not None:
+            f["completeness"] = f"{100 * comp['view_completeness']:.0f} %"
+            src["completeness"] = f"paper/figures/{name} (non-sky pixels of the keyframes covered by the mesh)"
+            break
+    metrics = load(run / "metrics" / "metrics.json") or {}
+    proc = metrics.get("processing") or {}
+    if proc.get("seconds") and proc.get("video_seconds"):
+        f["proc_time"] = f"{proc['seconds']:.0f} s"
+        f["video_len"] = f"{proc['video_seconds']:.0f} s"
+        src["proc_time"] = str(run / "metrics/metrics.json")
+    geo_e2e = load(ROOT / "paper" / "figures" / "fast_georef_e2e.json")
+    if geo_e2e:
+        near = [((m.get("mesh_error_m") or {}).get("by_distance_from_track") or {}).get("0-100 m", {}).get("median") for m in geo_e2e["models"]]
+        near = [x for x in near if x is not None]
+        if near:
+            f["near_track"] = f"{min(near):.1f}–{max(near):.1f} m"
+            src["near_track"] = "paper/figures/fast_georef_e2e.json (synthetic GPS on real models, median within 100 m of the track)"
     bench = load(ROOT / "paper" / "figures" / "bench_gpu.json")
     fps = ((bench or {}).get("decode", {}).get("ffmpeg9_nvdec") or {}).get("source_fps")
     if fps:

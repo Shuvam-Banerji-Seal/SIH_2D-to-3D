@@ -149,10 +149,16 @@ def main() -> None:
             sources[s["id"]] = fit_image(
                 run_dir / "keyframes" / "keyframe_timeline.png", out, w, h, dur
             )
+        elif s["id"] == "depth" and (BUILD / "depth_tiles.mp4").is_file():  # fast profile (promo/assets.py)
+            sources[s["id"]] = fit_video(BUILD / "depth_tiles.mp4", out, w, h, 0.0, dur)
         elif s["id"] == "depth":
             made = depth_strip(run_dir, out, w, h, dur)
             if made:
                 sources[s["id"]] = made
+        elif s["id"] == "splat_inset" and (BUILD / "model_inset.mp4").is_file():
+            sources[s["id"]] = fit_video(BUILD / "model_inset.mp4", out, w, h, 0.0, dur)
+        elif s["id"] == "flythrough" and (BUILD / "flythrough.mp4").is_file():
+            sources[s["id"]] = fit_video(BUILD / "flythrough.mp4", out, w, h, 0.0, dur)
         elif s["id"] in ("splat_inset", "flythrough") and fly:
             sources[s["id"]] = fit_video(
                 fly, out, w, h, 0.0 if s["id"] == "splat_inset" else 1.0, dur

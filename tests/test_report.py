@@ -1,4 +1,4 @@
-"""Tests for the HTML report content and the backend factory functions.
+"""Tests for the HTML report content and the pipeline's run-directory bookkeeping.
 
 The report was previously only asserted to *exist* (`.is_file()`), which would
 pass even if it rendered empty -- criterion 9 needs its *content* verified.
@@ -9,15 +9,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from drone3d.config import DenseConfig, MeshConfig, SfMConfig, load_config
-from drone3d.dense.base import NullDenseBackend, get_dense_backend
-from drone3d.exceptions import BackendUnavailable, ConfigError
-from drone3d.mesh.base import NullMeshBackend, get_mesh_backend
+from drone3d.config import load_config
 from drone3d.pipeline import Pipeline
 from drone3d.report.html import generate_report, make_contact_sheet
-from drone3d.sfm.base import NullSfMBackend, get_sfm_backend
 from drone3d.types import Artifact, PipelineResult, StageReport
 
 
@@ -134,74 +128,6 @@ def test_contact_sheet_of_missing_images_is_empty(tmp_path: Path) -> None:
     assert make_contact_sheet([tmp_path / "nope.jpg"], tmp_path / "sheet.jpg") is None
 
 
-# --- backend factories -----------------------------------------------------
-
-
-@pytest.mark.parametrize("name", ["none", "null", "off", "NONE"])
-def test_dense_factory_null_backends(name: str) -> None:
-    assert isinstance(get_dense_backend(name), NullDenseBackend)
-
-
-def test_dense_factory_known_backends() -> None:
-    assert get_dense_backend("mvs").name == "mvs"
-    assert get_dense_backend("mono").name == "mono"
-
-
-def test_dense_factory_rejects_unknown() -> None:
-    with pytest.raises(ConfigError, match="unknown dense backend"):
-        get_dense_backend("bogus")
-
-
-def test_null_dense_backend_raises_on_use(tmp_path: Path) -> None:
-    with pytest.raises(BackendUnavailable):
-        NullDenseBackend().reconstruct(
-            tmp_path,
-            None,
-            tmp_path / "out",
-            DenseConfig(),  # type: ignore[arg-type]
-        )
-
-
-@pytest.mark.parametrize("name", ["none", "null", "off"])
-def test_mesh_factory_null_backends(name: str) -> None:
-    assert isinstance(get_mesh_backend(name), NullMeshBackend)
-
-
-def test_mesh_factory_known_backends() -> None:
-    assert get_mesh_backend("poisson").name == "colmap"
-    assert get_mesh_backend("delaunay").name == "colmap"
-    assert get_mesh_backend("open3d").name == "open3d"
-
-
-def test_mesh_factory_rejects_unknown() -> None:
-    with pytest.raises(ConfigError, match="unknown mesh backend"):
-        get_mesh_backend("bogus")
-
-
-def test_null_mesh_backend_raises_on_use(tmp_path: Path) -> None:
-    with pytest.raises(BackendUnavailable):
-        NullMeshBackend().build(tmp_path / "c.ply", tmp_path / "i", tmp_path / "o", MeshConfig())
-
-
-@pytest.mark.parametrize("name", ["none", "null", "off"])
-def test_sfm_factory_null_backends(name: str) -> None:
-    assert isinstance(get_sfm_backend(name), NullSfMBackend)
-
-
-def test_sfm_factory_known_backend() -> None:
-    assert get_sfm_backend("colmap").name == "colmap"
-
-
-def test_sfm_factory_rejects_unknown() -> None:
-    with pytest.raises(ConfigError, match="unknown SfM backend"):
-        get_sfm_backend("bogus")
-
-
-def test_null_sfm_backend_raises_on_use(tmp_path: Path) -> None:
-    with pytest.raises(BackendUnavailable):
-        NullSfMBackend().reconstruct(tmp_path, tmp_path / "o", SfMConfig())
-
-
 # --- contact sheet ---------------------------------------------------------
 
 
@@ -245,9 +171,9 @@ def test_partial_rerun_keeps_earlier_stage_metrics(tmp_path: Path) -> None:
     """
     run_dir = tmp_path / "run"
     for name, payload in (
-        ("sfm", {"num_registered_images": 21, "num_points": 1286}),
-        ("dense", {"num_points": 246354}),
-        ("mesh", {"num_vertices": 31883, "num_faces": 63904}),
+        ("sfm", {"registered_images": 21, "points": 1286}),
+        ("depth", {"images": 21}),
+        ("mesh", {"meshes": [{"vertices": 31883}]}),
     ):
         (run_dir / name).mkdir(parents=True, exist_ok=True)
         (run_dir / name / "result.json").write_text(json.dumps(payload), encoding="utf-8")
@@ -260,16 +186,16 @@ def test_partial_rerun_keeps_earlier_stage_metrics(tmp_path: Path) -> None:
 
     metrics = pipeline._collect_metrics()
 
-    assert metrics["sfm"]["num_points"] == 1286
-    assert metrics["dense"]["num_points"] == 246354
-    assert metrics["mesh"]["num_vertices"] == 31883
+    assert metrics["sfm"]["points"] == 1286
+    assert metrics["depth"]["images"] == 21
+    assert metrics["mesh"]["meshes"][0]["vertices"] == 31883
 
 
 def test_metrics_are_not_stored_twice(tmp_path: Path) -> None:
     """F22: `metrics.json` is the same payload the `metrics` stage reports.
 
     Storing both under `metrics` and `summary` made the report render every
-    number twice.
+    number twice; it now appears once, under `summary`.
     """
     run_dir = tmp_path / "run"
     payload = {"frames": {"count": 20}}
@@ -284,8 +210,8 @@ def test_metrics_are_not_stored_twice(tmp_path: Path) -> None:
 
     metrics = pipeline._collect_metrics()
 
-    assert metrics["metrics"]["frames"]["count"] == 20
-    assert "summary" not in metrics
+    assert metrics["summary"]["frames"]["count"] == 20
+    assert "metrics" not in metrics
 
 
 def test_manifest_lists_stages_from_earlier_runs(tmp_path: Path) -> None:
@@ -296,7 +222,7 @@ def test_manifest_lists_stages_from_earlier_runs(tmp_path: Path) -> None:
     result.json files sat on disk.
     """
     run_dir = tmp_path / "run"
-    for name in ("ingest", "sfm", "dense"):
+    for name in ("ingest", "sfm", "depth"):
         (run_dir / name).mkdir(parents=True, exist_ok=True)
         (run_dir / name / "result.json").write_text(json.dumps({"x": 1}), encoding="utf-8")
 
@@ -310,5 +236,5 @@ def test_manifest_lists_stages_from_earlier_runs(tmp_path: Path) -> None:
 
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     names = [s["name"] for s in manifest["result"]["stages"]]
-    assert set(names) >= {"metrics", "ingest", "sfm", "dense"}
+    assert set(names) >= {"metrics", "ingest", "sfm", "depth"}
     assert manifest["result"]["stages"][0]["name"] == "metrics"  # this run first

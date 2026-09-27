@@ -249,7 +249,14 @@ class PipelineResult:
 
     @property
     def ok(self) -> bool:
-        return all(stage.status in {"ok", "skipped"} for stage in self.stages)
+        """No stage failed and at least one produced output.
+
+        A run in which every stage was skipped (no video, no backends) is not
+        a success: it exits non-zero instead of looking like a finished model.
+        """
+        return not any(s.status == "failed" for s in self.stages) and any(
+            s.status == "ok" for s in self.stages
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

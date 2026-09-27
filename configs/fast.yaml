@@ -1,36 +1,26 @@
-# Fast, near-real-time profile for field testing on a laptop (CPU only).
+# Fast preview: minutes, not tens of minutes, on one GPU.
 #
-#   drone3d run --config configs/fast.yaml --set ingest.video=/data/pass.mp4
+#   uv run drone3d run --config configs/fast.yaml --set ingest.video=/data/pass.mp4
 #
-# Trades reconstruction density for latency: fewer keyframes, smaller images,
-# no texturing, no dynamic masking.
+# Fewer keyframes (lower overlap target), the small flow model, no monocular
+# depth prior, short training at 1/2 resolution, vertex-coloured mesh only.
 
 run_name: fast
-preprocess:
-  sample_fps: 1.0
-  max_frames: 150
-  oversample: 2
-  min_spacing_s: 0.5
-  resize_width: 1280
-  selection: sharpness
-  deblur: false
-  stabilize: false
-  dynamic_masking: false
-
+keyframes:
+  flow_model: raft_small
+  analysis_fps: 8.0
+  overlap_target: 0.65
+  output_long_side: 1920
 sfm:
-  matcher: sequential
-  max_features: 4096
-
-dense:
-  backend: mvs
-  max_image_size: 1024
-  geom_consistency: false
-
+  quality: medium
+depth:
+  backend: none
+splat:
+  iterations: 7000
+  quality: medium
+  models: largest
 mesh:
-  backend: poisson
-  depth: 9
-  texture: false
-
-metrics:
-  voxel_size: 1.0
-  report_thumbnails: 8
+  formats: [glb]
+  colors: [vertex]
+render:
+  seconds: 8.0

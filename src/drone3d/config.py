@@ -12,7 +12,9 @@ from drone3d.exceptions import ConfigError
 
 __all__ = [
     "ALL_STAGES",
+    "DenseConfig",
     "DepthConfig",
+    "ExportConfig",
     "GeoConfig",
     "IngestConfig",
     "KeyframeConfig",
@@ -30,10 +32,12 @@ ALL_STAGES: tuple[str, ...] = (
     "ingest",
     "keyframes",
     "sfm",
+    "dense",
     "depth",
     "splat",
     "mesh",
     "georef",
+    "export",
     "render",
     "metrics",
     "report",
@@ -75,12 +79,44 @@ class KeyframeConfig:
 class SfMConfig:
     """Structure from motion (spirula-studio's GPU SfM)."""
 
-    backend: str = "spirula"  # spirula | none
+    backend: str = "spirula"  # spirula (SIFT, GPU) | flow (RAFT tracks + pycolmap) | none
     quality: str = "high"  # low | medium | high | extreme
     camera_model: str = "radial"  # one focal: drone cameras have square pixels
     camera_mode: str = "folder"  # one camera per pass folder (edits may re-crop)
     features: str = "sift"  # sift | aliked-n16rot | aliked-n32 | loma-b128 | loma-b
     extra_args: list[str] = field(default_factory=list)
+    # backend: flow
+    flow_long_side: int = 960  # tracking resolution; keypoints are written at full resolution
+    flow_span: int = 3  # direct flow to the next N keyframes
+    flow_stride: int = 16  # seeding grid (px at the tracking resolution)
+    flow_max_gap: int = 4  # keyframe pairs matched per track
+    mapper: str = "incremental"  # incremental | global (GLOMAP)
+
+
+@dataclass
+class DenseConfig:
+    """Dense depth from flow triangulation (+ monocular fill) fused in a GPU TSDF."""
+
+    backend: str = "flow"  # flow | none
+    long_side: int = 480
+    gaps: list[int] = field(default_factory=lambda: [2, 4, 8, 12])
+    min_angle_deg: float = 0.5
+    rel_tol: float = 0.05
+    mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf"  # null: triangulated depth only
+    voxel_px: float = 2.0  # TSDF voxel in pixel footprints at the median depth
+    min_model_images: int = 3
+
+
+@dataclass
+class ExportConfig:
+    """Deliverable formats and the web viewer."""
+
+    enabled: bool = True
+    mesh_formats: list[str] = field(default_factory=lambda: ["ply", "obj", "glb", "fbx"])
+    las: bool = True
+    geotiff: bool = True  # DSM + orthophoto (projected UTM when georeferenced)
+    raster_cell: float | None = None  # metres (or model units); default: 2 x median point spacing
+    viewer: bool = True
 
 
 @dataclass
@@ -169,10 +205,12 @@ class PipelineConfig:
     ingest: IngestConfig = field(default_factory=IngestConfig)
     keyframes: KeyframeConfig = field(default_factory=KeyframeConfig)
     sfm: SfMConfig = field(default_factory=SfMConfig)
+    dense: DenseConfig = field(default_factory=DenseConfig)
     depth: DepthConfig = field(default_factory=DepthConfig)
     splat: SplatConfig = field(default_factory=SplatConfig)
     mesh: MeshConfig = field(default_factory=MeshConfig)
     geo: GeoConfig = field(default_factory=GeoConfig)
+    export: ExportConfig = field(default_factory=ExportConfig)
     render: RenderConfig = field(default_factory=RenderConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
 
@@ -194,8 +232,14 @@ class PipelineConfig:
             raise ConfigError("keyframes.analysis_fps must be > 0 and analysis_long_side >= 64")
         if k.flow_model not in {"raft_large", "raft_small"}:
             raise ConfigError("keyframes.flow_model must be raft_large or raft_small")
-        if self.sfm.backend not in {"spirula", "none"}:
-            raise ConfigError("sfm.backend must be spirula or none")
+        if self.sfm.backend not in {"spirula", "flow", "none"}:
+            raise ConfigError("sfm.backend must be spirula, flow or none")
+        if self.sfm.mapper not in {"incremental", "global"}:
+            raise ConfigError("sfm.mapper must be incremental or global")
+        if self.dense.backend not in {"flow", "none"}:
+            raise ConfigError("dense.backend must be flow or none")
+        if not self.dense.gaps or min(self.dense.gaps) < 1:
+            raise ConfigError("dense.gaps must be positive keyframe offsets")
         if self.depth.backend not in {"marigold", "none"}:
             raise ConfigError("depth.backend must be marigold or none")
         if self.splat.backend not in {"spirula", "none"}:

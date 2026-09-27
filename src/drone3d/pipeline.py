@@ -315,11 +315,13 @@ class Pipeline:
         cfg = self.config.sfm
         if cfg.backend == "none":
             return StageReport("sfm", "skipped", "sfm.backend is none")
-        from drone3d.splat.spirula import run_sfm
-
         images = self.dataset / "images"
         if not images.is_dir():
             return StageReport("sfm", "skipped", "no keyframes (run the keyframes stage first)")
+        if cfg.backend == "flow":
+            return self._stage_sfm_flow()
+        from drone3d.splat.spirula import run_sfm
+
         sequences = sorted(p.name for p in images.iterdir() if p.is_dir())
         result = run_sfm(
             self.dataset,
@@ -343,6 +345,96 @@ class Pipeline:
             f"{len(result.models)} model(s); largest {best.get('images')} images, "
             f"{result.mean_reprojection_px} px mean reprojection",
             artifacts=[Artifact("sfm_result", self._stage_dir("sfm") / "result.json")],
+            metrics=payload,
+        )
+
+    def _stage_sfm_flow(self) -> StageReport:
+        cfg = self.config.sfm
+        from drone3d.fastsfm.stage import run_flow_sfm
+
+        payload = run_flow_sfm(
+            self.dataset,
+            self._stage_dir("sfm") / "work",
+            long_side=cfg.flow_long_side,
+            span=cfg.flow_span,
+            stride=cfg.flow_stride,
+            max_gap=cfg.flow_max_gap,
+            mapper=cfg.mapper,
+            hfov_deg=self.config.keyframes.hfov_deg,
+        )
+        _write_json(self._stage_dir("sfm") / "result.json", payload)
+        best = payload["models"][0] if payload["models"] else {}
+        return StageReport(
+            "sfm",
+            "ok" if payload["models"] else "failed",
+            f"flow tracks: {payload['registered_images']}/{payload['input_images']} keyframes registered in "
+            f"{len(payload['models'])} model(s); largest {best.get('images')} images, "
+            f"{payload['mean_reprojection_px']} px mean reprojection",
+            artifacts=[Artifact("sfm_result", self._stage_dir("sfm") / "result.json")],
+            metrics=payload,
+        )
+
+    def _stage_dense(self) -> StageReport:
+        cfg = self.config.dense
+        if cfg.backend == "none":
+            return StageReport("dense", "skipped", "dense.backend is none")
+        models = self._sfm_models(cfg.min_model_images)
+        if not models:
+            return StageReport("dense", "skipped", "no SfM model (run sfm first)")
+        from drone3d.fastsfm.dense_stage import run_dense
+
+        payload = run_dense(
+            [Path(m["path"]) for m in models],
+            self.dataset / "images",
+            self._stage_dir("dense"),
+            long_side=cfg.long_side,
+            gaps=tuple(cfg.gaps),
+            min_angle_deg=cfg.min_angle_deg,
+            rel_tol=cfg.rel_tol,
+            mono_model=cfg.mono_model,
+            voxel_px=cfg.voxel_px,
+        )
+        _write_json(self._stage_dir("dense") / "result.json", payload)
+        ok = [m for m in payload["models"] if m.get("status") == "ok"]
+        return StageReport(
+            "dense",
+            "ok" if ok else "failed",
+            "; ".join(
+                f"{Path(m['model']).name}: {m['mesh_triangles']:,} triangles, {m['num_points']:,} points, "
+                f"depth on {100 * m['coverage']:.0f} % of pixels"
+                for m in ok
+            )
+            or "no model produced depth",
+            metrics=payload,
+        )
+
+    def _stage_export(self) -> StageReport:
+        cfg = self.config.export
+        if not cfg.enabled:
+            return StageReport("export", "skipped", "export.enabled is false")
+        dense = self._stage_result("dense")
+        if not dense or not any(m.get("status") == "ok" for m in dense.get("models", [])):
+            return StageReport("export", "skipped", "no dense model (run dense first)")
+        from drone3d.export.stage import run_export
+
+        payload = run_export(
+            dense,
+            self._stage_result("georef"),
+            self._stage_dir("export"),
+            title=self.config.run_name,
+            mesh_formats=list(cfg.mesh_formats),
+            las=cfg.las,
+            geotiff=cfg.geotiff,
+            raster_cell=cfg.raster_cell,
+            viewer=cfg.viewer,
+        )
+        _write_json(self._stage_dir("export") / "result.json", payload)
+        n_files = sum(len(m["files"]) for m in payload["models"])
+        return StageReport(
+            "export",
+            "ok",
+            f"{n_files} files for {len(payload['models'])} model(s)"
+            + (f"; viewer: drone3d view {self.run_dir}" if payload.get("viewer") else ""),
             metrics=payload,
         )
 

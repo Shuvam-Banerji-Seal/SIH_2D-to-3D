@@ -130,23 +130,52 @@ def fuse_depths(depths: torch.Tensor, weights: torch.Tensor, *, rel_tol: float =
     return torch.where((agree.sum(0) >= min_views) & (wsum > 0), fused, torch.zeros_like(fused))
 
 
+def _surface_blocks(frames: list[tuple[np.ndarray, np.ndarray, Camera]], block: float, depth_max: float, step: int = 1) -> int:
+    """Number of distinct TSDF blocks the depth maps' surface points fall into (subsampled pixels)."""
+    keys = set()
+    for depth, _, cam in frames:
+        d = depth[::step, ::step]
+        ys, xs = np.nonzero((d > 0) & (d < depth_max))
+        if not len(xs):
+            continue
+        z = d[ys, xs].astype(np.float64)
+        pc = np.stack([(xs * step + 0.5 - cam.cx) / cam.f * z, (ys * step + 0.5 - cam.cy) / cam.f * z, z], 1)
+        pw = (pc - cam.translation) @ cam.rotation  # R^T (pc - t)
+        keys.update(map(tuple, np.unique(np.floor(pw / block).astype(np.int64), axis=0)))
+    return len(keys)
+
+
 def tsdf_fuse(
     frames: list[tuple[np.ndarray, np.ndarray, Camera]],
     *,
     voxel: float,
     depth_max: float,
     trunc_voxels: float = 4.0,
-    block_count: int = 200_000,
+    block_count: int | None = None,
+    memory_gb: float = 4.0,
 ):  # type: ignore[no-untyped-def]
     """Integrate ``(depth [H, W] float32, rgb [H, W, 3] uint8, camera)`` into a GPU TSDF.
 
     Returns Open3D's ``VoxelBlockGrid``; ``extract_triangle_mesh()`` and
     ``extract_point_cloud()`` give the outputs. Radial distortion is ignored
     here (depth maps are dense per pixel; the error is below a voxel at the
-    working resolution for |k1| < 0.1).
+    working resolution for |k1| < 0.1). ``block_count`` (16^3-voxel blocks,
+    20 B per voxel = 80 KB per block) defaults to 3x the blocks the depth maps'
+    surface points fall into (the truncation band spills into neighbours); if
+    that exceeds ``memory_gb`` the voxel grows until it fits -- an undersized
+    hash map crashes the CUDA kernel instead of raising.
     """
     import open3d as o3d
     import open3d.core as o3c
+
+    if block_count is None:
+        cap = int(memory_gb * 1e9 / (16**3 * 20))
+        for _ in range(8):
+            block_count = 3 * _surface_blocks(frames, voxel * 16, depth_max) + 4096
+            if block_count <= cap:
+                break
+            voxel *= float(np.sqrt(block_count / cap)) * 1.05  # surface blocks ~ 1 / voxel^2
+        block_count = min(block_count, cap)
 
     device = o3c.Device("CUDA:0") if o3c.cuda.is_available() else o3c.Device("CPU:0")
     vbg = o3d.t.geometry.VoxelBlockGrid(
@@ -159,6 +188,8 @@ def tsdf_fuse(
         device=device,
     )
     for depth, rgb, cam in frames:
+        if not (depth > 0).any():  # Open3D aborts on a frame that touches no block
+            continue
         intr = o3c.Tensor(np.array([[cam.f, 0, cam.cx - 0.5], [0, cam.f, cam.cy - 0.5], [0, 0, 1]]), o3c.float64)
         extr = np.eye(4)
         extr[:3, :3], extr[:3, 3] = cam.rotation, cam.translation
@@ -167,4 +198,4 @@ def tsdf_fuse(
         c_img = o3d.t.geometry.Image(o3c.Tensor(np.ascontiguousarray(rgb.astype(np.float32) / 255.0))).to(device)
         blocks = vbg.compute_unique_block_coordinates(d_img, intr, extr_t, 1.0, depth_max, trunc_voxels)
         vbg.integrate(blocks, d_img, c_img, intr, intr, extr_t, 1.0, depth_max, trunc_voxels)
-    return vbg
+    return vbg, voxel

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>drone3d viewer</title>
+<style>
+  :root { --bg: #0d1520; --panel: #16212f; --line: #2a3a4f; --text: #e8edf3; --muted: #93a4b8; --accent: #ff9933; --ok: #3fb950; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; width: min(320px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto;
+           background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  h1 { font-size: 15px; margin: 0 0 2px; } .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
+  label { color: var(--muted); } input[type=range] { width: 130px; }
+  button { background: #22344a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; font: inherit; }
+  select { background: #22344a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; max-width: 170px; }
+  button.on { background: var(--accent); color: #111; border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; } td { padding: 2px 0; } td:last-child { text-align: right; color: var(--muted); }
+  .sec { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+  .sec h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+  a { color: #5ad1ff; } #files a { display: inline-block; margin: 2px 8px 2px 0; }
+  #measures div { font-variant-numeric: tabular-nums; }
+  #hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 12px; background: #0d1520cc; padding: 4px 10px; border-radius: 6px; }
+  #status { color: var(--accent); font-size: 12px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }
+</script>
+</head>
+<body>
+<div id="view"></div>
+<div id="panel">
+  <h1 id="title">drone3d</h1>
+  <div class="sub" id="subtitle">loading…</div>
+  <div class="row"><label>Model</label><select id="pick"></select></div>
+  <div class="row"><label>Mesh</label><button id="tMesh" class="on">on</button></div>
+  <div class="row"><label>Point cloud</label><button id="tPts">off</button></div>
+  <div class="row"><label>Camera track</label><button id="tCams" class="on">on</button></div>
+  <div class="row"><label>Point size</label><input id="pSize" type="range" min="0.5" max="6" step="0.5" value="1.5"></div>
+  <div class="row"><label>Measure</label><button id="tMeasure">off</button></div>
+  <div class="sec"><h2>Measurements</h2><div id="measures"><span class="sub">Turn on Measure, click two points.</span></div></div>
+  <div class="sec"><h2>Model</h2><table id="stats"></table></div>
+  <div class="sec"><h2>Downloads</h2><div id="files"></div></div>
+  <div id="status"></div>
+</div>
+<div id="hint">drag: orbit · right-drag: pan · wheel: zoom · double-click: focus</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+
+const $ = (id) => document.getElementById(id);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1520);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+$('view').appendChild(renderer.domElement);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1e6);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+const groups = { mesh: new THREE.Group(), pts: new THREE.Group(), cams: new THREE.Group(), marks: new THREE.Group() };
+Object.values(groups).forEach((g) => scene.add(g));
+groups.pts.visible = false;
+
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+
+const scn = await (await fetch('scene.json')).json();
+const all = scn.models || [scn];
+const pickIdx = Math.min(all.length - 1, Math.max(0, +(new URLSearchParams(location.search).get('m') || 0)));
+const cfg = all[pickIdx];
+$('pick').innerHTML = all.map((m, i) => `<option value="${i}" ${i === pickIdx ? 'selected' : ''}>${m.name}</option>`).join('');
+$('pick').addEventListener('change', (e) => { location.search = '?m=' + e.target.value; });
+const units = cfg.units || 'model units';
+$('title').textContent = scn.title || cfg.title || 'drone3d';
+$('subtitle').textContent = cfg.georeferenced ? `georeferenced · ${units}` : `not georeferenced · ${units} (SfM scale)`;
+if (cfg.up) camera.up.set(...cfg.up);
+
+const statsRows = Object.entries(cfg.stats || {});
+$('stats').innerHTML = statsRows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+$('files').innerHTML = (cfg.files || []).map((f) => `<a href="${f.path}" download>${f.label}</a>`).join('') || '<span class="sub">none</span>';
+
+const box = new THREE.Box3();
+const status = (s) => { $('status').textContent = s; };
+async function loadMesh() {
+  if (!cfg.mesh) return;
+  status('loading mesh…');
+  const gltf = await new GLTFLoader().loadAsync(cfg.mesh);
+  gltf.scene.traverse((o) => { if (o.isMesh) {
+    o.material = new THREE.MeshBasicMaterial({ vertexColors: !!o.geometry.attributes.color, color: o.geometry.attributes.color ? 0xffffff : 0xbfc8d4, side: THREE.DoubleSide });
+  } });
+  groups.mesh.add(gltf.scene); box.expandByObject(gltf.scene);
+}
+let pointsObj = null;
+async function loadPoints() {
+  if (!cfg.points) return;
+  status('loading point cloud…');
+  const geo = await new PLYLoader().loadAsync(cfg.points);
+  const mat = new THREE.PointsMaterial({ size: 1.5, sizeAttenuation: false, vertexColors: !!geo.attributes.color });
+  pointsObj = new THREE.Points(geo, mat); groups.pts.add(pointsObj);
+  geo.computeBoundingBox(); if (!cfg.mesh) box.union(geo.boundingBox);
+}
+function addCameras() {
+  const c = cfg.cameras || []; if (c.length < 2) return;
+  const pts = c.map((p) => new THREE.Vector3(...p));
+  groups.cams.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xff9933 })));
+  const dots = new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts), new THREE.PointsMaterial({ color: 0xff9933, size: 5, sizeAttenuation: false }));
+  groups.cams.add(dots);
+  pts.forEach((p) => box.expandByPoint(p));
+}
+await Promise.all([loadMesh(), loadPoints()]).catch((e) => status('load failed: ' + e));
+addCameras();
+function frame() {
+  if (box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+  controls.target.copy(c);
+  const dir = new THREE.Vector3(0.6, -0.9, 0.7).normalize();
+  if (!cfg.up || cfg.up[2] === 0) dir.set(0.6, 0.7, 0.9).normalize();
+  camera.position.copy(c).addScaledVector(dir, r * 2.2); camera.near = r / 1000; camera.far = r * 100; camera.updateProjectionMatrix();
+}
+frame(); status('');
+
+const toggle = (btn, group) => btn.addEventListener('click', () => { group.visible = !group.visible; btn.classList.toggle('on', group.visible); btn.textContent = group.visible ? 'on' : 'off'; });
+toggle($('tMesh'), groups.mesh); toggle($('tPts'), groups.pts); toggle($('tCams'), groups.cams);
+$('pSize').addEventListener('input', (e) => { if (pointsObj) pointsObj.material.size = +e.target.value; });
+
+// ---- measuring: two clicks -> distance and height difference
+let measuring = false, pending = null;
+const measures = [];
+$('tMeasure').addEventListener('click', () => { measuring = !measuring; $('tMeasure').classList.toggle('on', measuring); $('tMeasure').textContent = measuring ? 'on' : 'off'; pending = null; });
+const ray = new THREE.Raycaster();
+function pick(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1), camera);
+  ray.params.Points.threshold = box.getSize(new THREE.Vector3()).length() / 2000;
+  const targets = [groups.mesh.visible && groups.mesh, groups.pts.visible && groups.pts].filter(Boolean);
+  const hit = ray.intersectObjects(targets, true)[0];
+  return hit ? hit.point.clone() : null;
+}
+function marker(p, color) {
+  const s = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color, depthTest: false }));
+  s.scale.setScalar(box.getSize(new THREE.Vector3()).length() / 400); s.position.copy(p); s.renderOrder = 10; groups.marks.add(s);
+}
+const upAxis = new THREE.Vector3(...(cfg.up || [0, 0, 1])).normalize();
+let down = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', (ev) => {
+  if (!measuring || !down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4) return;
+  const p = pick(ev); if (!p) return;
+  if (!pending) { pending = p; marker(p, 0xff9933); return; }
+  marker(p, 0x3fb950);
+  groups.marks.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pending, p]), new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false })));
+  const d = pending.distanceTo(p), dz = p.clone().sub(pending).dot(upAxis);
+  measures.push({ d, dz }); pending = null;
+  $('measures').innerHTML = measures.map((m, i) => `<div>#${i + 1}: ${m.d.toFixed(2)} ${units} · Δh ${m.dz.toFixed(2)}</div>`).join('');
+});
+renderer.domElement.addEventListener('dblclick', (ev) => { const p = pick(ev); if (p) controls.target.copy(p); });
+
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>

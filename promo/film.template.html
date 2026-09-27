@@ -1,0 +1,388 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>One Pass. One GPU.</title>
+<style>
+  html,body{margin:0;background:#050c16;display:grid;place-items:center;height:100vh}
+  canvas{width:min(100vw,177.78vh);height:auto;max-height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Promo film for the SIH 2026 PS 26158 pipeline. Every frame is drawn here in code; the
+// numbers come from FACTS, which promo/build.py fills from the pipeline's run JSON.
+// Real footage and renders are composited afterwards into the rectangles in window.SLOTS.
+// Contract: draw(frame) is a pure function of the frame number (no Math.random, no Date).
+const FACTS = /*FACTS*/{}/*END*/;
+const F = (k, d) => (FACTS[k] !== undefined && FACTS[k] !== null ? FACTS[k] : d);
+
+const W = 1920, H = 1080, FPS = 30, DUR = 80, FRAMES = FPS * DUR;
+const cv = document.getElementById('c');
+let ctx = cv.getContext('2d');
+
+// LOOK: blueprint on night navy; saffron is the lead (the drone, the "3D" verdict, the splats).
+const NAVY = '#0b1d33', DEEP = '#061222', CYAN = '#5ad1ff', CYAN_D = 'rgba(90,209,255,0.22)',
+      WHITE = '#f2f4f7', SAFFRON = '#ff9933', GREEN = '#3fb950', RED = '#ff5a5a', SAND = '#e0b07a';
+const FONT = (s, w = 600) => `${w} ${s}px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif`;
+
+// ---------- math ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => { t = clamp(t); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+const easeOut = t => 1 - Math.pow(1 - clamp(t), 3);
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+function hash2(a, b) { let n = Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263); n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967295; }
+function rng(seed) { let a = seed | 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  return lerp(lerp(hash2(xi, yi), hash2(xi + 1, yi), u), lerp(hash2(xi, yi + 1), hash2(xi + 1, yi + 1), u), v); }
+
+// ---------- beat grid & storyboard (single source of truth for picture and sound) ----------
+const BPM = 96, BEAT = 60 / BPM, BAR = 4 * BEAT, b = n => n * BEAT, bar = n => n * BAR;
+const SECTIONS = [
+  [0, 2, ['padSoft']], [2, 4, ['padSoft', 'hat8']], [4, 7, ['pad', 'hat8', 'kick2']],
+  [7, 10, ['pad', 'hat8', 'kick4', 'bassHalf']], [10, 16, ['pad', 'hat16', 'kick4', 'bass8', 'clap']],
+  [16, 22, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'pluck']], [22, 26, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'lead']],
+  [26, 27, []], [27, 31, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'lead', 'crash']], [31, 32, ['pad', 'pluck']],
+];
+const SHOT_BARS = [0, 2, 4, 7, 10, 13, 16, 19, 22, 25, 26, 27, 31, 32];   // cut on bar lines
+const SHOTS = SHOT_BARS.slice(0, -1).map((a, i) => ({ id: i + 1, from: bar(a), to: bar(SHOT_BARS[i + 1]) }));
+const T = id => SHOTS[id - 1];
+const EVENTS = [
+  [T(1).from + 1.2, 'whoosh'], [T(2).from + b(2), 'pop'], [T(2).from + b(3), 'pop'], [T(2).from + b(4), 'pop'],
+  ...[0, 1, 2, 3, 4, 5, 6, 7, 8].map(k => [T(3).from + b(2 + k), 'click']),
+  [T(4).from + b(6), 'clank'], ...[0, 1, 2, 3].map(k => [T(5).from + b(3 + 2 * k), 'tick']),
+  [T(6).from + b(6), 'ding'], [T(6).from + b(9), 'blip', 0], ...[0, 1, 2, 3].map(k => [T(7).from + b(2 + 2 * k), 'popLow', k]),
+  [T(8).from + b(1), 'whoosh'], [T(9).from + b(1), 'whooshIn'], [T(10).from + b(1), 'click'], [T(10).from + b(2.5), 'ding'],
+  [T(13).from + b(1), 'notify'],
+];
+const STAGES = ['video', 'decode', 'passes', 'keyframes', 'is it 3D?', 'SfM', 'depth', 'splats', 'map'];
+const STAGE_AT = [T(2).from, T(3).from, T(4).from, T(5).from, T(6).from, T(7).from, T(8).from, T(9).from, T(10).from];
+
+// Real-output slots (screen pixels); build.py composites the named sources here.
+const SLOTS = [
+  { id: 'source', t0: T(2).from + b(1), t1: T(2).to, x: 1000, y: 214, w: 800, h: 450 },
+  { id: 'timeline', t0: T(4).from + b(8), t1: T(4).to, x: 640, y: 150, w: 1180, h: 610 },
+  { id: 'depth', t0: T(8).from + b(3), t1: T(8).to, x: 900, y: 170, w: 900, h: 506 },
+  { id: 'splat_inset', t0: T(9).from + b(5), t1: T(9).to, x: 1040, y: 214, w: 760, h: 428 },
+  { id: 'flythrough', t0: T(12).from, t1: T(12).to, x: 0, y: 0, w: 1920, h: 1080 },
+];
+
+// ---------- layout registry (scripts/layout-check.mjs) ----------
+let LAYOUT = [];
+function claim(id, kind, x, y, w, h) { LAYOUT.push({ id, kind, x, y, w, h }); }
+
+// ---------- primitives ----------
+function grid(offx = 0, alpha = 1) {
+  ctx.fillStyle = NAVY; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W * .5, H * .45, 100, W * .5, H * .5, W * .75);
+  g.addColorStop(0, 'rgba(20,52,90,0.55)'); g.addColorStop(1, 'rgba(3,10,20,0.6)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.globalAlpha = alpha;
+  for (const [step, a, lw] of [[48, .05, 1], [240, .12, 1.2]]) {
+    ctx.strokeStyle = `rgba(90,209,255,${a})`; ctx.lineWidth = lw; ctx.beginPath();
+    for (let x = -((offx % step) + step) % step; x < W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = 0; y < H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function text(s, x, y, o = {}) {
+  const { size = 40, col = WHITE, align = 'left', weight = 600, alpha = 1, p = 1, id } = o;
+  if (p <= 0 || alpha <= 0) return;
+  const n = Math.round(s.length * clamp(p)); const shown = s.slice(0, n);
+  ctx.save(); ctx.globalAlpha = alpha; ctx.font = FONT(size, weight); ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'middle';
+  ctx.fillText(shown, x, y);
+  const w = ctx.measureText(s).width, x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+  ctx.restore();
+  if (id) claim(id, 'text', x0, y - size * .6, w, size * 1.2);
+}
+function caption(s, t, t0, o = {}) {   // lower-left caption with a cyan rule, typed on
+  const p = prog(t, t0, t0 + .9), y = o.y || 912;
+  if (p <= 0) return;
+  ctx.save(); ctx.fillStyle = CYAN; ctx.globalAlpha = .9; ctx.fillRect(120, y + 34, 80 * easeOut(p * 2), 4); ctx.restore();
+  text(s, 120, y, { size: o.size || 44, p, id: o.id || 'caption' });
+}
+function kicker(s, t, t0) { text(s.toUpperCase(), 120, 110, { size: 22, col: CYAN, weight: 700, alpha: prog(t, t0, t0 + .4), id: 'kicker' }); }
+function bezel(r, t, t0, label) {      // a screen for composited footage; its inside stays dark
+  const a = easeOut(prog(t, t0 - .4, t0));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = DEEP; ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = CYAN; ctx.lineWidth = 3; ctx.strokeRect(r.x - 6, r.y - 6, r.w + 12, r.h + 12);
+  ctx.fillStyle = CYAN; for (const [cx, cy] of [[r.x - 6, r.y - 6], [r.x + r.w + 6, r.y - 6], [r.x - 6, r.y + r.h + 6], [r.x + r.w + 6, r.y + r.h + 6]]) ctx.fillRect(cx - 7, cy - 7, 14, 14);
+  ctx.restore();
+  if (label) text(label, r.x, r.y - 30, { size: 22, col: CYAN, weight: 700, alpha: a, id: 'bezel-' + label });
+  claim('slot', 'keep', r.x - 10, r.y - 10, r.w + 20, r.h + 20);
+}
+function gauge(x, y, w, v, label, o = {}) {
+  const { col = SAFFRON, band = null, alpha = 1 } = o;
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(90,209,255,.15)'; ctx.fillRect(x, y, w, 22);
+  if (band) { ctx.fillStyle = 'rgba(255,153,51,.25)'; ctx.fillRect(x + w * band[0], y - 8, w * (band[1] - band[0]), 38); }
+  ctx.fillStyle = col; ctx.fillRect(x, y, w * clamp(v), 22);
+  ctx.restore();
+  text(label, x, y - 30, { size: 24, col: WHITE, alpha, id: 'gauge-' + label });
+  claim('gauge', 'keep', x, y - 8, w, 38);
+}
+
+// ---------- drawings ----------
+function hills(yBase, scale, alpha, seed) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = '#123150'; ctx.beginPath(); ctx.moveTo(0, yBase);
+  for (let x = 0; x <= W; x += 16) ctx.lineTo(x, yBase - scale * (.35 + .65 * vnoise(x / 260 + seed, seed)) - scale * .4 * vnoise(x / 90, seed + 3));
+  ctx.lineTo(W, yBase); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function palace(cx, base, s, o = {}) {   // stylised Jal Mahal: long body, arcade, four chhatris
+  const { col = SAND, alpha = 1, reflect = true } = o;
+  const draw = sign => {
+    ctx.save(); ctx.translate(cx, base); ctx.scale(s, sign * s);
+    ctx.fillStyle = col; ctx.fillRect(-160, -64, 320, 64);
+    ctx.fillStyle = 'rgba(6,18,34,.55)'; for (let i = -7; i <= 7; i++) { ctx.beginPath(); ctx.arc(i * 20, -26, 6, Math.PI, 0); ctx.rect(i * 20 - 6, -26, 12, 16); ctx.fill(); }
+    ctx.fillStyle = col; for (const x of [-150, -60, 60, 150]) { ctx.fillRect(x - 10, -86, 20, 22); ctx.beginPath(); ctx.arc(x, -86, 13, Math.PI, 0); ctx.fill(); ctx.fillRect(x - 1.5, -106, 3, 8); }
+    ctx.restore();
+  };
+  ctx.save(); ctx.globalAlpha = alpha; draw(1); if (reflect) { ctx.globalAlpha = alpha * .28; draw(-1); } ctx.restore();
+}
+function water(y0, t, alpha) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = 'rgba(90,209,255,.35)'; ctx.lineWidth = 2;
+  for (let k = 0; k < 9; k++) { const y = y0 + 18 + k * 20, off = (t * 40 * (1 + k * .15)) % 140; ctx.beginPath();
+    for (let x = -140 + off; x < W; x += 140) { ctx.moveTo(x, y); ctx.lineTo(x + 70 - k * 4, y); } ctx.stroke(); }
+  ctx.restore();
+}
+function drone(x, y, s, t, alpha = 1) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.strokeStyle = SAFFRON; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-42, -10); ctx.lineTo(42, -10); ctx.stroke();
+  ctx.fillStyle = SAFFRON; ctx.beginPath(); ctx.roundRect(-18, -18, 36, 20, 7); ctx.fill();
+  ctx.fillStyle = DEEP; ctx.beginPath(); ctx.arc(0, 6, 6, 0, 7); ctx.fill();                       // gimbal camera
+  for (const sx of [-42, 42]) { const w = 30 * Math.abs(Math.cos(t * 55 + sx)); ctx.fillStyle = 'rgba(255,153,51,.55)'; ctx.beginPath(); ctx.ellipse(sx, -18, w + 4, 3.5, 0, 0, 7); ctx.fill(); }
+  ctx.restore();
+}
+function chip(cx, cy, s, t, glowA) {
+  ctx.save(); ctx.translate(cx, cy);
+  const g = ctx.createRadialGradient(0, 0, 20 * s, 0, 0, 220 * s); g.addColorStop(0, `rgba(255,153,51,${.35 * glowA})`); g.addColorStop(1, 'rgba(255,153,51,0)');
+  ctx.fillStyle = g; ctx.fillRect(-240 * s, -240 * s, 480 * s, 480 * s);
+  ctx.strokeStyle = CYAN; ctx.lineWidth = 3; for (let i = -4; i <= 4; i++) { for (const [dx, dy] of [[1, 0], [0, 1]]) {
+    ctx.beginPath(); const o = i * 24 * s; if (dx) { ctx.moveTo(-150 * s, o); ctx.lineTo(-124 * s, o); ctx.moveTo(124 * s, o); ctx.lineTo(150 * s, o); } else { ctx.moveTo(o, -150 * s); ctx.lineTo(o, -124 * s); ctx.moveTo(o, 124 * s); ctx.lineTo(o, 150 * s); } ctx.stroke(); } }
+  ctx.fillStyle = '#10263f'; ctx.beginPath(); ctx.roundRect(-124 * s, -124 * s, 248 * s, 248 * s, 18 * s); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  text('A100', cx, cy - 18 * s, { size: 44 * s, col: WHITE, align: 'center', weight: 800 });
+  text('80 GB · NVDEC', cx, cy + 30 * s, { size: 20 * s, col: CYAN, align: 'center' });
+  claim('chip', 'keep', cx - 150 * s, cy - 150 * s, 300 * s, 300 * s);
+}
+function thumb(x, y, w, h, seed, o = {}) {   // a small video frame: sky, hills, water, palace
+  const { alpha = 1, border = CYAN, shift = 0 } = o;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  const sky = ctx.createLinearGradient(0, y, 0, y + h); sky.addColorStop(0, '#f2b27a'); sky.addColorStop(.55, '#e08a5a'); sky.addColorStop(.56, '#20476a'); sky.addColorStop(1, '#0f2a44');
+  ctx.fillStyle = sky; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#1b3552'; ctx.beginPath(); ctx.moveTo(x, y + h * .56);
+  for (let i = 0; i <= 12; i++) ctx.lineTo(x + w * i / 12, y + h * (.5 - .12 * vnoise(i * .7 + seed, seed)));
+  ctx.lineTo(x + w, y + h * .56); ctx.fill();
+  const pw = w * .42; ctx.fillStyle = SAND; ctx.fillRect(x + w * .3 + shift * w, y + h * .45, pw, h * .11);
+  ctx.globalAlpha *= .35; ctx.fillRect(x + w * .3 + shift * w, y + h * .56, pw, h * .09);
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = border; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h); ctx.restore();
+}
+function rail(t) {   // persistent pipeline rail: which stage the film is in
+  const x0 = 160, x1 = W - 160, y = 1016, n = STAGES.length;
+  ctx.save(); ctx.strokeStyle = 'rgba(90,209,255,.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.restore();
+  let lit = -1; STAGE_AT.forEach((s, i) => { if (t >= s) lit = i; });
+  const done = t >= T(12).from;
+  for (let i = 0; i < n; i++) {
+    const x = lerp(x0, x1, i / (n - 1)), on = done || i <= lit, cur = !done && i === lit;
+    ctx.save(); ctx.fillStyle = on ? (cur ? SAFFRON : CYAN) : 'rgba(90,209,255,.25)';
+    ctx.beginPath(); ctx.arc(x, y, cur ? 9 : 6, 0, 7); ctx.fill(); ctx.restore();
+    text(STAGES[i], x, y + 28, { size: 17, col: on ? WHITE : 'rgba(242,244,247,.4)', align: 'center', weight: cur ? 700 : 500 });
+  }
+  if (lit >= 0 && !done) { const x = lerp(x0, x1, lit / (n - 1)); ctx.save(); ctx.strokeStyle = SAFFRON; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x, y); ctx.stroke(); ctx.restore(); }
+  claim('rail', 'keep', x0 - 20, y - 12, x1 - x0 + 40, 56);
+}
+
+// ---------- a small 3D world: the palace, ground and hills as points ----------
+const WORLD = (() => {
+  const r = rng(11), pts = [];
+  for (let i = 0; i < 2600; i++) { const x = (r() - .5) * 26, z = (r() - .5) * 18; pts.push([x, 0.02 * Math.sin(x * 2) , z, 0]); }          // water / ground
+  for (let i = 0; i < 2200; i++) { const f = r(); let x, y, z;                                                               // palace box faces
+    if (f < .5) { x = (r() - .5) * 6; y = r() * 1.6; z = r() < .5 ? -1.4 : 1.4; } else if (f < .8) { x = r() < .5 ? -3 : 3; y = r() * 1.6; z = (r() - .5) * 2.8; } else { x = (r() - .5) * 6; y = 1.6; z = (r() - .5) * 2.8; }
+    pts.push([x, y, z, 1]); }
+  for (const cx of [-2.8, -1, 1, 2.8]) for (const cz of [-1.2, 1.2]) for (let i = 0; i < 90; i++) { const a = r() * 6.283, e = r() * 1.57, rr = .38;
+    pts.push([cx + rr * Math.cos(a) * Math.cos(e), 2.05 + rr * Math.sin(e), cz + rr * Math.sin(a) * Math.cos(e), 2]); }            // chhatri domes
+  for (let i = 0; i < 1500; i++) { const x = (r() - .5) * 40, z = -12 - r() * 5; pts.push([x, 2.5 + 3.5 * vnoise(x * .15, 3) * (1 - (z + 12) / -8), z, 3]); } // hills
+  return pts;
+})();
+const WORLD_COL = ['#4aa3c8', SAND, '#f0c890', '#3a6f96'];
+function project(p, cam) {   // cam: { yaw, pitch, dist, fov, cx, cy }
+  const [x, y, z] = p, cy_ = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const X = cy_ * x - sy * z, Z0 = sy * x + cy_ * z, Y = cp * (y - 1) - sp * Z0, Z = sp * (y - 1) + cp * Z0 + cam.dist;
+  if (Z < .3) return null; const f = cam.fov / Z; return [cam.cx + X * f, cam.cy - Y * f, Z];
+}
+function cloud(t, cam, share, o = {}) {   // sparse SfM-style points appearing in bursts
+  const { size = 2.2, tint = null, alpha = 1 } = o, n = Math.floor(WORLD.length * clamp(share));
+  ctx.save(); ctx.globalAlpha = alpha;
+  for (let i = 0; i < n; i++) { const q = project(WORLD[(i * 7919) % WORLD.length], cam); if (!q) continue;
+    ctx.fillStyle = tint || WORLD_COL[WORLD[(i * 7919) % WORLD.length][3]]; ctx.fillRect(q[0], q[1], size, size); }
+  ctx.restore();
+}
+function splats(t, cam, settle, alpha = 1) {   // Gaussian splats: big and blurry, settling to crisp
+  ctx.save(); ctx.globalAlpha = alpha;
+  const order = WORLD.map((p, i) => [project(p, cam), i]).filter(e => e[0]).sort((a, b) => b[0][2] - a[0][2]);
+  for (const [q, i] of order) { if (i % 2) continue;
+    const kind = WORLD[i][3], r = lerp(26, 5, easeOut(settle)) * (kind === 3 ? 1.6 : 1) * 10 / q[2];
+    ctx.fillStyle = WORLD_COL[kind]; ctx.globalAlpha = alpha * lerp(.12, .55, settle);
+    ctx.beginPath(); ctx.ellipse(q[0], q[1], r * 1.6, r, (hash2(i, 5) - .5) * 1.4, 0, 7); ctx.fill(); }
+  ctx.restore();
+}
+function frustum(cam, pos, look, s, col, alpha) {
+  const a = project(pos, cam); if (!a) return;
+  const dir = [look[0] - pos[0], look[1] - pos[1], look[2] - pos[2]], L = Math.hypot(...dir), d = dir.map(v => v / L * s);
+  const up = [0, 1, 0], sx = [d[2], 0, -d[0]].map(v => v * .6), su = up.map(v => v * s * .35);
+  const corners = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([u, v]) => project([pos[0] + d[0] + u * sx[0] + v * su[0], pos[1] + d[1] + v * su[1], pos[2] + d[2] + u * sx[2] + v * su[2]], cam));
+  ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+  for (const c of corners) if (c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); }
+  if (corners.every(Boolean)) { ctx.moveTo(corners[0][0], corners[0][1]); for (const c of [...corners.slice(1), corners[0]]) ctx.lineTo(c[0], c[1]); }
+  ctx.stroke(); ctx.restore();
+}
+
+// ---------- shots ----------
+const SCENES = {
+  1(t, lt) {   // one pass, one chance
+    grid(lt * 30); hills(560, 150, .9, 1); water(560, lt, .8); palace(W * .56, 560, 1.15, { alpha: .95 });
+    const dx = lerp(-200, W + 200, ease(prog(lt, .3, 4.6)));
+    ctx.save(); ctx.strokeStyle = SAFFRON; ctx.setLineDash([14, 12]); ctx.lineWidth = 3; ctx.globalAlpha = .8; ctx.beginPath(); ctx.moveTo(-200, 300); ctx.lineTo(dx, 300 + 20 * Math.sin(dx / 300)); ctx.stroke(); ctx.restore();
+    drone(dx, 300 + 20 * Math.sin(dx / 300), 1.2, lt); claim('drone', 'keep', dx - 60, 260, 120, 70);
+    text('One pass.', 120, 760, { size: 96, weight: 800, p: prog(lt, .6, 1.4), id: 't1' });
+    text('One chance.', 120, 860, { size: 96, weight: 800, col: SAFFRON, p: prog(lt, 1.6, 2.4), id: 't2' });
+  },
+  2(t, lt) {   // the question; real footage in the source slot
+    grid(); kicker('The problem · SIH 2026 · PS 26158', t, T(2).from);
+    for (let k = 0; k < 3; k++) { const up = easeOut(prog(lt, b(2 + k) - .1, b(2 + k) + .4)); thumb(120 + k * 250, 420 - up * 60, 220, 124, k * 3 + 1, { alpha: .35 + .65 * up, shift: k * .08 }); }
+    claim('strip', 'keep', 110, 350, 760, 200);
+    text('A single drone video.', 120, 250, { size: 54, weight: 700, p: prog(lt, .2, 1), id: 'q1' });
+    bezel(SLOTS[0], t, SLOTS[0].t0, 'SOURCE FOOTAGE · JAL MAHAL, JAIPUR');
+    caption('Can it become an accurate 3D model?', t, T(2).from + 1.2);
+  },
+  3(t, lt) {   // GPU decode
+    grid(); kicker('1 · Decode on the GPU', t, T(3).from);
+    chip(W * .5, 470, 1, lt, .6 + .4 * Math.sin(lt * 5));
+    for (let k = 0; k < 9; k++) { const p = prog(lt, b(2 + k) - .4, b(2 + k) + .3); if (p <= 0) continue;
+      thumb(lerp(160, W * .5 - 60, easeOut(p)), 420, 110, 62, k + 2, { alpha: 1 - prog(p, .8, 1) });
+      const q = prog(lt, b(2 + k), b(2 + k) + .7); if (q > 0) thumb(lerp(W * .5 + 60, W - 280, easeOut(q)), 420 + (k % 3 - 1) * 90, 110, 62, k + 2, { alpha: 1 - prog(q, .85, 1), border: SAFFRON }); }
+    text(`${F('decode_fps', '—')} frames / s`, W * .5, 700, { size: 40, align: 'center', col: SAFFRON, weight: 800, p: prog(lt, 1.5, 2.2), id: 'fps' });
+    caption('4K video decoded on NVDEC, never touching the CPU.', t, T(3).from + 1);
+  },
+  4(t, lt) {   // passes: flow arrows, a cut
+    grid(); kicker('2 · Find the passes', t, T(4).from);
+    const cut = b(6), split = easeOut(prog(lt, cut, cut + .5));
+    for (let k = 0; k < 5; k++) { const x = 140 + k * 200 + (k >= 3 ? split * 80 : 0); thumb(x, 300, 170, 96, k < 3 ? 4 : 9, { alpha: prog(lt, 0.1 * k, .1 * k + .4), shift: (k % 3) * .05 });
+      if (k < 4) { const bad = k === 2 && lt > cut; ctx.save(); ctx.strokeStyle = bad ? RED : CYAN; ctx.lineWidth = 3; ctx.globalAlpha = prog(lt, .5 + .2 * k, .9 + .2 * k);
+        for (let a = 0; a < 3; a++) { const ay = 330 + a * 18, ax = x + 176; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + 20, ay); ctx.lineTo(ax + 14, ay - 5); ctx.moveTo(ax + 20, ay); ctx.lineTo(ax + 14, ay + 5); ctx.stroke(); }
+        ctx.restore(); } }
+    claim('frames', 'keep', 130, 290, 1110, 120);
+    if (lt > cut) text('CUT', 140 + 3 * 200 - 20, 450, { size: 30, col: RED, weight: 800, align: 'center', alpha: prog(lt, cut, cut + .3), id: 'cut' });
+    text(`${F('passes', '—')} passes found`, 120, 560, { size: 44, col: SAFFRON, weight: 800, p: prog(lt, cut + .6, cut + 1.3), id: 'passes' });
+    if (t >= SLOTS[1].t0 - .4) { grid(); kicker('2 · Find the passes', t, T(4).from); bezel(SLOTS[1], t, SLOTS[1].t0, 'REAL RUN · FLOW CONSISTENCY, PASSES, KEYFRAMES');
+      text(`${F('passes', '—')} passes`, 120, 400, { size: 54, col: SAFFRON, weight: 800, id: 'passes2' }); text('found by optical-flow', 120, 470, { size: 30, id: 'p3' }); text('consistency', 120, 510, { size: 30, id: 'p4' }); }
+    caption('Cuts and fades split an edit into camera moves.', t, T(4).from + 1);
+  },
+  5(t, lt) {   // overlap band
+    grid(); kicker('3 · Keyframes by overlap, not by clock', t, T(5).from);
+    const r = rng(3), dots = []; for (let i = 0; i < 180; i++) dots.push([r(), r()]);
+    const kx = 160, ky = 250, kw = 560, kh = 315; thumb(kx, ky, kw, kh, 5);
+    const drift = (lt % (2 * BEAT)) / (2 * BEAT), cycle = Math.floor(lt / (2 * BEAT));
+    ctx.save(); for (const [u, v] of dots) { const gone = u - drift * .45 < 0; ctx.fillStyle = gone ? 'rgba(255,90,90,.6)' : SAFFRON;
+      ctx.beginPath(); ctx.arc(kx + (u - drift * .45) * kw, ky + v * kh, 4, 0, 7); if (!gone) ctx.fill(); } ctx.restore();
+    const ov = 1 - .3 * drift; gauge(860, 330, 900, ov, `overlap with keyframe K: ${ov.toFixed(2)}`, { band: [.75, .85] });
+    for (let k = 0; k < 4; k++) { const on = cycle > k; ctx.save(); ctx.fillStyle = on ? SAFFRON : 'rgba(90,209,255,.25)'; ctx.fillRect(860 + k * 60, 470, 40, 24); ctx.restore(); }
+    text('keyframes', 860 + 4 * 60 + 10, 482, { size: 22, id: 'kflabel' }); claim('kfs', 'keep', 860, 470, 240, 24);
+    text(`${F('keyframes', '—')} keyframes · ~${F('views', '—')} views per point`, 860, 580, { size: 34, col: WHITE, p: prog(lt, 2, 3), id: 'kfn' });
+    caption('Similar enough to match. Different enough to see depth.', t, T(5).from + 1);
+  },
+  6(t, lt) {   // is it 3D?
+    grid(); kicker('4 · Is it really 3D?', t, T(6).from);
+    const sep = easeOut(prog(lt, 1, 3));
+    thumb(160, 250, 460, 260, 6); thumb(160 + 480, 250, 460, 260, 6, { shift: .06 });
+    ctx.save(); ctx.globalAlpha = .75; ctx.strokeStyle = CYAN; ctx.setLineDash([8, 6]); ctx.strokeRect(160 + 480 + 40 * sep, 250 + 10 * sep, 460, 260); ctx.restore();
+    text('homography explains the flat ground…', 160, 560, { size: 28, p: prog(lt, 1, 1.8), id: 'h1' });
+    text('…but not the palace: parallax', 160, 606, { size: 28, col: SAFFRON, p: prog(lt, 2.2, 3), id: 'h2' });
+    gauge(1240, 300, 520, clamp(F('snr_real', 10) / 12), `parallax SNR ${F('snr_real', '—')}  →  3D ✓`, { col: GREEN, alpha: prog(lt, b(6) - .3, b(6)) });
+    gauge(1240, 470, 520, clamp(F('snr_control', 1.2) / 12), `spinning-camera control: SNR ${F('snr_control', '—')}  →  not 3D`, { col: RED, alpha: prog(lt, b(9) - .3, b(9)) });
+    caption('Measured before any reconstruction is attempted.', t, T(6).from + 1.5);
+  },
+  7(t, lt) {   // SfM: one straight flight line of cameras, the model assembling in front of it
+    grid(); kicker('5 · Structure from motion on the GPU', t, T(7).from);
+    const cam = { yaw: .35 + lt * .06, pitch: .62, dist: 16, fov: 1150, cx: W * .56, cy: 600 };
+    cloud(t, cam, prog(lt, .3, 6.5) * .7, { size: 2.6 });
+    for (let k = 0; k < 9; k++) { const pos = [-8 + 2 * k, 8.5, -1];
+      frustum(cam, pos, [0, 1, 0], 1.4, k % 4 ? CYAN : SAFFRON, prog(lt, .15 * k, .15 * k + .4)); }
+    claim('cloud', 'keep', 380, 160, 1460, 620);
+    text(`${F('registered', '—')} keyframes registered`, 120, 800, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 3, 4), id: 'reg' });
+    caption(`Camera poses and ${F('sfm_points', '—')} tie points.`, t, T(7).from + 1.2);
+  },
+  8(t, lt) {   // depth
+    grid(); kicker('6 · A depth prior, checked against geometry', t, T(8).from);
+    const cam = { yaw: .35 + (T(8).from - T(7).from + lt) * .06, pitch: .42, dist: 17, fov: 900, cx: 470, cy: 540 };
+    cloud(t, cam, .7, { size: 2.4, alpha: 1 - prog(lt, 1, 2) * .4 });
+    claim('cloud8', 'keep', 120, 330, 720, 440);
+    bezel(SLOTS[2], t, SLOTS[2].t0, 'REAL RUN · KEYFRAME | MARIGOLD V2 DEPTH');
+    text(`held-out error vs SfM: ${F('depth_absrel', '—')}`, 120, 250, { size: 36, col: SAFFRON, weight: 800, p: prog(lt, 2, 3), id: 'absrel' });
+    text('(median, per-image calibration)', 120, 296, { size: 22, col: CYAN, alpha: prog(lt, 2.5, 3.2), id: 'absrel2' });
+    caption('Diffusion-transformer depth, calibrated per image to SfM.', t, T(8).from + 1);
+  },
+  9(t, lt) {   // splats
+    grid(); kicker('7 · 3D Gaussian splatting', t, T(9).from);
+    const cam = { yaw: .2 + lt * .18, pitch: .34, dist: 20, fov: 950, cx: 560, cy: 540 };
+    splats(t, cam, prog(lt, .2, 5), 1);
+    claim('splats', 'keep', 120, 260, 900, 560);
+    text(`${F('splats', '—')} Gaussians`, 120, 250, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 1, 2), id: 'ng' });
+    bezel(SLOTS[3], t, SLOTS[3].t0, 'REAL RUN · TRAINED MODEL');
+    text(`held-out PSNR ${F('psnr', '—')} dB`, 1040, 700, { size: 32, col: WHITE, p: prog(lt, b(6), b(6) + .8), id: 'psnr' });
+    caption('Trained on the GPU from the keyframes and the depth prior.', t, T(9).from + 1);
+  },
+  10(t, lt) {   // georeference
+    grid(); kicker('8 · On the map', t, T(10).from);
+    const tilt = lerp(.18, 0, easeOut(prog(lt, b(1), b(2.5))));
+    ctx.save(); ctx.translate(W * .38, 560); ctx.rotate(tilt); ctx.strokeStyle = CYAN; ctx.lineWidth = 2; ctx.globalAlpha = .7;
+    for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(i * 60, -200); ctx.lineTo(i * 60, 200); ctx.moveTo(-360, i * 33); ctx.lineTo(360, i * 33); ctx.stroke(); }
+    ctx.restore(); palace(W * .38, 560, .8, { reflect: false, alpha: .95 });
+    ctx.save(); ctx.fillStyle = SAFFRON; ctx.beginPath(); ctx.arc(W * .38, 380, 22, Math.PI, 0); ctx.lineTo(W * .38, 440); ctx.closePath(); ctx.fill(); ctx.restore();
+    claim('map', 'keep', W * .38 - 380, 340, 760, 440);
+    text('levelled on the ground, fitted to GPS', 1180, 460, { size: 32, p: prog(lt, .2, 1), id: 'g1' });
+    text(`metric scale error < ${F('scale_err', '—')}`, 1180, 520, { size: 32, col: SAFFRON, p: prog(lt, b(2.5), b(2.5) + .6), id: 'g2' });
+  },
+  11() { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); },            // break
+  12(t, lt) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); claim('flythrough', 'keep', 0, 0, W, 980);
+    text('The reconstructed model', 120, 110, { size: 30, col: WHITE, alpha: prog(lt, .5, 1) * (1 - prog(lt, 4, 5)), id: 'fly' }); },
+  13(t, lt) {   // recap
+    grid(); text('Video → passes → keyframes → poses → depth → splats → map', W / 2, 420, { size: 44, align: 'center', weight: 700, p: prog(lt, 0, 1.2), id: 'recap' });
+    text('One pass. One GPU. One world in 3D.', W / 2, 520, { size: 60, align: 'center', weight: 800, col: SAFFRON, p: prog(lt, .6, 1.6), id: 'tag' });
+    text('Smart India Hackathon 2026 · Problem Statement 26158 · NTRO', W / 2, 640, { size: 28, align: 'center', col: CYAN, alpha: prog(lt, 1, 1.6), id: 'sih' });
+  },
+};
+
+function draw(frame) {
+  const t = frame / FPS; LAYOUT = [];
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none';
+  const shot = SHOTS.find(s => t >= s.from && t < s.to) || SHOTS[SHOTS.length - 1];
+  SCENES[shot.id](t, t - shot.from);
+  if (shot.id <= 10) rail(t);
+  const inT = prog(t, shot.from, shot.from + .18), outT = shot.id === 11 ? 0 : prog(t, shot.to - .12, shot.to);   // soft edges on cuts
+  const a = Math.max(1 - inT, outT) * .6; if (a > 0 && shot.id !== 12) { ctx.fillStyle = `rgba(5,12,22,${a})`; ctx.fillRect(0, 0, W, H); }
+  if (t > DUR - 1) { ctx.fillStyle = `rgba(0,0,0,${prog(t, DUR - 1, DUR)})`; ctx.fillRect(0, 0, W, H); }
+  window.LAYOUT = LAYOUT;
+}
+window.draw = draw; window.FRAMES = FRAMES; window.FPS = FPS; window.SLOTS = SLOTS;
+window.CUES = SHOTS.slice(1).map(s => s.from);
+
+/*GROOVE*/
+
+window.SCORE = ac => buildGroove(ac, { dur: DUR, bpm: BPM, sections: SECTIONS, events: EVENTS, kit: 'electro', harmony: 'bright', key: 2, sfxGain: .7 });
+
+if (!new URLSearchParams(location.search).has('render')) {
+  let start = performance.now();
+  const loop = () => { draw(Math.floor((performance.now() - start) / 1000 * FPS) % FRAMES); requestAnimationFrame(loop); };
+  loop();
+  addEventListener('click', () => { const ac = new AudioContext(); window.SCORE(ac); start = performance.now() + 50; }, { once: true });
+}
+</script>
+</body>
+</html>

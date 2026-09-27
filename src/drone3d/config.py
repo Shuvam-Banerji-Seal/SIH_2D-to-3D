@@ -62,6 +62,7 @@ class KeyframeConfig:
     adaptive_rate: bool = False
     target_motion: float = 0.02  # median flow per analysis step, fraction of the width
     min_analysis_fps: float = 3.0
+    relative_overlap: bool = False  # ignore what dies in the first step (water, reflections)
     flow_model: str = "raft_large"  # raft_large | raft_small
     flow_batch: int = 32
     overlap_target: float = 0.75  # tau: co-visibility with the previous keyframe
@@ -125,6 +126,7 @@ class ExportConfig:
     texture: bool = True  # bake an atlas from the keyframes (sharper than TSDF vertex colours)
     texture_views: int = 16  # candidate keyframes; each triangle takes its best view
     texture_size: int = 4096
+    max_triangles: int = 600_000  # viewable copies (GLB, textured, FBX); mesh.ply keeps full density
 
 
 @dataclass

@@ -1,0 +1,61 @@
+{
+ "note": "Open3D 0.20 VoxelBlockGrid.extract_triangle_mesh on Jal Mahal quality-profile depth (960 px, every keyframe); each probe in a fresh process.",
+ "active_block_probe": [
+  {
+   "active": 59895,
+   "ok": true
+  },
+  {
+   "active": 62760,
+   "ok": true
+  },
+  {
+   "active": 66472,
+   "ok": false
+  },
+  {
+   "active": 70082,
+   "ok": false
+  }
+ ],
+ "capacity_probe_at_66472_active": [
+  {
+   "capacity": 70000,
+   "ok": false
+  },
+  {
+   "capacity": 100000,
+   "ok": false
+  },
+  {
+   "capacity": 170000,
+   "ok": false
+  },
+  {
+   "capacity": 180000,
+   "ok": false
+  }
+ ],
+ "cpu_extraction_70082": "segfault",
+ "sequence": {
+  "crash": "138,790-block grid then 161,677-block grid in one process: second extraction fails (each alone works)",
+  "ok": "every sequence up to ~92k blocks"
+ },
+ "quality_8gb_vs_24gb_completeness": {
+  "model_0": [
+   0.928,
+   0.93
+  ],
+  "model_1": [
+   0.874,
+   0.87
+  ]
+ },
+ "quality_all_models_capped": [
+  0.9295,
+  0.867,
+  0.771,
+  0.6728,
+  0.9066
+ ]
+}

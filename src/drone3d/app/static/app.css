@@ -280,3 +280,7 @@ pre.yaml { font: 12px var(--mono); background: #060a0e; border: 1px solid var(--
 kbd { font: 11px var(--mono); border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--ink3); }
 h2 .btn, h2 select, h2 input, h2 .seg, h2 label { font: 500 12.5px var(--sans); letter-spacing: 0; text-transform: none; }
 h2 select { width: auto; padding: 5px 8px; }
+.xp .pip { position: absolute; right: 12px; bottom: 44px; width: 320px; z-index: 4; background: #000; border: 1px solid var(--line2); border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px #000a; }
+.xp .pip video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.xp .pipbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; font: 11px var(--mono); color: var(--muted); }
+.xp .layers .lay:nth-last-child(1):nth-child(odd) { grid-column: span 2; }

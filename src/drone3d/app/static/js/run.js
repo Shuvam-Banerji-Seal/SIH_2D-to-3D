@@ -90,7 +90,7 @@ export async function viewRun(main, name) {
     const s = r.summary;
     if (!s.files?.length) return;
     const el = $('#downloads'); el.hidden = false;
-    el.innerHTML = `<h2>Deliverables <span class="tag">OBJ · PLY · LAS · GeoTIFF · GLB · FBX · web splats</span></h2>` + s.files.map((m) => `
+    el.innerHTML = `<h2>Deliverables <span class="tag">OBJ · PLY · LAS · GeoTIFF · GLB · FBX · STL · Blender · web splats</span></h2>` + s.files.map((m) => `
       <div style="padding:10px 0;border-top:1px solid var(--line)"><div class="between"><b>model ${esc(m.model)}</b><span class="note mono">${fmtN(m.triangles)} triangles · ${fmtN(m.points)} points${m.epsg ? ` · EPSG:${m.epsg}` : ''}</span></div>
         <div class="row" style="margin-top:8px;gap:6px">${m.files.map((f) => `<a class="btn tiny" href="/runs/${enc}/export/${esc(f)}" download>${icon.down}${esc(f.split('/').pop())}</a>`).join('')}</div></div>`).join('');
   }

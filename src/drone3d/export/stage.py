@@ -19,7 +19,15 @@ from pathlib import Path
 
 import numpy as np
 
-from drone3d.export.formats import rasterize_top, write_fbx, write_geotiff, write_las, write_mesh
+from drone3d.export.formats import (
+    Y_UP,
+    rasterize_top,
+    write_blend,
+    write_fbx,
+    write_geotiff,
+    write_las,
+    write_mesh,
+)
 from drone3d.logging_utils import get_logger
 
 __all__ = ["run_export", "utm_epsg"]
@@ -127,7 +135,7 @@ def _write_textured(v: np.ndarray, f: np.ndarray, uv: np.ndarray, albedo: np.nda
     tex = stem.with_name(stem.name + "_albedo.jpg")
     tex.write_bytes(jpg)
     image = Image.open(io.BytesIO(jpg))  # format JPEG: trimesh embeds it as is in the GLB
-    verts = v[f].reshape(-1, 3)
+    verts = v[f].reshape(-1, 3) @ Y_UP.T  # glTF is y-up
     faces = np.arange(len(verts)).reshape(-1, 3)
     visual = trimesh.visual.TextureVisuals(uv=uv.reshape(-1, 2), image=image)
     glb = stem.with_suffix(".glb")
@@ -146,14 +154,43 @@ def _write_textured(v: np.ndarray, f: np.ndarray, uv: np.ndarray, albedo: np.nda
     return [glb, obj, mtl, tex]
 
 
-def _textured_and_fbx(baked: tuple | None, mdir: Path, fbx_src: Path | None, fbx: bool) -> list[Path]:
-    """Background half of a model's export: textured GLB/OBJ, then the FBX (from the textured GLB)."""
+def _frame_previews(posed: list, images: Path | None, depth_dir: Path | None, out: Path, *, most: int = 36,
+                    width: int = 320) -> dict | None:  # fmt: skip
+    """Small keyframe photos and fused-depth previews for the viewer's photo and depth layers."""
+    if images is None or not posed:
+        return None
+    from PIL import Image
+
+    step = max(1, -(-len(posed) // most))
+    names = []
+    for im in posed[::step]:
+        src = images / im.name
+        if not src.is_file():
+            continue
+        stem = Path(im.name).stem
+        (out / "photo").mkdir(parents=True, exist_ok=True)
+        with Image.open(src) as pic:
+            pic.thumbnail((width, width))
+            pic.convert("RGB").save(out / "photo" / f"{stem}.jpg", "JPEG", quality=80)
+        if depth_dir is not None and (depth_dir / f"{stem}.jpg").is_file():
+            (out / "depth").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(depth_dir / f"{stem}.jpg", out / "depth" / f"{stem}.jpg")
+        names.append(im.name)
+    return {"names": names, "photo": (out / "photo").exists(), "depth": (out / "depth").exists()} if names else None
+
+
+def _textured_and_fbx(baked: tuple | None, mdir: Path, fbx_src: Path | None, fbx: bool, blend: bool = False) -> list[Path]:
+    """Background half of a model's export: textured GLB/OBJ, then FBX and .blend (from the textured GLB)."""
     out = _write_textured(*baked, mdir / "mesh_textured") if baked is not None else []
     src = out[0] if out else fbx_src
     if fbx and src is not None:
         converted = write_fbx(src, mdir / "mesh.fbx")
         if converted is not None:
             out.append(converted)
+    if blend and src is not None and src.suffix == ".glb":
+        scene = write_blend(src, mdir / "mesh.blend")
+        if scene is not None:
+            out.append(scene)
     return out
 
 
@@ -256,6 +293,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 baked = (baked[0] @ rot.T, *baked[1:])
             units, frame = "model units", "SfM (levelled, not georeferenced)"
             to_export = {"scale": 1.0, "rotation": rot.tolist(), "translation": [0.0, 0.0, 0.0]}
+        with clock("frames"):
+            frames = _frame_previews(posed, images, Path(m["depth_previews"]) if m.get("depth_previews") else None,
+                                     mdir / "frames")  # fmt: skip
         # SfM frame -> this model's export frame, for renderers that follow the keyframe cameras
         (mdir / "frame.json").write_text(json.dumps({**to_export, "frame": frame, "units": units}, indent=1))
         splat_file, splat_info = None, None
@@ -269,13 +309,14 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 splat_file = mdir / "splats.splat"
                 splat_info = export_splat(trained["splat_ply"], splat_file, transform=tf, max_splats=max_splats)
         # OBJ has no standard vertex colour: with a texture, OBJ is written textured only
-        plain = [x for x in mesh_formats if x != "fbx" and not (x == "obj" and baked is not None)]
+        plain = [x for x in mesh_formats if x not in ("fbx", "blend") and not (x == "obj" and baked is not None)]
         with clock("mesh_files"):
             files = write_mesh(v, f, vc, mdir / "mesh", tuple(x for x in plain if x == "ply"))
             files += write_mesh(dv, df, dvc, mdir / "mesh", tuple(x for x in plain if x != "ply"))
         # textured files and the FBX are written in the background while the GPU bakes the next model
         fbx_src = mdir / "mesh.glb" if (mdir / "mesh.glb").is_file() else (files[0] if files else None)
-        bg_jobs.append((pool.submit(_textured_and_fbx, baked, mdir, fbx_src, "fbx" in mesh_formats), len(rows)))
+        bg_jobs.append((pool.submit(_textured_and_fbx, baked, mdir, fbx_src, "fbx" in mesh_formats, "blend" in mesh_formats),
+                        len(rows)))  # fmt: skip
         pts_ply = mdir / "points.ply"
         cloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(p))
         if pc is not None:
@@ -307,7 +348,8 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         scene_models.append({
             "name": f"model {name}",
             "mesh": f"model_{name}/mesh_textured.glb" if baked is not None else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),
-            "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units, "dir": f"model_{name}",
+            "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units, "dir": f"model_{name}", "gltf_up": "y",
+            "frames": {**frames, "photo_dir": f"model_{name}/frames/photo", "depth_dir": f"model_{name}/frames/depth"} if frames else None,
             "camera_rotations": cam_rots.reshape(len(cam_rots), 9).round(5).tolist(), "intrinsics": intr,
             "images": [im.name for im in posed],
             "splat": f"model_{name}/splats.splat" if splat_file is not None else None,

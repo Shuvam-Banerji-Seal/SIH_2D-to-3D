@@ -31,8 +31,11 @@ export const MODULES = [
     get: (s) => s.eff('geo', 'enabled') !== false && s.stages().includes('georef'), set: (s, on) => { s.override('geo.enabled', on); s.toggleStage('georef', on); } },
   { key: 'las', title: 'LAS point cloud', desc: 'LAS 1.4, point format 7 (RGB)', get: (s) => s.eff('export', 'las') !== false, set: (s, on) => s.override('export.las', on) },
   { key: 'geotiff', title: 'GeoTIFF DSM + orthophoto', desc: 'top-down surface model and colour raster', get: (s) => s.eff('export', 'geotiff') !== false, set: (s, on) => s.override('export.geotiff', on) },
-  { key: 'fbx', title: 'FBX', desc: 'for DCC tools (assimp)', get: (s) => (s.eff('export', 'mesh_formats') || []).includes('fbx'),
-    set: (s, on) => { const f = new Set(s.eff('export', 'mesh_formats') || ['ply', 'obj', 'glb']); on ? f.add('fbx') : f.delete('fbx'); s.override('export.mesh_formats', ['ply', 'obj', 'glb', 'fbx'].filter((x) => f.has(x))); } },
+  ...[['fbx', 'FBX', 'for DCC tools (assimp)'], ['stl', 'STL', 'geometry only, for 3D printing and CAD'],
+    ['blend', 'Blender scene (.blend)', 'the textured mesh as a native Blender file, texture packed (headless Blender)']].map(([fmt, title, desc]) => ({
+    key: fmt, title, desc, get: (s) => (s.eff('export', 'mesh_formats') || []).includes(fmt),
+    set: (s, on) => { const f = new Set(s.eff('export', 'mesh_formats') || ['ply', 'obj', 'glb']); on ? f.add(fmt) : f.delete(fmt);
+      s.override('export.mesh_formats', ['ply', 'obj', 'glb', 'fbx', 'stl', 'blend'].filter((x) => f.has(x))); } })),
 ];
 
 // Form state shared by the Build and Live pages.

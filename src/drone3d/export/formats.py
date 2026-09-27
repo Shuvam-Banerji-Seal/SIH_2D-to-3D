@@ -1,9 +1,11 @@
-"""Exports in the formats problem statement 26158 lists: OBJ, PLY, LAS, GeoTIFF, glTF/GLB, FBX.
+"""Exports in the formats problem statement 26158 lists -- OBJ, PLY, LAS, GeoTIFF, glTF/GLB, FBX -- plus STL and .blend.
 
 Everything takes points or a mesh in one Cartesian frame: local ENU metres
-after georeferencing, or the SfM frame without GPS. With an EPSG code (a UTM
-zone) the LAS and GeoTIFF files carry it; without one they are written in
-the local frame and say so.
+after georeferencing, or the SfM frame without GPS, z up. With an EPSG code (a
+UTM zone) the LAS and GeoTIFF files carry it; without one they are written in
+the local frame and say so. glTF is y-up by specification, so GLB files store
+``(x, z, -y)``: Blender, three.js and every other glTF reader then show the
+model upright (PLY, OBJ, STL and LAS keep the z-up survey frame).
 """
 
 from __future__ import annotations
@@ -15,26 +17,29 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["rasterize_top", "write_fbx", "write_geotiff", "write_las", "write_mesh"]
+__all__ = ["Y_UP", "rasterize_top", "write_blend", "write_fbx", "write_geotiff", "write_las", "write_mesh"]
 
 log = get_logger(__name__)
 NODATA = -9999.0
+Y_UP = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]])  # z-up frame -> glTF y-up: (x, y, z) -> (x, z, -y)
+_ROOT = Path(__file__).resolve().parents[3]
 
 
 def write_mesh(vertices: np.ndarray, faces: np.ndarray, colors: np.ndarray | None, stem: Path,
                formats: tuple[str, ...] = ("ply", "obj", "glb")) -> list[Path]:  # fmt: skip
-    """Mesh with optional per-vertex colour (uint8 or [0, 1] float) -> ``stem.<fmt>`` files."""
+    """Mesh with optional per-vertex colour (uint8 or [0, 1] float) -> ``stem.<fmt>`` (ply, obj, glb, stl)."""
     import trimesh
 
     vc = None
     if colors is not None:
         c = np.asarray(colors)
         vc = (np.clip(c, 0, 1) * 255).astype(np.uint8) if c.dtype.kind == "f" else c.astype(np.uint8)
-    mesh = trimesh.Trimesh(vertices=np.asarray(vertices), faces=np.asarray(faces), vertex_colors=vc, process=False)
+    v = np.asarray(vertices, dtype=np.float64)
     out = []
     for fmt in formats:
         path = stem.with_suffix(f".{fmt}")
-        mesh.export(path)
+        verts = v @ Y_UP.T if fmt == "glb" else v
+        trimesh.Trimesh(vertices=verts, faces=np.asarray(faces), vertex_colors=vc, process=False).export(path)
         out.append(path)
     return out
 
@@ -107,6 +112,36 @@ def write_geotiff(array: np.ndarray, path: Path, *, origin: tuple[float, float],
     photometric = "rgb" if array.ndim == 3 else "minisblack"
     tifffile.imwrite(path, array, photometric=photometric, extratags=tags, compression="zlib")
     return path
+
+
+def blender_binary() -> Path | None:
+    """Blender for headless conversion: ``$DRONE3D_BLENDER``, ``.tools/blender/blender``, then PATH."""
+    import os
+    import shutil
+
+    for cand in (os.environ.get("DRONE3D_BLENDER"), _ROOT / ".tools" / "blender" / "blender", shutil.which("blender")):
+        if cand and Path(cand).is_file():
+            return Path(cand)
+    return None
+
+
+def write_blend(src_glb: Path, dst: Path, *, blender: Path | None = None, timeout: float = 300.0) -> Path | None:
+    """A native Blender scene (``.blend``, texture packed) from a GLB, with Blender run headless."""
+    exe = blender or blender_binary()
+    if exe is None:
+        log.warning(".blend skipped: no Blender (put one in .tools/blender or set DRONE3D_BLENDER)")
+        return None
+    script = _ROOT / "tools" / "glb_to_blend.py"
+    cmd = [str(exe), "--background", "--factory-startup", "--python", str(script), "--", str(src_glb), str(dst)]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired:
+        log.warning(".blend export timed out after %.0f s", timeout)
+        return None
+    if res.returncode != 0 or not dst.is_file():
+        log.warning(".blend export failed: %s", (res.stderr or res.stdout)[-300:])
+        return None
+    return dst
 
 
 def write_fbx(src: Path, dst: Path, converter: str | None = None) -> Path | None:

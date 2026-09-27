@@ -126,7 +126,7 @@ class ExportConfig:
     """Deliverable formats and the web viewer."""
 
     enabled: bool = True  # write the deliverables and the viewer
-    mesh_formats: list[str] = field(default_factory=lambda: ["ply", "obj", "glb", "fbx"])  # ply | obj | glb | fbx
+    mesh_formats: list[str] = field(default_factory=lambda: ["ply", "obj", "glb", "fbx", "stl", "blend"])  # ply | obj | glb | fbx | stl | blend
     las: bool = True  # write the point cloud as LAS (UTM + EPSG when georeferenced)
     geotiff: bool = True  # DSM + orthophoto (projected UTM when georeferenced)
     raster_cell: float | None = None  # metres (or model units); default: 2 x median point spacing

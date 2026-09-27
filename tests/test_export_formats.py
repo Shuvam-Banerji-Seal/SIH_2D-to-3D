@@ -38,7 +38,9 @@ def test_geotiff_carries_scale_tiepoint_and_crs(tmp_path: Path) -> None:
     import tifffile
 
     arr = np.arange(12, dtype=np.float32).reshape(3, 4)
-    path = write_geotiff(arr, tmp_path / "dsm.tif", origin=(500000.0, 3000100.0), cell=0.5, epsg=32643)
+    path = write_geotiff(
+        arr, tmp_path / "dsm.tif", origin=(500000.0, 3000100.0), cell=0.5, epsg=32643
+    )
     with tifffile.TiffFile(path) as tif:
         np.testing.assert_array_equal(tif.asarray(), arr)
         geo = tif.geotiff_metadata
@@ -58,3 +60,53 @@ def test_write_mesh_formats(tmp_path: Path) -> None:
     back = trimesh.load(paths[2], force="mesh")
     assert len(back.faces) == 4
     np.testing.assert_array_equal(back.visual.vertex_colors[:, :3].min(0) <= 9, True)
+
+
+def test_glb_is_y_up_and_stl_keeps_the_survey_frame(tmp_path: Path) -> None:
+    import trimesh
+
+    from drone3d.export.formats import Y_UP
+
+    v = np.array([[1.0, 2.0, 30.0], [2.0, 2.0, 30.0], [1.0, 3.0, 31.0]])  # z = height
+    f = np.array([[0, 1, 2]])
+    glb, stl = write_mesh(v, f, None, tmp_path / "m", ("glb", "stl"))
+    got = trimesh.load(glb, force="mesh").vertices
+    np.testing.assert_allclose(sorted(got[:, 1]), sorted(v[:, 2]))  # height is glTF's +Y
+    np.testing.assert_allclose(
+        np.sort(got @ Y_UP, axis=0), np.sort(v, axis=0)
+    )  # Y_UP is a rotation: undone by its transpose
+    np.testing.assert_allclose(
+        np.sort(trimesh.load(stl, force="mesh").vertices, axis=0), np.sort(v, axis=0), atol=1e-6
+    )
+    assert abs(np.linalg.det(Y_UP) - 1) < 1e-12
+
+
+def test_blend_is_skipped_without_blender(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from drone3d.export import formats
+
+    monkeypatch.setattr(formats, "blender_binary", lambda: None)
+    assert formats.write_blend(tmp_path / "m.glb", tmp_path / "m.blend") is None
+
+
+def test_frame_previews_for_the_viewer(tmp_path: Path) -> None:
+    from PIL import Image
+
+    from drone3d.export.stage import _frame_previews
+
+    class Im:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    images, depth = tmp_path / "images", tmp_path / "depth"
+    (images / "pass_00").mkdir(parents=True)
+    depth.mkdir()
+    posed = [Im(f"pass_00/f_{k:06d}.jpg") for k in range(0, 100, 5)]
+    for im in posed:
+        Image.new("RGB", (1920, 1080), (100, 120, 140)).save(images / im.name)
+    Image.new("RGB", (160, 90)).save(depth / "f_000020.jpg")
+    out = _frame_previews(posed, images, depth, tmp_path / "frames", most=6)
+    assert len(out["names"]) == 5 and out["photo"] and out["depth"]  # every 4th of 20
+    with Image.open(tmp_path / "frames" / "photo" / "f_000000.jpg") as im:
+        assert max(im.size) == 320
+    assert (tmp_path / "frames" / "depth" / "f_000020.jpg").is_file()
+    assert _frame_previews([], images, depth, tmp_path / "x") is None

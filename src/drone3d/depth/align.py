@@ -185,7 +185,9 @@ class MonotoneMap:
     continues with the robust affine slope.
     """
 
-    def __init__(self, pred: np.ndarray, z: np.ndarray, *, bins: int = 24, slope: float = 1.0) -> None:
+    def __init__(
+        self, pred: np.ndarray, z: np.ndarray, *, bins: int = 24, slope: float = 1.0
+    ) -> None:
         p, lz = np.asarray(pred, dtype=np.float64), np.log(np.asarray(z, dtype=np.float64))
         edges = np.unique(np.quantile(p, np.linspace(0, 1, bins + 1)))
         which = np.clip(np.searchsorted(edges, p, side="right") - 1, 0, len(edges) - 2)
@@ -227,10 +229,15 @@ class MonotoneMap:
 
 def _scores(d: np.ndarray, z: np.ndarray) -> dict[str, float]:
     rel = np.abs(d - z) / z
-    return {"abs_rel_median": float(np.median(rel)), "delta1": float(np.mean(np.maximum(d / z, z / d) < 1.25))}
+    return {
+        "abs_rel_median": float(np.median(rel)),
+        "delta1": float(np.mean(np.maximum(d / z, z / d) < 1.25)),
+    }
 
 
-def cross_validate(pred: np.ndarray, z: np.ndarray, folds: int = 5, seed: int = 0) -> dict[str, dict[str, float]] | None:
+def cross_validate(
+    pred: np.ndarray, z: np.ndarray, folds: int = 5, seed: int = 0
+) -> dict[str, dict[str, float]] | None:
     """Held-out-point comparison of affine vs monotone calibration."""
     ok = np.isfinite(pred) & np.isfinite(z) & (z > 0)
     p, zz = pred[ok], z[ok]

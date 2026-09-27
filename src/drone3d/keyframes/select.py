@@ -211,7 +211,11 @@ def find_passes(flow: ConsecutiveFlow, fps: float, cfg: SelectorConfig) -> list[
             if i - start + 1 >= min_len:
                 passes.append((start, i))
             start = None
-    return [p for p in (_trim_fades(flow.luma_mean, s, e, cfg.fade_ratio) for s, e in passes) if p[1] - p[0] + 1 >= min_len]
+    return [
+        p
+        for p in (_trim_fades(flow.luma_mean, s, e, cfg.fade_ratio) for s, e in passes)
+        if p[1] - p[0] + 1 >= min_len
+    ]
 
 
 def _trim_fades(luma: np.ndarray, s: int, e: int, ratio: float) -> tuple[int, int]:

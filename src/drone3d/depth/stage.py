@@ -21,9 +21,38 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["DepthStageResult", "configure_bitsandbytes", "run_depth"]
+__all__ = ["DepthStageResult", "aggregate", "configure_bitsandbytes", "run_depth"]
 
 log = get_logger(__name__)
+
+
+def aggregate(per_image: dict[str, dict]) -> dict[str, dict]:
+    """Per-model summary of the per-image records, including models where every alignment failed."""
+    by_model: dict[str, list[dict]] = {}
+    for record in per_image.values():
+        by_model.setdefault(record["model"], []).append(record)
+    out = {}
+    for model, records in sorted(by_model.items()):
+        ok = [r for r in records if "abs_rel" in r]
+
+        def med(key: str, rows: list[dict] = ok) -> float | None:
+            return round(float(np.median([r[key] for r in rows])), 4) if rows else None
+
+        summary = {
+            "images": len(records),
+            "aligned": len(ok),
+            "abs_rel_median": med("abs_rel_median"),
+            "delta1_median": med("delta1"),
+            "valid_fraction_mean": round(float(np.mean([r["valid_fraction"] for r in ok])), 4)
+            if ok
+            else None,
+        }
+        for kind in ("affine", "monotone"):
+            for metric in ("abs_rel_median", "delta1"):
+                vals = [r["cv"][kind][metric] for r in ok if "cv" in r]
+                summary[f"cv_{kind}_{metric}"] = round(float(np.median(vals)), 4) if vals else None
+        out[model] = summary
+    return out
 
 
 def configure_bitsandbytes() -> None:
@@ -117,7 +146,6 @@ def run_depth(
     result = DepthStageResult(
         images=len(jobs), seconds=0.0, seconds_inference=0.0, processing_size=size
     )
-    per_model: dict[str, list[dict]] = {}
     infer_time = 0.0
     for s in range(0, len(jobs), batch):
         chunk = jobs[s : s + batch]
@@ -173,22 +201,8 @@ def run_depth(
             record["valid_fraction"] = round(float(valid.mean()), 4)
             write_depth_png(depth_dir / f"{stem}.png", depth, valid)
             result.per_image[obs.name] = record
-            per_model.setdefault(model_dir, []).append(record)
         log.info("depth %d/%d", min(s + batch, len(jobs)), len(jobs))
-    for model_dir, records in per_model.items():
-        ok = [r for r in records if "abs_rel" in r]
-        result.per_model[model_dir] = {
-            "images": len(records),
-            "aligned": len(ok),
-            "abs_rel_median": round(float(np.median([r["abs_rel_median"] for r in ok])), 4)
-            if ok
-            else None,
-            "abs_rel_mean": round(float(np.mean([r["abs_rel"] for r in ok])), 4) if ok else None,
-            "delta1_mean": round(float(np.mean([r["delta1"] for r in ok])), 4) if ok else None,
-            "valid_fraction_mean": round(float(np.mean([r["valid_fraction"] for r in ok])), 4)
-            if ok
-            else None,
-        }
+    result.per_model = aggregate(result.per_image)
     result.seconds = time.perf_counter() - started
     result.seconds_inference = infer_time
     del net

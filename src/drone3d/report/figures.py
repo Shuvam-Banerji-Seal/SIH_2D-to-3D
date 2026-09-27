@@ -91,7 +91,9 @@ def keyframe_timeline(selection: dict, out_path: str | Path, fps: float | None =
     return out
 
 
-def depth_panel(dataset: str | Path, depth_result: dict, out_path: str | Path, names: list[str]) -> Path:
+def depth_panel(
+    dataset: str | Path, depth_result: dict, out_path: str | Path, names: list[str]
+) -> Path:
     """RGB | aligned Marigold depth | predicted-vs-SfM scatter, one row per image."""
     import cv2
     import matplotlib
@@ -104,7 +106,12 @@ def depth_panel(dataset: str | Path, depth_result: dict, out_path: str | Path, n
     dataset = Path(dataset)
     per_image = depth_result["per_image"]
     obs_cache: dict[str, dict] = {}
-    fig, axes = plt.subplots(len(names), 3, figsize=(10.5, 2.35 * len(names)), gridspec_kw={"width_ratios": [1.6, 1.6, 1]})
+    fig, axes = plt.subplots(
+        len(names),
+        3,
+        figsize=(10.5, 2.35 * len(names)),
+        gridspec_kw={"width_ratios": [1.6, 1.6, 1]},
+    )
     axes = np.atleast_2d(axes)
     for row, name in zip(axes, names, strict=True):
         rec = per_image[name]
@@ -113,7 +120,9 @@ def depth_panel(dataset: str | Path, depth_result: dict, out_path: str | Path, n
             obs_cache[model] = sfm_depth_observations(model)
         obs = obs_cache[model][name]
         rgb = cv2.cvtColor(cv2.imread(str(dataset / "images" / name)), cv2.COLOR_BGR2RGB)
-        pred = np.load(dataset / "depth_raw" / (str(Path(name).with_suffix("")) + ".npz"))["pred"].astype(np.float32)
+        pred = np.load(dataset / "depth_raw" / (str(Path(name).with_suffix("")) + ".npz"))[
+            "pred"
+        ].astype(np.float32)
         depth = np.exp(rec["a"] * pred + rec["b"])
         import torch
 

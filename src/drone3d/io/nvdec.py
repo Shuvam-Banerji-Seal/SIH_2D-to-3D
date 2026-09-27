@@ -329,7 +329,9 @@ def stream_analysis_chunks(
     frame_bytes = width * height * 3 // 2
     q: queue.Queue = queue.Queue(maxsize=prefetch)
     stop, handle = threading.Event(), []
-    thread = threading.Thread(target=_reader, args=(cmd, frame_bytes, chunk, q, stop, handle), daemon=True)
+    thread = threading.Thread(
+        target=_reader, args=(cmd, frame_bytes, chunk, q, stop, handle), daemon=True
+    )
     thread.start()
     color = _color_args(info)
     produced = 0
@@ -344,7 +346,9 @@ def stream_analysis_chunks(
                 log.warning("%s", item)
                 break
             n = len(item) // frame_bytes
-            nv12 = torch.from_numpy(item).view(n, height * 3 // 2, width).to(device, non_blocking=True)
+            nv12 = (
+                torch.from_numpy(item).view(n, height * 3 // 2, width).to(device, non_blocking=True)
+            )
             rgb = nv12_to_rgb(nv12, height, width, **color)
             if crop is not None:
                 x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), size, multiple=8)
@@ -546,7 +550,9 @@ def extract_frames(
             )
             rgb = nv12_to_rgb(nv12, height, width, **color)
             if crop is not None:
-                x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), (width, height), multiple=2)
+                x0, y0, x1, y1 = scaled_crop(
+                    crop, (info.width, info.height), (width, height), multiple=2
+                )
                 rgb = rgb[:, y0:y1, x0:x1]
             for k in range(len(frames)):
                 target = Path(out_paths[order[rank]])

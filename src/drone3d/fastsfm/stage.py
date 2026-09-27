@@ -49,20 +49,30 @@ def _to_full(tracks: FlowTracks, full: tuple[int, int]) -> FlowTracks:
     return FlowTracks(tracks.image, tracks.track, ((tracks.xy + 0.5) * s - 0.5).astype(np.float32), full, tracks.stats)
 
 
-def _map_pass(db: Path, images: Path, work_dir: Path, name: str, n_images: int, mapper: str):  # type: ignore[no-untyped-def]
-    """Verify and map one pass; falls back to the other mapper when under 80 % registers."""
+def _components(recs: dict, min_images: int) -> list:
+    """The reconstructions of one pass worth keeping, largest first."""
+    return sorted((r for r in recs.values() if r.num_reg_images() >= min_images), key=lambda r: -r.num_reg_images())
+
+
+def _map_pass(db: Path, images: Path, work_dir: Path, name: str, n_images: int, mapper: str, min_images: int = 3):  # type: ignore[no-untyped-def]
+    """Verify and map one pass -> ``(components, mapper used, all reconstructions, timing)``.
+
+    Every component with ``min_images`` becomes a model (Hanoi's one pass mapped
+    as 43 + 25 + 6 keyframes: keeping only the largest dropped 31 registered
+    views); the other mapper is tried only when all components together
+    register under 80 % of the pass.
+    """
     recs, t = map_tracks(db, images, work_dir / f"models_{name}", mapper=mapper)
-    best = max(recs.values(), key=lambda r: r.num_reg_images(), default=None)
-    used = mapper
-    if best is None or best.num_reg_images() < 0.8 * n_images:
-        # the other mapper on the same verified pairs; keep whichever registers more
+    comps, used = _components(recs, min_images), mapper
+    if sum(r.num_reg_images() for r in comps) < 0.8 * n_images:
+        # the other mapper on the same verified pairs; keep whichever registers more in total
         other = "global" if mapper == "incremental" else "incremental"
         recs2, t2 = map_tracks(db, images, work_dir / f"models_{name}_{other}", mapper=other, verify=False)
         t = {**t, "mapping_s": t["mapping_s"] + t2["mapping_s"]}
-        best2 = max(recs2.values(), key=lambda r: r.num_reg_images(), default=None)
-        if best2 is not None and (best is None or best2.num_reg_images() > best.num_reg_images()):
-            best, used, recs = best2, other, recs2
-    return best, used, recs, t
+        comps2 = _components(recs2, min_images)
+        if sum(r.num_reg_images() for r in comps2) > sum(r.num_reg_images() for r in comps):
+            comps, used, recs = comps2, other, recs2
+    return comps, used, recs, t
 
 
 def run_flow_sfm(
@@ -127,15 +137,15 @@ def run_flow_sfm(
         db_info = write_database(db, images, names, tracks, focal_px=focal, max_gap=max_gap)
         timing["database"] += time.perf_counter() - t0
         row = {"pass": folder.name, "keyframes": len(paths), "tracks": tracks.stats, "database": db_info}
-        jobs.append((row, pool.submit(_map_pass, db, images, work_dir, folder.name, len(paths), mapper)))
+        jobs.append((row, pool.submit(_map_pass, db, images, work_dir, folder.name, len(paths), mapper, min_images)))
     t0 = time.perf_counter()
     for row, job in jobs:
-        best, used, recs, t = job.result()
+        comps, used, recs, t = job.result()
         timing["verification"] += t["verification_s"]
         timing["mapping"] += t["mapping_s"]
         per_pass.append({**row, "mapper": used, "models": summarize(recs), "timing_s": t})
-        if best is not None and best.num_reg_images() >= min_images:  # one model per pass: the largest
-            found.append((best.num_reg_images(), row["pass"], 0, best))
+        for c, rec in enumerate(comps):  # every component of the pass with enough images is a model
+            found.append((rec.num_reg_images(), row["pass"], c, rec))
     found.sort(key=lambda f: f[1])  # pass order, so equal-sized models keep a stable numbering
     pool.shutdown()
     per_pass.sort(key=lambda r: r["pass"])

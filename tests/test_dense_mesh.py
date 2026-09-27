@@ -7,8 +7,10 @@ from pathlib import Path
 import pytest
 
 from drone3d.config import DenseConfig, MeshConfig
+from drone3d.dense.base import DenseBackend, get_dense_backend
 from drone3d.dense.mvs import ColmapMvsBackend
 from drone3d.exceptions import BackendUnavailable, ReconstructionError
+from drone3d.mesh.base import MeshBackend, get_mesh_backend
 from drone3d.mesh.colmap_mesher import ColmapMesher
 from drone3d.mesh.texturing import (
     Open3DMesher,
@@ -17,6 +19,7 @@ from drone3d.mesh.texturing import (
     has_trimesh,
     poisson_mesh_from_cloud,
 )
+from drone3d.sfm.base import SfMBackend, get_sfm_backend
 from drone3d.types import SfMResult
 
 
@@ -241,3 +244,26 @@ def test_texture_step_uses_the_dense_workspace(
 
     tex = next(a for a in argvs if a[1] == "mesh_texturer")
     assert Path(tex[tex.index("--workspace_path") + 1]) == dense.parent
+
+
+def test_every_dense_factory_returns_a_dense_backend_subclass() -> None:
+    """F26: ColmapMvsBackend/MonoDepthBackend declared the ABC's interface but
+    never inherited from it, so `isinstance(x, DenseBackend)` was False while
+    the factory was typed `-> DenseBackend`."""
+    for name in ("mvs", "mono", "none"):
+        backend = get_dense_backend(name)
+        assert isinstance(backend, DenseBackend), name
+
+
+def test_all_factories_return_true_subclasses() -> None:
+    """F26: the factories are typed `-> XBackend` but the dense backends did not
+    actually inherit `DenseBackend`, so `isinstance` checks silently failed and
+    the declared return type was a lie. Every factory must return a real
+    subclass of its ABC."""
+    from drone3d.dense.base import DenseBackend
+
+    for name in ("mvs", "mono", "none"):
+        assert isinstance(get_dense_backend(name), DenseBackend), name
+    for name in ("poisson", "delaunay", "open3d", "none"):
+        assert isinstance(get_mesh_backend(name), MeshBackend), name
+    assert isinstance(get_sfm_backend("colmap"), SfMBackend)

@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 
 from drone3d.config import DenseConfig
+from drone3d.dense.base import DenseBackend
 from drone3d.exceptions import BackendUnavailable, ReconstructionError
 from drone3d.logging_utils import get_logger
 from drone3d.types import DenseResult, SfMResult
@@ -61,7 +62,7 @@ class MonoDepthEstimator:
         return (depth - minimum) / (maximum - minimum)
 
 
-class MonoDepthBackend:
+class MonoDepthBackend(DenseBackend):
     """Writes normalised per-frame depth maps for downstream fusion."""
 
     name = "mono"

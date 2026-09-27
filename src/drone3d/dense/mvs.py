@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from drone3d.config import DenseConfig
+from drone3d.dense.base import DenseBackend
 from drone3d.exceptions import BackendUnavailable, ReconstructionError
 from drone3d.logging_utils import get_logger
 from drone3d.types import DenseResult, SfMResult
@@ -16,7 +17,7 @@ __all__ = ["ColmapMvsBackend"]
 log = get_logger(__name__)
 
 
-class ColmapMvsBackend:
+class ColmapMvsBackend(DenseBackend):
     """Runs ``image_undistorter`` -> ``patch_match_stereo`` -> ``stereo_fusion``."""
 
     name = "mvs"

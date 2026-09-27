@@ -58,6 +58,10 @@ class KeyframeConfig:
 
     analysis_long_side: int = 640  # RAFT analysis resolution (long side, px)
     analysis_fps: float = 12.0  # frames analysed per second of video
+    # adaptive_rate: probe the motion and analyse fewer frames when the camera moves slowly
+    adaptive_rate: bool = False
+    target_motion: float = 0.02  # median flow per analysis step, fraction of the width
+    min_analysis_fps: float = 3.0
     flow_model: str = "raft_large"  # raft_large | raft_small
     flow_batch: int = 32
     overlap_target: float = 0.75  # tau: co-visibility with the previous keyframe

@@ -191,6 +191,9 @@ class Pipeline:
         crop = detect_letterbox(info, hwaccel=cfg.hwaccel) if cfg.crop_letterbox else None
         t0 = time.perf_counter()
         flow_model = RaftFlow(cfg.flow_model, batch=cfg.flow_batch)
+        probe = None
+        if cfg.adaptive_rate:
+            stride, probe = _adapt_stride(info, size, stride, flow_model, crop, cfg)
         # One decode for analysis and keyframes when the keyframes are small enough to write
         # every analysis frame as a candidate (the default profile keeps full-size keyframes).
         side = (
@@ -228,6 +231,7 @@ class Pipeline:
         analysis = {
             "frames": int(flow.num_frames),
             "stride": stride,
+            "rate_probe": probe,
             "size": list(size),
             "flow_model": cfg.flow_model,
             "flows": 2 * (flow.num_frames - 1),
@@ -805,6 +809,43 @@ class Pipeline:
 def flow_frames_str(payload: dict[str, Any]) -> str:
     a = payload["analysis"]
     return f"{a['frames']} analysis frames at {a['flows_per_second']} flows/s"
+
+
+def _adapt_stride(info, size, stride, flow_model, crop, cfg):  # type: ignore[no-untyped-def]
+    """Grow the analysis stride while the camera moves slowly.
+
+    Twelve frame pairs one nominal step apart, spread over the video, give the
+    median flow per step; the stride is multiplied until a step moves about
+    ``target_motion`` of the width (never below ``min_analysis_fps``). A survey
+    pass drifting slowly across the ground then costs a fraction of the flows a
+    fast cinematic orbit needs, which is where a 10-minute video's time goes.
+    """
+    import torch
+
+    from drone3d.io.nvdec import _color_args, nv12_to_rgb, sample_pairs, scaled_crop
+
+    width, height = size
+    if info.duration_s < 10:
+        return stride, None
+    times = np.linspace(0.05, 0.9, 12) * info.duration_s
+    pairs = sample_pairs(info, times, size, stride, hwaccel=cfg.hwaccel)
+    if len(pairs) < 4:
+        return stride, {"status": "too-few-samples"}
+    nv = torch.from_numpy(np.stack([f for p in pairs for f in p])).view(-1, height * 3 // 2, width).cuda()
+    rgb = nv12_to_rgb(nv, height, width, **_color_args(info))
+    if crop is not None:
+        x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), size, multiple=8)
+        rgb = rgb[:, y0:y1, x0:x1].contiguous()
+    flow = flow_model(rgb[0::2].contiguous(), rgb[1::2].contiguous())
+    per_pair = flow.norm(dim=1).flatten(1).median(dim=1).values.cpu().numpy()
+    motion = float(np.median(per_pair))
+    target = cfg.target_motion * rgb.shape[2]
+    max_stride = max(stride, int(info.fps // cfg.min_analysis_fps))
+    new = int(min(max_stride, stride * max(1, int(target // max(motion, 1e-6)))))
+    log.info("analysis rate: %.1f px per step at stride %d (target %.1f px) -> stride %d (%.1f fps)",
+             motion, stride, target, new, info.fps / new)  # fmt: skip
+    return new, {"pairs": len(pairs), "median_px_per_step": round(motion, 2), "target_px": round(target, 1),
+                 "nominal_stride": stride, "stride": new}  # fmt: skip
 
 
 def _model_passes(model_dir: Path) -> dict[str, int]:

@@ -117,7 +117,7 @@ function addCameras() {
   groups.cams.add(dots);
   pts.forEach((p) => box.expandByPoint(p));
 }
-await Promise.all([loadMesh(), loadPoints()]).catch((e) => status('load failed: ' + e));
+await loadMesh().catch((e) => status('load failed: ' + e));  // the point cloud loads when first shown
 addCameras();
 function frame() {
   if (cfg.bounds && cfg.bounds.length) { box.makeEmpty(); cfg.bounds.forEach((q) => box.expandByPoint(new THREE.Vector3(...q))); }
@@ -138,6 +138,8 @@ frame(); status('');
 
 const toggle = (btn, group) => btn.addEventListener('click', () => { group.visible = !group.visible; btn.classList.toggle('on', group.visible); btn.textContent = group.visible ? 'on' : 'off'; });
 toggle($('tMesh'), groups.mesh); toggle($('tPts'), groups.pts); toggle($('tCams'), groups.cams);
+$('tPts').addEventListener('click', () => { if (groups.pts.visible && !pointsObj) loadPoints().then(() => status('')).catch((e) => status('load failed: ' + e)); });
+if (!cfg.mesh) { groups.pts.visible = true; $('tPts').classList.add('on'); $('tPts').textContent = 'on'; await loadPoints(); frame(); status(''); }
 $('pSize').addEventListener('input', (e) => { if (pointsObj) pointsObj.material.size = +e.target.value; });
 
 // ---- measuring: two clicks -> distance and height difference

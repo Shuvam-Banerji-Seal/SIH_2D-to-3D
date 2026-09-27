@@ -63,6 +63,7 @@ class SelectorConfig:
     hfov_deg: float = 72.0  # assumed horizontal FOV to express parallax as an angle
     span_max: int = 6  # keyframe pairs (i, i+k), k <= span_max, feed the verdict
     direct_min_overlap: float = 0.3  # widest partner for direct-flow geometry needs this overlap
+    verdict_max_pairs: int = 24  # keyframe pairs flowed directly for the 3D verdict, per pass
     # A pass holds recoverable 3D structure when GRIC prefers F on at least
     # this share of its widest pairs AND the rotation-compensated parallax is
     # parallax_snr times what track noise alone leaves (median over those
@@ -360,6 +361,11 @@ def _pair_statistics(
         ]
         if ok:
             pairs.append((i, i + ok[-1], float(overlap[i, ok[-1] - 1])))
+    if len(pairs) > cfg.verdict_max_pairs:
+        # The verdict is a per-pass median: evenly spaced pairs estimate it as well as all
+        # of them, and each pair costs two direct RAFT flows (most of the selection time).
+        pick = np.unique(np.linspace(0, len(pairs) - 1, cfg.verdict_max_pairs).round().astype(int))
+        pairs = [pairs[k] for k in pick]
     if not pairs or flow_model is None or tr.flow.frames is None:
         return [], {}, alive_frac
     frames = tr.flow.frames

@@ -3,8 +3,10 @@
 #   uv run drone3d run --config configs/quality.yaml --set ingest.video=/data/pass.mp4
 #
 # Analysis at a fixed 12 fps (denser keyframes: completeness 0.82 vs 0.78 on Jal
-# Mahal, 0.81 vs 0.75 on Qutub Minar), depth at 960 px for every keyframe, a
-# larger TSDF budget so voxels stay small. Slower than the budget on long videos.
+# Mahal, 0.81 vs 0.75 on Qutub Minar), depth at 960 px for every keyframe (Jal
+# Mahal's models: completeness 0.93 / 0.87 / 0.77). The TSDF stays at 8 GB: a
+# 24 GB grid crashed Open3D's mesh extraction on the next model and bought
+# no completeness. Slower than the budget on long videos.
 
 run_name: quality
 stages: [ingest, keyframes, sfm, dense, georef, export, metrics, report]
@@ -18,7 +20,7 @@ dense:
   backend: flow
   long_side: 960
   keyframe_stride: 1
-  tsdf_memory_gb: 24.0
+  tsdf_memory_gb: 8.0
   mono_model: depth-anything/Depth-Anything-V2-Large-hf
 export:
   max_triangles: 1000000

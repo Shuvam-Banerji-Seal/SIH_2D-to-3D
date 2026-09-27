@@ -1,0 +1,146 @@
+[
+ {
+  "run": "map_aerial_views_of_rural_riches_drone_shot",
+  "video": "Aerial Views of Rural Riches\uff1a Drone Shot of Farmland \ud83c\udf3e\ud83d\ude81 [p8eRmxosalI].webm",
+  "seconds": 19.081,
+  "resolution": [
+   2560,
+   1440
+  ],
+  "fps": 23.976023976023978,
+  "keyframes": 21,
+  "registered": 21,
+  "models": 1,
+  "completeness": 0.8536,
+  "triangles": 753629,
+  "stage_s": {
+   "keyframes": 13.81,
+   "sfm": 6.69,
+   "dense": 3.69,
+   "splat": 41.21,
+   "export": 9.99
+  },
+  "fast_s": 34.2,
+  "splat_s": 41.21,
+  "total_s": 75.4,
+  "budget_s": 28.6,
+  "fast_within_budget": false,
+  "splat_models": 1,
+  "splats": 200000,
+  "splat_psnr_mean": 29.84,
+  "splat_cc_psnr_mean": 31.09,
+  "deliverable_mb": 277.8,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ]
+ },
+ {
+  "run": "map_gopro_flying_a_drone_through_a_waterfall",
+  "video": "GoPro \uff5c Flying a Drone through a Waterfall \ud83c\udfac Fabio Tischler #Shorts #FPV [y8CAxo3QuRU].webm",
+  "seconds": 18.021,
+  "resolution": [
+   1080,
+   1920
+  ],
+  "fps": 29.97002997002997,
+  "keyframes": 179,
+  "registered": 179,
+  "models": 1,
+  "completeness": 0.8906,
+  "triangles": 1276202,
+  "stage_s": {
+   "keyframes": 16.32,
+   "sfm": 48.95,
+   "dense": 14.79,
+   "splat": 42.0,
+   "export": 16.53
+  },
+  "fast_s": 96.6,
+  "splat_s": 42.0,
+  "total_s": 138.6,
+  "budget_s": 27.0,
+  "fast_within_budget": false,
+  "splat_models": 1,
+  "splats": 200000,
+  "splat_psnr_mean": 25.85,
+  "splat_cc_psnr_mean": 26.4,
+  "deliverable_mb": 308.5,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ]
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "video": "Jal Mahal, Jaipur, India, Drone Cinematic [l8rXEYoVxDY].webm",
+  "seconds": 54.861,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 24.0,
+  "keyframes": 128,
+  "registered": 128,
+  "models": 5,
+  "completeness": 0.6603,
+  "triangles": 1391805,
+  "stage_s": {
+   "keyframes": 22.14,
+   "sfm": 22.37,
+   "dense": 12.28,
+   "splat": 204.88,
+   "export": 10.68
+  },
+  "fast_s": 67.5,
+  "splat_s": 204.88,
+  "total_s": 272.4,
+  "budget_s": 82.3,
+  "fast_within_budget": true,
+  "splat_models": 5,
+  "splats": 1000000,
+  "splat_psnr_mean": 26.56,
+  "splat_cc_psnr_mean": 32.05,
+  "deliverable_mb": 661.0,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ]
+ },
+ {
+  "run": "map_petronas_twin_tower_in_fpv_drone_4k_nich",
+  "video": "Petronas Twin Tower in FPV drone - 4K - Niche Films [p9jSKslwZWo].webm",
+  "seconds": 35.401,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 59.94006309148265,
+  "keyframes": 251,
+  "registered": 251,
+  "models": 6,
+  "completeness": 0.6857,
+  "triangles": 5094288,
+  "stage_s": {
+   "keyframes": 35.39,
+   "sfm": 51.45,
+   "dense": 28.52,
+   "splat": 232.07,
+   "export": 64.64
+  },
+  "fast_s": 180.0,
+  "splat_s": 232.07,
+  "total_s": 412.1,
+  "budget_s": 53.1,
+  "fast_within_budget": false,
+  "splat_models": 6,
+  "splats": 1200000,
+  "splat_psnr_mean": 16.71,
+  "splat_cc_psnr_mean": 18.09,
+  "deliverable_mb": 1108.8,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ]
+ }
+]

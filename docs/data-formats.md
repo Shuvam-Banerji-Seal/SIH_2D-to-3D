@@ -67,6 +67,7 @@ ISO-8601; absolute times are normalised to seconds relative to the first fix.
 Coordinate conventions:
 
 - Local ENU metres with origin = median GPS fix (override with `geo.origin_*`).
-- WGS84 / EPSG:4326 for all geographic output; other EPSG codes via `geo.epsg`
-  with the optional `geo` extra.
+- WGS84 / EPSG:4326 for all geographic output. `geo.epsg` is recorded in
+  `georef/result.json` for provenance but **no reprojection is performed** --
+  all geographic output is EPSG:4326.
 - PLY files carry `x, y, z` (float32) and optional `red, green, blue` (uint8).

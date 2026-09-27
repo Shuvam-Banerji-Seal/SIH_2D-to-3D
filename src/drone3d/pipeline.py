@@ -183,6 +183,7 @@ class Pipeline:
             analysis_size,
             detect_letterbox,
             extract_frames,
+            letterbox_from_frames,
             stream_analysis_chunks,
             write_sidecar_jpegs,
         )
@@ -197,12 +198,17 @@ class Pipeline:
         # Letterbox bars are static and black: left in, they count as perfectly
         # tracked content (inflating overlap), get depth predicted for them and
         # inflate held-out PSNR with trivially correct pixels.
-        crop = detect_letterbox(info, hwaccel=cfg.hwaccel) if cfg.crop_letterbox else None
         t0 = time.perf_counter()
         flow_model = models.raft(cfg.flow_model, batch=cfg.flow_batch)
-        probe = None
+        probe, crop = None, None
+        # One set of samples serves both the letterbox test and the motion probe (each ffmpeg
+        # sample costs ~0.2 s; two sets of twelve were 11 s of a 76 s Jal Mahal run).
+        pairs = _probe_pairs(info, size, stride) if cfg.adaptive_rate else None
+        if cfg.crop_letterbox:
+            crop = (letterbox_from_frames(info, [p[0] for p in pairs], size) if pairs and len(pairs) >= 4
+                    else detect_letterbox(info))  # fmt: skip
         if cfg.adaptive_rate:
-            stride, probe = _adapt_stride(info, size, stride, flow_model, crop, cfg)
+            stride, probe = _adapt_stride(info, size, stride, flow_model, crop, cfg, pairs=pairs)
         # One decode for analysis and keyframes when the keyframes are small enough to write
         # every analysis frame as a candidate (the default profile keeps full-size keyframes).
         side = (
@@ -883,7 +889,16 @@ def flow_frames_str(payload: dict[str, Any]) -> str:
     return f"{a['frames']} analysis frames at {a['flows_per_second']} flows/s"
 
 
-def _adapt_stride(info, size, stride, flow_model, crop, cfg):  # type: ignore[no-untyped-def]
+def _probe_pairs(info, size, stride):  # type: ignore[no-untyped-def]
+    """Twelve frame pairs one analysis step apart, spread over the video (none for clips under 10 s)."""
+    from drone3d.io.nvdec import sample_pairs
+
+    if info.duration_s < 10:
+        return None
+    return sample_pairs(info, np.linspace(0.05, 0.9, 12) * info.duration_s, size, stride)
+
+
+def _adapt_stride(info, size, stride, flow_model, crop, cfg, pairs=None):  # type: ignore[no-untyped-def]
     """Grow the analysis stride while the camera moves slowly.
 
     Twelve frame pairs one nominal step apart, spread over the video, give the
@@ -894,13 +909,13 @@ def _adapt_stride(info, size, stride, flow_model, crop, cfg):  # type: ignore[no
     """
     import torch
 
-    from drone3d.io.nvdec import _color_args, nv12_to_rgb, sample_pairs, scaled_crop
+    from drone3d.io.nvdec import _color_args, nv12_to_rgb, scaled_crop
 
     width, height = size
     if info.duration_s < 10:
         return stride, None
-    times = np.linspace(0.05, 0.9, 12) * info.duration_s
-    pairs = sample_pairs(info, times, size, stride, hwaccel=cfg.hwaccel)
+    if pairs is None:
+        pairs = _probe_pairs(info, size, stride)
     if len(pairs) < 4:
         return stride, {"status": "too-few-samples"}
     nv = torch.from_numpy(np.stack([f for p in pairs for f in p])).view(-1, height * 3 // 2, width).cuda()

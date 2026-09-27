@@ -1,26 +1,23 @@
-# Fast preview: minutes, not tens of minutes, on one GPU.
+# Fast profile: mesh + point cloud within the problem statement's budget
+# (< 15 minutes for a 10-minute video) on one GPU.
 #
-#   uv run drone3d run --config configs/fast.yaml --set ingest.video=/data/pass.mp4
+#   uv run drone3d run --config configs/fast.yaml --set ingest.video=/data/pass.mp4 \
+#       [--set ingest.telemetry=/data/pass.SRT]
+#   uv run drone3d view outputs/fast
 #
-# Fewer keyframes (lower overlap target), the small flow model, no monocular
-# depth prior, short training at 1/2 resolution, vertex-coloured mesh only.
+# Keyframes by overlap as in the default profile, written at 1920 px; SfM from
+# RAFT flow tracks (no SIFT); dense depth from flow triangulation, completed by
+# Depth Anything V2 calibrated to it; GPU TSDF mesh and point cloud; exports in
+# OBJ, PLY, GLB, FBX, LAS and GeoTIFF; web viewer. No splat training.
 
 run_name: fast
+stages: [ingest, keyframes, sfm, dense, georef, export, metrics, report]
 keyframes:
-  flow_model: raft_small
-  analysis_fps: 8.0
-  overlap_target: 0.65
   output_long_side: 1920
 sfm:
-  quality: medium
-depth:
-  backend: none
-splat:
-  iterations: 7000
-  quality: medium
-  models: largest
-mesh:
-  formats: [glb]
-  colors: [vertex]
-render:
-  seconds: 8.0
+  backend: flow
+  mapper: incremental
+dense:
+  backend: flow
+  long_side: 480
+  mono_model: depth-anything/Depth-Anything-V2-Large-hf

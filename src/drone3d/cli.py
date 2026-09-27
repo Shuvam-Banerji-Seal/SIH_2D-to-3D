@@ -80,6 +80,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     doctor_parser.set_defaults(func=cmd_doctor)
 
+    view_parser = subparsers.add_parser("view", help="Serve a run's 3D viewer (export stage) over HTTP")
+    view_parser.add_argument("run_dir", help="Run directory containing export/index.html")
+    view_parser.add_argument("--host", default="127.0.0.1")
+    view_parser.add_argument("--port", type=int, default=8765)
+    view_parser.set_defaults(func=cmd_view)
+
     subparsers.add_parser("version", help="Print the version").set_defaults(func=cmd_version)
     return parser
 
@@ -197,6 +203,26 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             )
     except ImportError:
         print("  torch not installed (uv sync --extra gpu)")
+    return 0
+
+
+def cmd_view(args: argparse.Namespace) -> int:
+    import functools
+    import http.server
+    from pathlib import Path
+
+    root = Path(args.run_dir) / "export"
+    if not (root / "index.html").is_file():
+        print(f"no viewer in {root} (run the export stage)", file=sys.stderr)
+        return 1
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(root))
+    handler.func.extensions_map.update(  # type: ignore[attr-defined]
+        {".glb": "model/gltf-binary", ".ply": "application/octet-stream", ".las": "application/octet-stream",
+         ".fbx": "application/octet-stream", ".tif": "image/tiff", ".js": "text/javascript"}
+    )  # fmt: skip
+    with http.server.ThreadingHTTPServer((args.host, args.port), handler) as httpd:
+        print(f"viewer: http://{args.host}:{args.port}/  (Ctrl+C to stop)")
+        httpd.serve_forever()
     return 0
 
 

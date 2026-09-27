@@ -86,7 +86,10 @@ def main() -> None:
     ap.add_argument("out", type=Path)
     ap.add_argument("--long-side", type=int, default=960)
     ap.add_argument("--span", type=int, default=3)
+    ap.add_argument("--stride", type=int, default=8)
+    ap.add_argument("--max-gap", type=int, default=8)
     ap.add_argument("--mappers", default="global,incremental")
+    ap.add_argument("--tag", default="", help="suffix for this run's database / model / report names")
     ap.add_argument("--hfov", type=float, default=72.0)
     args = ap.parse_args()
 
@@ -111,7 +114,7 @@ def main() -> None:
         cv2.imwrite(str(img_dir / name), cv2.cvtColor(f, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
     report["timing_s"]["load_resize_write"] = round(time.perf_counter() - t0, 2)
 
-    cache = args.out / f"tracks_span{args.span}.npz"
+    cache = args.out / (f"tracks_span{args.span}" + (f"_stride{args.stride}" if args.stride != 8 else "") + ".npz")
     if cache.is_file():  # flow is the expensive part; mapping experiments reuse it
         z = np.load(cache, allow_pickle=True)
         tracks = FlowTracks(z["image"], z["track"], z["xy"], tuple(z["size"]), z["stats"].item())
@@ -119,7 +122,7 @@ def main() -> None:
     else:
         t0 = time.perf_counter()
         raft = RaftFlow("raft_large", batch=8, iters=12)
-        tracks = build_tracks(frames, raft, span=args.span)
+        tracks = build_tracks(frames, raft, span=args.span, stride=args.stride)
         torch.cuda.synchronize()
         tracks.stats["wall_s"] = round(time.perf_counter() - t0, 2)
         report["timing_s"]["tracks"] = tracks.stats["wall_s"]
@@ -139,11 +142,11 @@ def main() -> None:
         report["reference"] = {"model": str(args.reference), "images": len(ref), "focal_at_working_res": round(cam.params[0] * w / src_size[0], 1)}
     report["runs"] = {}
     for mapper in args.mappers.split(","):
-        db = args.out / f"{mapper}.db"
+        db = args.out / f"{mapper}{args.tag}.db"
         t0 = time.perf_counter()
-        db_info = write_database(db, img_dir, names, tracks, focal_px=focal)
+        db_info = write_database(db, img_dir, names, tracks, focal_px=focal, max_gap=args.max_gap)
         t_db = round(time.perf_counter() - t0, 2)
-        recs, timing = map_tracks(db, img_dir, args.out / f"sparse_{mapper}", mapper=mapper)
+        recs, timing = map_tracks(db, img_dir, args.out / f"sparse_{mapper}{args.tag}", mapper=mapper)
         run = {"database": db_info, "timing_s": {"database": t_db, **timing}, "models": summarize(recs)}
         if recs and ref is not None:
             best = max(recs.values(), key=lambda r: r.num_reg_images())
@@ -151,7 +154,7 @@ def main() -> None:
             run["focal_px"] = round(float(next(iter(best.cameras.values())).params[0]), 1)
         report["runs"][mapper] = run
         print(json.dumps({mapper: run}, indent=1), flush=True)
-    (args.out / "report.json").write_text(json.dumps(report, indent=1))
+    (args.out / f"report{args.tag}.json").write_text(json.dumps(report, indent=1))
     print(json.dumps({k: report[k] for k in ("keyframes", "timing_s", "tracks")}, indent=1))
 
 

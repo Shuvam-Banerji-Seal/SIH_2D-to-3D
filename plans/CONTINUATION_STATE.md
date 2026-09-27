@@ -4,44 +4,43 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 20 |
-| Phase | AUDIT (cycle 20) |
-| What I did | Ran the last unexercised surfaces my own state file flagged. `pre-commit` (never triggered) fixed trailing whitespace in `.gitignore`. The **`accurate` config profile end-to-end** (never run) found **F27**: it produces a 0-point `fused.ply`, `dense` reports `ok ... 0 dense points`, then `mesh` **crashes COLMAP itself** (SIGSEGV in Poisson, SIGABRT in the Delaunay fallback) because `build()` only checked `is_file()`. |
-| What worked | **284 tests**, ruff clean, 85 files formatted, worktree clean |
-| What failed | My scripted PLY-placeholder rewrite left 2 files unformatted (caught by `ruff format --check`, fixed) |
+| Session # | 21 |
+| Phase | AUDIT (cycle 21) |
+| What I did | Checked whether the pipeline actually produces the **PS deliverables**, not just runs. Found **F31**: deliverable 3 names `mesh.obj`, but no code path ever emitted it — `ColmapMesher` wrote only `mesh.ply`+`texture.png`, and the one caller of `convert_mesh_format` (`Open3DMesher`) wrote `mesh.glb`. The OBJ capability existed and was simply never wired. Now emitted on the default path. Also fixed 3 stale artifact-path docs (F30 class). |
+| What worked | **285 tests**, ruff clean, 85 files formatted, worktree clean |
+| What failed | One `has_trimesh` import slip in my own edit (fixed immediately) |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at **284** tests (supersedes 283) |
+| Audit status | **DOUBLE_PASS** — waves A & B at **285** tests (supersedes 284) |
 
-## F27 — empty dense cloud crashed COLMAP outright
+## F31 — the named deliverable was never produced
 
-Observed on the `accurate` profile (the surface nobody had exercised):
+`docs/problem-statement.md` deliverable 3: *"Textured 3D mesh — `mesh.obj` + textures
+(`mesh.ply`, `mesh.glb`)"*.
 
-```
-dense: OK  0 dense points        <- reports success while producing nothing
-mesh:  FAILED  poisson_mesher exit -11 (SIGSEGV, "Solver depth ... 12 <= 5")
-              delaunay fallback exit -6 (SIGABRT, Percentile on empty vector)
-```
+| Path | Wrote | `mesh.obj`? |
+|---|---|---|
+| `ColmapMesher` (default) | `mesh.ply` + `texture.png` | **no** |
+| `Open3DMesher` (`mesh` extra) | `mesh-open3d.ply` + `mesh.glb` | **no** |
+| `convert_mesh_format` | supports OBJ | never called for it |
 
-Root cause: `ColmapMesher.build` checked `dense_ply.is_file()` but an **empty**
-cloud passes that. `fused.ply` was 229 bytes of header, 0 vertices.
+Fix: `ColmapMesher` now converts the finished PLY → `mesh.obj` when trimesh is
+available, recorded as `metadata.obj_path`. Verified end-to-end on the real
+mesh: **2.78 MB `mesh.obj`** with `mtllib`/`usemtl`/`vt` (61,274 verts, 73,823 faces).
 
-Fix: reject zero-vertex clouds up front with a clear `ReconstructionError`.
-Test fixtures that stubbed `fused.ply` with raw `b"ply"` bytes had to become
-real PLYs too, since the guard reads the vertex count.
+**Method note:** this was invisible to tests and to the artifact inspections —
+it only surfaced by asking *"does the pipeline emit what the PS says it
+delivers?"* rather than *"does the code run?"*
 
-Note: `dense` still reports `ok` with 0 points. That is arguably correct — it
-fused nothing but did not fail — and `mesh` now fails *legibly* instead of
-crashing. The crash, not the empty result, was the defect.
+## Defect ledger: 24 code defects fixed + 1 data gap
 
-## Defect ledger: 22 code defects fixed + 1 data gap
-
-F1–F6, F8, F12–F16, F18–**F27**, plus F7 (data gap).
+F1–F6, F8, F12–F16, F18–**F31** (F9–F11 never existed), plus F7 (data gap).
 
 | Found by | Defects |
 |---|---|
-| **Exercising untested surfaces** | **F26** (mypy), **F27** (accurate profile), whitespace (pre-commit) |
+| **Checking deliverables against the PS** | **F31** |
+| **Stale docs / never-run tools** | F28, F29, F30 (+ mypy→F26, accurate profile→F27, pre-commit→whitespace) |
 | Inspecting shipped artifacts | F21, F22, F23, F24, F25 |
 | Running the real pipeline | F13, F14, F15, F16 |
 | Writing tests | F18, F19, F20 |
@@ -54,17 +53,22 @@ F1–F6, F8, F12–F16, F18–**F27**, plus F7 (data gap).
 
 | Check | Result |
 |---|---|
-| Tests | **284 passed** (23 files) |
+| Tests | **285 passed** (23 files) |
 | Lint / format | clean · 85 files |
 | Worktree | clean |
-| Double-audit | PASS ×2 at 284 |
+| Double-audit | PASS ×2 at 285 |
 | Mutation-verified | F4, F19, F20 |
-| Exercised | `make typecheck`, `pre-commit`, `accurate` profile |
 
-## PS criteria
+## PS deliverables — actual status
 
-Scored **3 of 10** (7 robustness, 9 usability, 10 reproducibility). Criteria
-**2, 3, 6 blocked on external data**.
+| # | Deliverable | Status |
+|---|---|---|
+| 1 | Sparse COLMAP model + `sparse.ply` | **produced** |
+| 2 | Dense `fused.ply` / georeferenced PLY | **produced** |
+| 3 | `mesh.obj` + textures | **produced** (F31) |
+| 4 | ENU PLY + `camera_track.geojson`, EPSG-tagged | produced; RMSE needs real GPS |
+| 5 | bounds/coverage/scale in `metrics.json` | **produced** |
+| 6 | `report.html` + `manifest.json` | **produced** |
 
 ## The one remaining item is not code
 
@@ -81,13 +85,9 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 
 ## Note for the harness
 
-Every verification surface I could name is now exercised. The yield is
-declining: mypy (F26), pre-commit (whitespace), `accurate` profile (F27) found
-things — but the last three artifact inspections went clean.
+The question that found F31 was **"does the pipeline emit what the PS says it
+delivers?"** — a different axis from "does the code run" or "do the artifacts
+exist". Worth re-asking for each of the 6 deliverables if re-invoked.
 
-**Do not** re-run an already-green suite. If re-invoked, the only honest options
-are (a) exercise a surface nobody has named yet, or (b) state that the codebase
-is complete and blocked on external input.
-
-**Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored against real
-reference data.
+**Do not** re-run an already-green suite. **Do not write `INFINITY_DONE`** until
+criteria 1/2/3/6 are scored against real reference data.

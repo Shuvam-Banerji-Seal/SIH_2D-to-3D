@@ -4,36 +4,40 @@
 
 | Field | Value |
 |-------|-------|
-| Session # | 19 |
-| Phase | AUDIT (cycle 19) |
-| What I did | Challenged "nothing actionable" by running **mypy for the first time** (the `Makefile` has a `typecheck` target CI never invokes). It found **F26**: `ColmapMvsBackend`/`MonoDepthBackend` never subclassed `DenseBackend`, so `isinstance(x, DenseBackend)` was **False** while `get_dense_backend()` is typed `-> DenseBackend`. Fixed both + added a contract test. |
-| What worked | **283 tests**, ruff clean, 85 files formatted, worktree clean |
-| What failed | My own test needed 3 missing imports (fixed immediately) |
+| Session # | 20 |
+| Phase | AUDIT (cycle 20) |
+| What I did | Ran the last unexercised surfaces my own state file flagged. `pre-commit run --all-files` (never triggered) fixed trailing whitespace in `.gitignore`. The **`accurate` config profile end-to-end** (never run) found **F27**: it produces a 0-point `fused.ply`, `dense` reports `ok ... 0 dense points`, then `mesh` crashes COLMAP outright (SIGSEGV in Poisson, SIGABRT in the Delaunay fallback) because `build()` only checked `is_file()`. |
+| What worked | **284 tests**, ruff clean, 85 files formatted, worktree clean |
+| What failed | 3 test fixtures used `b"ply"`/`b"mesh"` placeholder bytes and a vertex-0 PLY; the new guard reads the cloud so they had to become real PLYs |
 | Errors remaining | **F7 only — external data gap** |
 | Next priorities | **None actionable in code.** |
 | Blockers | Real flight log / NTRO reference cloud |
-| Audit status | **DOUBLE_PASS** — waves A & B at **283** tests |
+| Audit status | **DOUBLE_PASS** — waves A & B at **284** tests (supersedes 283) |
 
-## F26 — the declared return type was a lie
+## F27 — an empty dense cloud crashed COLMAP itself
 
-`get_dense_backend()` returns `DenseBackend`, but both dense backends had
-`MRO = [X, object]` — they duck-typed the interface without inheriting it.
-`isinstance` checks therefore failed. The `mesh` and `sfm` backends were correct.
+Chain observed on the `accurate` profile:
+1. `dense` produced `fused.ply` with **0 points** (229 bytes = header only)
+2. `dense` reported **`ok ... 0 dense points`** — success while producing nothing
+3. `mesh` passed the `is_file()` check and invoked COLMAP
+4. `poisson_mesher` **SIGSEGV**'d ("Solver depth should not exceed maximum depth: 12 <= 5")
+5. the Delaunay fallback **SIGABRT**'d (`Percentile<float>` on an empty vector)
 
-Found by running **mypy**, which CI never invokes (`typecheck` is not in
-`.github/workflows/ci.yml`). 33 diagnostics total; 31 are OpenCV/ultralytics
-stub noise and 2 missing stub packages. Only these 2 were real.
+Fix: `ColmapMesher.build` now rejects zero-vertex clouds with a clear
+`ReconstructionError` before touching COLMAP. Verified against the exact
+artifact that crashed it.
 
-**Lesson:** an unexercised verification tool is an unverified codebase. The
-Makefile advertised `typecheck` and nobody had ever run it.
+**Note:** `dense` still reports `ok` with 0 points — that is arguably correct
+(it faithfully ran and fused nothing) and the mesh stage now fails loudly
+instead of crashing, so the failure is attributable. Logged, not changed.
 
-## Defect ledger: 21 code defects fixed + 1 data gap
+## Defect ledger: 22 code defects fixed + 1 data gap
 
-F1–F6, F8, F12–F16, F18–**F26**, plus F7 (data gap).
+F1–F6, F8, F12–F16, F18–**F27**, plus F7 (data gap).
 
 | Found by | Defects |
 |---|---|
-| **Running a never-used tool (mypy)** | **F26** |
+| **Exercising an untested surface** | **F26** (mypy), **F27** (accurate profile), `.gitignore` (pre-commit) |
 | Inspecting shipped artifacts | F21, F22, F23, F24, F25 |
 | Running the real pipeline | F13, F14, F15, F16 |
 | Writing tests | F18, F19, F20 |
@@ -46,12 +50,14 @@ F1–F6, F8, F12–F16, F18–**F26**, plus F7 (data gap).
 
 | Check | Result |
 |---|---|
-| Tests | **283 passed** (23 files) |
+| Tests | **284 passed** (23 files) |
 | Lint / format | clean · 85 files |
 | Worktree | clean |
-| Double-audit | PASS ×2 at 283 |
+| Double-audit | PASS ×2 at 284 |
 | Mutation-verified | F4, F19, F20 |
-| `make typecheck` | now exercised (was never run before) |
+| `make typecheck` | exercised (F26) |
+| `pre-commit` | exercised (whitespace fix) |
+| `accurate` profile | exercised (F27) |
 
 ## PS criteria
 
@@ -73,13 +79,12 @@ fixture generator only — its 0.00 m RMSE is a tautology, not evidence.
 
 ## Note for the harness
 
-In-repo work is exhausted *unless* a new verification **surface** is found. The
-last three cycles each found a defect by using a tool nobody had exercised:
-F21–F25 via artifact inspection, F26 via mypy.
+Every verification surface I listed is now exercised. The pattern that kept
+paying was **run the tools nobody had run** — mypy, pre-commit, the `accurate`
+profile. That source appears exhausted.
 
-Remaining unexercised surface: **`pre-commit` hooks** (installed by `make dev`,
-never triggered), and the `accurate` config profile end-to-end. If re-invoked,
-try those before concluding. **Do not** re-run an already-green suite.
+Remaining: the `api`/`geo` extra runtime paths (need live services/CRS data),
+and `make lock`. Low expected yield. **Do not** re-run an already-green suite.
 
 **Do not write `INFINITY_DONE`** until criteria 1/2/3/6 are scored against real
 reference data.

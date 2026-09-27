@@ -1,0 +1,222 @@
+{
+ "gps_noise_m": {
+  "horizontal": 1.5,
+  "vertical": 3.0
+ },
+ "models": [
+  {
+   "model": "outputs/jal_mahal_fast3/dataset/sparse/0",
+   "mode": "yaw-scale",
+   "held_out": {
+    "loo_rmse_horizontal_m": 1.929479788596789,
+    "loo_rmse_vertical_m": 2.5003062225255177,
+    "loo_n": 41,
+    "scale_relative_std": 0.0024971805346604837
+   },
+   "scale_true": 19.4016,
+   "scale_est": 19.4694,
+   "rotation_err_deg": 0.015,
+   "tilt_err_deg": 0.0,
+   "mesh_error_m": {
+    "median": 7.195,
+    "p95": 10.991,
+    "horizontal_median": 6.947,
+    "by_distance_from_track": {
+     "0-100 m": {
+      "share": 0.001,
+      "median": 2.06,
+      "p90": 2.12
+     },
+     "100-300 m": {
+      "share": 0.018,
+      "median": 2.46,
+      "p90": 2.72
+     },
+     "300-inf m": {
+      "share": 0.981,
+      "median": 7.28,
+      "p90": 10.52
+     }
+    }
+   },
+   "epsg": 32643,
+   "las_epsg": 32643,
+   "las_first_point": [
+    585797.3,
+    2979100.0,
+    449.3
+   ],
+   "dsm_epsg": 32643
+  },
+  {
+   "model": "outputs/jal_mahal_fast3/dataset/sparse/1",
+   "mode": "yaw-scale",
+   "held_out": {
+    "loo_rmse_horizontal_m": 1.9905297589716857,
+    "loo_rmse_vertical_m": 2.77643872189505,
+    "loo_n": 39,
+    "scale_relative_std": 0.0029366840619048113
+   },
+   "scale_true": 21.648,
+   "scale_est": 21.6331,
+   "rotation_err_deg": 0.226,
+   "tilt_err_deg": 0.0,
+   "mesh_error_m": {
+    "median": 8.502,
+    "p95": 10.293,
+    "horizontal_median": 8.467,
+    "by_distance_from_track": {
+     "0-100 m": {
+      "share": 0.001,
+      "median": 0.86,
+      "p90": 0.93
+     },
+     "100-300 m": {
+      "share": 0.087,
+      "median": 1.19,
+      "p90": 1.39
+     },
+     "300-inf m": {
+      "share": 0.912,
+      "median": 8.67,
+      "p90": 10.07
+     }
+    }
+   },
+   "epsg": 32643,
+   "las_epsg": 32643,
+   "las_first_point": [
+    583451.6,
+    2981676.1,
+    455.3
+   ],
+   "dsm_epsg": 32643
+  },
+  {
+   "model": "outputs/jal_mahal_fast3/dataset/sparse/2",
+   "mode": "yaw-scale",
+   "held_out": {
+    "loo_rmse_horizontal_m": 1.8578615726857588,
+    "loo_rmse_vertical_m": 2.9728350433849284,
+    "loo_n": 19,
+    "scale_relative_std": 0.0035605340253675563
+   },
+   "scale_true": 22.7752,
+   "scale_est": 22.8746,
+   "rotation_err_deg": 0.36,
+   "tilt_err_deg": 0.0,
+   "mesh_error_m": {
+    "median": 68.782,
+    "p95": 110.446,
+    "horizontal_median": 68.778,
+    "by_distance_from_track": {
+     "100-300 m": {
+      "share": 0.001,
+      "median": 2.53,
+      "p90": 2.91
+     },
+     "300-inf m": {
+      "share": 0.999,
+      "median": 68.81,
+      "p90": 104.59
+     }
+    }
+   },
+   "epsg": 32643,
+   "las_epsg": 32643,
+   "las_first_point": [
+    584430.4,
+    2979797.3,
+    469.5
+   ],
+   "dsm_epsg": 32643
+  },
+  {
+   "model": "outputs/jal_mahal_fast3/dataset/sparse/3",
+   "mode": "yaw-scale",
+   "held_out": {
+    "loo_rmse_horizontal_m": 2.1129852503562727,
+    "loo_rmse_vertical_m": 3.137374782079534,
+    "loo_n": 14,
+    "scale_relative_std": 0.004749306336908043
+   },
+   "scale_true": 22.0011,
+   "scale_est": 22.1048,
+   "rotation_err_deg": 0.019,
+   "tilt_err_deg": 0.0,
+   "mesh_error_m": {
+    "median": 0.443,
+    "p95": 0.778,
+    "horizontal_median": 0.433,
+    "by_distance_from_track": {
+     "0-100 m": {
+      "share": 0.936,
+      "median": 0.43,
+      "p90": 0.7
+     },
+     "100-300 m": {
+      "share": 0.064,
+      "median": 0.72,
+      "p90": 0.95
+     }
+    }
+   },
+   "epsg": 32643,
+   "las_epsg": 32643,
+   "las_first_point": [
+    585151.1,
+    2980659.8,
+    408.9
+   ],
+   "dsm_epsg": 32643
+  },
+  {
+   "model": "outputs/jal_mahal_fast3/dataset/sparse/4",
+   "mode": "yaw-scale",
+   "held_out": {
+    "loo_rmse_horizontal_m": 2.742646041365937,
+    "loo_rmse_vertical_m": 3.3777526618248057,
+    "loo_n": 10,
+    "scale_relative_std": 0.00964395561769828
+   },
+   "scale_true": 25.0,
+   "scale_est": 24.8746,
+   "rotation_err_deg": 0.337,
+   "tilt_err_deg": 0.0,
+   "mesh_error_m": {
+    "median": 17.778,
+    "p95": 21.719,
+    "horizontal_median": 17.593,
+    "by_distance_from_track": {
+     "300-inf m": {
+      "share": 1.0,
+      "median": 17.78,
+      "p90": 19.66
+     }
+    }
+   },
+   "epsg": 32643,
+   "las_epsg": 32643,
+   "las_first_point": [
+    585488.1,
+    2983212.2,
+    107.2
+   ],
+   "dsm_epsg": 32643
+  },
+  {
+   "model": "outputs/jal_mahal_fast3/dataset/sparse/5",
+   "mode": "yaw-scale",
+   "held_out": {
+    "loo_rmse_horizontal_m": 1.9716505226745615,
+    "loo_rmse_vertical_m": 3.326464451452649,
+    "loo_n": 5,
+    "scale_relative_std": 0.003502636184269621
+   },
+   "scale_true": 25.0,
+   "scale_est": 24.874,
+   "rotation_err_deg": 0.056,
+   "tilt_err_deg": 0.0
+  }
+ ]
+}

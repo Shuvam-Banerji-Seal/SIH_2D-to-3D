@@ -55,7 +55,7 @@ flowchart LR
 4. **SfM from flow.** Direct RAFT flow from each keyframe to its next three gives
    sub-pixel multi-view tracks (each step checked against the longer direct
    flows, so drift cannot accumulate); pycolmap's global mapper (GLOMAP) maps
-   them. No SIFT: on the Jal Mahal orbit the poses agree with SIFT SfM to 0.14 %
+   them. No SIFT: on the Jal Mahal orbit the poses agree with SIFT SfM to 0.2 %
    of the flight extent and 0.28° in rotation.
 5. **Dense geometry.** With the poses, every consistent flow vector to
    neighbours 2–12 keyframes away is triangulated (a single pass is 0.1–1°

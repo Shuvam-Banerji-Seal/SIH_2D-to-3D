@@ -1,0 +1,48 @@
+{
+ "jal_mahal_fast3": {
+  "processing": {
+   "seconds": 146.7,
+   "per_stage_s": {
+    "keyframes": 37.7,
+    "sfm": 64.01,
+    "dense": 32.76,
+    "export": 12.24
+   },
+   "video_seconds": 54.861,
+   "budget_seconds": 82.3,
+   "within_budget": false
+  },
+  "rate_probe": {
+   "pairs": 12,
+   "median_px_per_step": 0.63,
+   "target_px": 12.8,
+   "nominal_stride": 2,
+   "stride": 8
+  },
+  "passes": 6,
+  "keyframes": 128
+ },
+ "qutub_fast2": {
+  "processing": {
+   "seconds": 242.6,
+   "per_stage_s": {
+    "keyframes": 69.7,
+    "sfm": 64.01,
+    "dense": 44.23,
+    "export": 64.65
+   },
+   "video_seconds": 187.454,
+   "budget_seconds": 281.2,
+   "within_budget": true
+  },
+  "rate_probe": {
+   "pairs": 12,
+   "median_px_per_step": 0.78,
+   "target_px": 12.8,
+   "nominal_stride": 2,
+   "stride": 9
+  },
+  "passes": 12,
+  "keyframes": 113
+ }
+}

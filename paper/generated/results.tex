@@ -197,3 +197,90 @@ jal\_mahal & depth & 522 & 84 & 265 & 24.3 & 11.2 & yes \\
 \end{tabular}
 \end{adjustbox}
 \end{table*}
+
+\subsection{Fast profile: mesh and point cloud within the time budget}\label{sec:fast-results}
+
+\paragraph{Structure from flow.} On the 97-keyframe orbit of Jal Mahal, tracks from direct RAFT flow register every keyframe; with 960\,px tracks the global mapper's camera centres agree with spirula's SIFT reconstruction to 0.19\,\% of the flight extent and its rotations to 0.28$^\circ$ (median), with no feature extraction or matching (Table~\ref{tab:flowsfm}). Tracking at 640\,px is cheaper but 2.5--3$\times$ less accurate. COLMAP's incremental mapper needs its initialisation angle lowered from 16$^\circ$ to 2$^\circ$ to start on single-pass footage at all and is eight times slower here.
+
+\begin{table*}[htbp]
+\centering\small
+\caption{SfM from flow tracks on Jal Mahal pass 3 against SIFT SfM of the same keyframes (similarity-aligned).}\label{tab:flowsfm}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrrrrrr}
+\toprule
+Tracks & Mapper & Flow (s) & Map (s) & Reg. & Reproj. (px) & Centre (\% ext.) & Rot. med. ($^\circ$) & Rot. max ($^\circ$) \\
+\midrule
+640 px, 8 iterations & global & 8.8 & 9.8 & 97/97 & 0.32 & 0.53 & 0.79 & 1.44 \\
+640 px, 12 iterations & global & 13.1 & 18.7 & 97/97 & 0.32 & 0.55 & 0.66 & 1.35 \\
+960 px, 12 iterations & global & 28.9 & 16.2 & 97/97 & 0.32 & 0.19 & 0.28 & 0.41 \\
+960 px, 12 iterations & incremental & 28.9 & 129.1 & 97/97 & 0.35 & 0.40 & 0.42 & 1.59 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\par\smallskip\footnotesize Reference: spirula-studio SIFT SfM of all 213 Jal Mahal keyframes, 255\,s for extraction, matching and mapping.
+\end{table*}
+
+\paragraph{Fusion.} The depth maps (triangulated, then filled by the calibrated prior) cover every non-sky pixel of the references, yet a TSDF with the usual 4-voxel truncation band keeps only part of the view: neighbouring views disagree slightly and their signed distances cancel. Widening the band recovers most of it at a small cost in depth error against the triangulated geometry (Table~\ref{tab:tsdf}); the profile uses 12 voxels.
+
+\begin{table}[htbp]
+\centering\small
+\caption{TSDF truncation band on Jal Mahal's two largest models (voxel = 3 pixel footprints at the median depth): view completeness, median depth error against the triangulated depth, triangles.}\label{tab:tsdf}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lrrrr}
+\toprule
+Model & Band (vox.) & Completeness & Depth err. (\%) & Triangles \\
+\midrule
+0 & 4 & 0.468 & 0.42 & 41{,}072 \\
+0 & 8 & 0.722 & 0.51 & 184{,}092 \\
+0 & 12 & 0.800 & 0.60 & 402{,}964 \\
+0 & 16 & 0.853 & 0.68 & 666{,}407 \\
+1 & 4 & 0.750 & 0.92 & 178{,}556 \\
+1 & 8 & 0.874 & 1.05 & 416{,}504 \\
+1 & 12 & 0.912 & 1.09 & 604{,}939 \\
+1 & 16 & 0.928 & 1.10 & 743{,}658 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\paragraph{Time and completeness.} The budget is 1.5$\times$ the video length (15 minutes for a 10-minute video). Completeness is the share of each registered keyframe's non-sky pixels whose ray hits the mesh. The motion-adaptive analysis rate costs a few points of completeness and brings the 187\,s Qutub Minar video within budget (243\,s of 281\,s); the 55\,s Jal Mahal edit, five camera moves over a lake, stays over it (147\,s of 82\,s). Measuring overlap against the points that survive the first tracking step (so that water does not force a keyframe every step) was worse on both videos (Table~\ref{tab:fastruns}).
+
+\begin{table*}[htbp]
+\centering\small
+\caption{Fast profile end to end on a shared A100: keyframes, registration, view completeness, processing time and budget (1.5$\times$ video length). The adopted setting is the adaptive rate with absolute overlap.}\label{tab:fastruns}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lllrrrrr}
+\toprule
+Video & Analysis & Overlap & KF & Reg. & Compl. & Time (s) & Budget (s) \\
+\midrule
+Jal Mahal & 12 fps & absolute & 213 & 213 & 0.82 & 262 & 82 \\
+Jal Mahal & adaptive, 3.0 fps & absolute & 128 & 128 & 0.78 & 147 & 82 \\
+Jal Mahal & adaptive, 6.0 fps & relative & 82 & 82 & 0.71 & 145 & 82 \\
+Qutub Minar & 15 fps & absolute & 110 & 102 & 0.81 & 307 & 281 \\
+Qutub Minar & adaptive, 3.3 fps & absolute & 113 & 106 & 0.75 & 243 & 281 \checkmark \\
+Qutub Minar & adaptive, 7.5 fps & relative & 106 & 98 & 0.70 & 292 & 281 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table*}
+
+\paragraph{Georeferencing, end to end.} Each Jal Mahal model receives a known model-to-world similarity at the real site and its keyframes GPS with 1.5\,m horizontal and 3.0\,m vertical noise; the pipeline's georef and export stages then run unchanged. The levelled fit recovers rotation to a few tenths of a degree and scale to half a percent; the exported mesh is within 0.43--2.06\,m (median) of the truth within 100\,m of the track, and the error grows with distance, as yaw and scale error do (Table~\ref{tab:geoe2e}). LAS and GeoTIFF outputs carry EPSG:32643 (UTM 43N).
+
+\begin{table*}[htbp]
+\centering\small
+\caption{Georeferencing with synthetic GPS on the real models: rotation error, scale error, held-out horizontal RMSE of the cameras, and median mesh error by distance from the flight track.}\label{tab:geoe2e}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Fit & Rot. ($^\circ$) & Scale (\%) & LOO (m) & $<$100\,m & 100--300\,m & $>$300\,m \\
+\midrule
+0 & yaw-scale & 0.01 & 0.35 & 1.93 & 2.06 & 2.46 & 7.3 \\
+1 & yaw-scale & 0.23 & 0.07 & 1.99 & 0.86 & 1.19 & 8.7 \\
+2 & yaw-scale & 0.36 & 0.44 & 1.86 & --- & 2.53 & 68.8 \\
+3 & yaw-scale & 0.02 & 0.47 & 2.11 & 0.43 & 0.72 & --- \\
+4 & yaw-scale & 0.34 & 0.50 & 2.74 & --- & --- & 17.8 \\
+5 & yaw-scale & 0.06 & 0.50 & 1.97 & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table*}

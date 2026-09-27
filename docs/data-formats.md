@@ -58,7 +58,7 @@ ISO-8601; absolute times are normalised to seconds relative to the first fix.
 | Frame manifest | `ingest/frames.csv`, `preprocess/selected_frames.csv` | All stages |
 | Sparse model | `sfm/sparse/` (COLMAP), `sfm/sparse.ply` | dense, georef |
 | Dense cloud | `dense/fused.ply` | mesh, georef, metrics |
-| Mesh | `mesh/mesh-*.ply`, `mesh/textured/mesh.obj` (+ textures) | viewer/CAD/GIS |
+| Mesh | `mesh/mesh-*.ply`, `mesh/textured/mesh.ply` (+ `texture.png` atlas) | viewer/CAD/GIS |
 | Georeferenced cloud | `georef/georeferenced_*.ply` (local ENU, metres) | measurement |
 | Camera track | `georef/camera_track.geojson` (WGS84) | GIS |
 | Metrics | `metrics/metrics.json` | evaluation |

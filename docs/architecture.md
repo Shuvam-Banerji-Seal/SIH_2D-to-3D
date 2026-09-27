@@ -37,7 +37,7 @@ outputs/<run_name>_<UTC timestamp>/
 ├── preprocess/                    # selected_frames.csv, selection_summary.json
 ├── sfm/                           # database.db, sparse model, sparse.ply, result.json
 ├── dense/                         # fused.ply or depth/*.npy, result.json
-├── mesh/                          # mesh-*.ply / textured/*.obj, result.json
+├── mesh/                          # mesh-*.ply / textured/mesh.ply + texture.png, result.json
 ├── georef/                        # georeferenced_*.ply, camera_track.geojson, result.json
 └── metrics/                       # metrics.json
 ```

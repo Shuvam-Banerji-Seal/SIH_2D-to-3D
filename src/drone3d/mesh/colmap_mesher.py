@@ -25,7 +25,7 @@ def ply_element_counts(path: str | Path) -> tuple[int, int]:
 
 
 class ColmapMesher(MeshBackend):
-    """Runs ``poisson_mesher``/``delaunay_mesher`` and ``texture_mesher``."""
+    """Runs ``poisson_mesher``/``delaunay_mesher`` and ``mesh_texturer``."""
 
     name = "colmap"
 

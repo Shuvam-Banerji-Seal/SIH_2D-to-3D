@@ -14,12 +14,14 @@ run_name: fast
 stages: [ingest, keyframes, sfm, dense, georef, export, metrics, report]
 keyframes:
   output_long_side: 1920
-  # Jal Mahal, view completeness vs processing time: absolute overlap at 12 fps
-  # 0.70 / 286 s; relative overlap with the rate adapted down to 6 fps 0.64 / 114 s;
-  # down to 3 fps 0.56 / 85 s (and a pass split by a false cut). 6 fps it is.
-  relative_overlap: true
+  # View completeness (exact, ray cast) vs processing time, shared A100:
+  #                         Jal Mahal 55 s (budget 82)   Qutub Minar 187 s (budget 281)
+  #   absolute, 12 fps      0.82 / 262 s                 0.81 / 307 s
+  #   absolute, adaptive    0.78 / 147 s  (3.0 fps)      0.75 / 243 s  (3.3 fps)
+  #   relative, adaptive    0.71 / 145 s  (6.0 fps)      0.70 / 292 s  (7.5 fps)
+  # Absolute overlap with the adaptive rate is at least as fast and more complete.
   adaptive_rate: true
-  min_analysis_fps: 6.0
+  min_analysis_fps: 3.0
 sfm:
   backend: flow
   mapper: global

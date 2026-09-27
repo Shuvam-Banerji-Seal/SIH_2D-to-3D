@@ -50,6 +50,7 @@ class IngestConfig:
 
     video: str | None = None  # the drone video (mp4, mov, mkv, avi, webm)
     telemetry: str | None = None  # flight log for georeferencing: DJI SRT, CSV, GPX or JSON (optional)
+    telemetry_offset_s: float = 0.0  # the video starts this many seconds into the flight log (live segments)
 
 
 @dataclass

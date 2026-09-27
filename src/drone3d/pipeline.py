@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +71,7 @@ class Pipeline:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.dataset = self.run_dir / "dataset"
         self._result = PipelineResult(run_dir=self.run_dir)
+        self.cancel: threading.Event | None = None  # set by the engine to stop before the next stage
 
     # ------------------------------------------------------------------ public
 
@@ -81,6 +83,10 @@ class Pipeline:
             raise Drone3DError(f"unknown stage(s): {', '.join(unknown)}")
         self._result = PipelineResult(run_dir=self.run_dir)
         for name in selected:
+            if self.cancel is not None and self.cancel.is_set():
+                log.info("stage %s: skipped (0.0s) cancelled", name)
+                self._result.stages.append(StageReport(name, "skipped", "cancelled"))
+                continue
             self._result.stages.append(self._run_stage(name))
         self._result.metrics = self._collect_metrics()
         log.info("manifest written: %s", self._write_manifest())
@@ -153,6 +159,8 @@ class Pipeline:
         cfg = self.config.ingest
         info = self._video_info()
         samples = load_telemetry(cfg.telemetry) if cfg.telemetry else []
+        for sample in samples:  # the video starts this far into the log (a live segment)
+            sample.t -= cfg.telemetry_offset_s
         stage_dir = self._stage_dir("ingest")
         if samples:
             _write_json(stage_dir / "telemetry.json", [s.to_dict() for s in samples])
@@ -170,6 +178,7 @@ class Pipeline:
     def _stage_keyframes(self) -> StageReport:
         import torch
 
+        from drone3d.engine import models
         from drone3d.io.nvdec import (
             analysis_size,
             detect_letterbox,
@@ -177,7 +186,7 @@ class Pipeline:
             stream_analysis_chunks,
             write_sidecar_jpegs,
         )
-        from drone3d.keyframes.flow import ConsecutiveFlow, RaftFlow
+        from drone3d.keyframes.flow import ConsecutiveFlow
         from drone3d.keyframes.select import SelectorConfig, select_keyframes
 
         cfg = self.config.keyframes
@@ -190,7 +199,7 @@ class Pipeline:
         # inflate held-out PSNR with trivially correct pixels.
         crop = detect_letterbox(info, hwaccel=cfg.hwaccel) if cfg.crop_letterbox else None
         t0 = time.perf_counter()
-        flow_model = RaftFlow(cfg.flow_model, batch=cfg.flow_batch)
+        flow_model = models.raft(cfg.flow_model, batch=cfg.flow_batch)
         probe = None
         if cfg.adaptive_rate:
             stride, probe = _adapt_stride(info, size, stride, flow_model, crop, cfg)

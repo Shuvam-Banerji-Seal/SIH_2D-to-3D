@@ -19,7 +19,7 @@ import torch.nn.functional as F
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["ConsecutiveFlow", "RaftFlow", "consistency_mask", "frame_sharpness"]
+__all__ = ["ConsecutiveFlow", "RaftFlow", "consistency_mask", "frame_sharpness", "load_raft"]
 
 log = get_logger(__name__)
 
@@ -104,6 +104,21 @@ def _patch_raft(net: torch.nn.Module) -> None:
     net.forward = types.MethodType(forward, net)
 
 
+def load_raft(model: str = "raft_large", device: str | torch.device = "cuda") -> torch.nn.Module:
+    """RAFT with torchvision's pretrained weights, patched for bf16, in eval mode on ``device``."""
+    _default_torch_home()
+    from torchvision.models import optical_flow as of
+
+    if model == "raft_large":
+        net = of.raft_large(weights=of.Raft_Large_Weights.DEFAULT)
+    elif model == "raft_small":
+        net = of.raft_small(weights=of.Raft_Small_Weights.DEFAULT)
+    else:
+        raise ValueError(f"unknown flow model {model!r} (raft_large | raft_small)")
+    _patch_raft(net)
+    return net.to(torch.device(device)).eval()
+
+
 class RaftFlow:
     """Batched RAFT inference in bfloat16, replayed from a CUDA Graph.
 
@@ -117,6 +132,7 @@ class RaftFlow:
         batch: pairs per replay.
         iters: RAFT refinement iterations.
         cuda_graph: capture and replay (falls back to eager if capture fails).
+        net: an already loaded network of ``model`` to share (see :mod:`drone3d.engine.models`).
     """
 
     def __init__(
@@ -127,19 +143,10 @@ class RaftFlow:
         iters: int = 12,
         device: str | torch.device = "cuda",
         cuda_graph: bool = True,
+        net: torch.nn.Module | None = None,
     ) -> None:
-        _default_torch_home()
-        from torchvision.models import optical_flow as of
-
-        if model == "raft_large":
-            net = of.raft_large(weights=of.Raft_Large_Weights.DEFAULT)
-        elif model == "raft_small":
-            net = of.raft_small(weights=of.Raft_Small_Weights.DEFAULT)
-        else:
-            raise ValueError(f"unknown flow model {model!r} (raft_large | raft_small)")
-        _patch_raft(net)
         self.device = torch.device(device)
-        self.net = net.to(self.device).eval()
+        self.net = net if net is not None else load_raft(model, self.device)
         self.batch = max(1, batch)
         self.iters = iters
         self.name = model

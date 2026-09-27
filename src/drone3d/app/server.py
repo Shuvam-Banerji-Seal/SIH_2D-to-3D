@@ -44,6 +44,37 @@ __all__ = ["create_app"]
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".ts"}
 LOG_EXT = {".srt", ".csv", ".gpx", ".json", ".tsv", ".txt"}
 _NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    if a.stat().st_size != b.stat().st_size:
+        return False
+    import hashlib
+
+    def digest(p: Path) -> bytes:
+        h = hashlib.blake2b(digest_size=16)
+        with p.open("rb") as fh:
+            while chunk := fh.read(8 << 20):
+                h.update(chunk)
+        return h.digest()
+
+    return digest(a) == digest(b)
+
+
+def _place(part: Path, dest: Path) -> tuple[Path, bool]:
+    """Move an uploaded ``part`` to ``dest`` -> ``(path, reused)``.
+
+    A file of the same name is never overwritten -- runs refer to it by path.
+    The same bytes uploaded again reuse it; different ones get ``name-2.ext``, ``-3``...
+    """
+    for k in range(1, 1000):
+        cand = dest if k == 1 else dest.with_name(f"{dest.stem}-{k}{dest.suffix}")
+        if not cand.exists():
+            part.rename(cand)
+            return cand, False
+        if _same_file(part, cand):
+            return cand, True
+    raise HTTPException(409, f"too many uploads named {dest.name}")
 _SOURCE = re.compile(r"^(rtsp|rtmp|srt|udp|http|https|tcp)://\S+$|^/dev/video\d+$")
 
 
@@ -181,17 +212,22 @@ def create_app(
         return media(LOG_EXT)
 
     @app.post("/api/upload")
-    async def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008
+    def upload(file: UploadFile = File(...)) -> dict:  # noqa: B008  (sync: a 4 GB copy runs in a worker thread, not the event loop)
         name = Path(file.filename or "upload").name
         if Path(name).suffix.lower() not in VIDEO_EXT | LOG_EXT:
             raise HTTPException(400, f"unsupported file type: {name}")
-        dest = uploads / name
-        with dest.open("wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        part = uploads / f".{name}.{threading.get_ident()}.part"  # hidden, and not a video: never listed half-written
+        try:
+            with part.open("wb") as fh:
+                shutil.copyfileobj(file.file, fh, 8 << 20)
+            dest, reused = _place(part, uploads / name)
+        finally:
+            part.unlink(missing_ok=True)
         return {
             "path": str(dest.relative_to(repo)),
-            "name": name,
+            "name": dest.name,
             "size_mb": round(dest.stat().st_size / 1e6, 1),
+            "reused": reused,
         }
 
     def build_config(req: dict, *, need_video: bool = True) -> tuple[str, dict]:

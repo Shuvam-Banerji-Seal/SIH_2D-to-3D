@@ -1,6 +1,7 @@
 // End-to-end check of the console in a GPU-accelerated headless Chrome: every page, every explorer layer and control.
 //
 //   bun tools/record_ui/e2e.mjs --url http://127.0.0.1:8080 --run RUN_NAME [--out .playwright-mcp/e2e.json]
+//   bun tools/record_ui/e2e.mjs --upload path/to/video.mp4 --build NAME   (upload, drop, build, then check that run)
 //
 // Fails (exit 1) on console errors, page exceptions, failed requests (>= 400), a layer that draws nothing, or a
 // control that does not do what it says. A layer "draws" when the canvas changes by more than 0.5 % of its pixels.
@@ -37,9 +38,47 @@ const sections = await page.evaluate(() => { document.querySelectorAll('.opt-sec
 report.controls.options = sections;
 if (!sections.length || sections.some((s) => !s.fields || !s.help)) fail('an options section is empty or a field has no help');
 
+// ------------------------------------------------------------------ upload a video, drop a flight log, build
+// --upload FILE: through the file picker, as a user would; a small flight log is dropped on the zone as well
+// (a real drop event) and removed again. --build NAME then builds the uploaded video and checks that run below.
+let run = RUN;
+const UPLOAD = arg('upload'), BUILD = arg('build');
+if (UPLOAD) {
+  await page.goto(`${URL_}/#/new`); await page.locator('#drop').waitFor();
+  const t0 = Date.now();
+  await page.locator('#file').setInputFiles(UPLOAD);
+  try { await page.locator('#drop').getByText(/Uploaded|already uploaded/).waitFor({ timeout: 600000 }); }
+  catch { fail(`upload of ${UPLOAD} did not finish: ${await page.locator('#drop').textContent()}`); }
+  const sel = await page.evaluate(() => document.querySelector('#videos .choice.sel')?.dataset.p);
+  report.controls.upload = { file: UPLOAD.split('/').pop(), selected: sel, seconds: (Date.now() - t0) / 1000 };
+  if (!sel) fail('the uploaded video was not selected');
+  // a drop of a flight log: a DataTransfer built in the page
+  await page.evaluate(() => { const dt = new DataTransfer();
+    dt.items.add(new File(['1\n00:00:00,000 --> 00:00:00,033\n[latitude: 26.9530] [longitude: 75.8460] [rel_alt: 60.0]\n'], 'e2e_drop_test.srt', { type: 'text/plain' }));
+    document.querySelector('#drop').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); });
+  try { await page.waitForFunction(() => document.querySelector('#telemetry').value.endsWith('e2e_drop_test.srt'), null, { timeout: 20000 }); report.controls.drop = 'ok'; }
+  catch { fail('a dropped flight log was not uploaded and selected'); }
+  await page.locator('#telemetry').selectOption(''); // not this video's log
+  const { unlinkSync } = await import('node:fs'); try { unlinkSync(`${arg('repo', '.')}/uploads/e2e_drop_test.srt`); } catch { /* already gone */ }
+  if (BUILD && sel) {
+    await page.locator('#runname').fill(BUILD);
+    await page.locator('#start').click();
+    await page.waitForFunction((n) => location.hash === `#/run/${encodeURIComponent(n)}`, BUILD, { timeout: 30000 }).catch(() => fail('Build did not open the run page'));
+    const tb = Date.now(); let st = {};
+    while (Date.now() - tb < 45 * 60000) { // the run page stays open meanwhile: its polling must not error either
+      st = await (await page.request.get(`${URL_}/api/runs/${encodeURIComponent(BUILD)}`)).json().catch(() => ({}));
+      if (['done', 'failed', 'stopped'].includes(st.status)) break;
+      await sleep(10000);
+    }
+    report.controls.build = { status: st.status, minutes: +((Date.now() - tb) / 60000).toFixed(1), stages: Object.fromEntries(Object.entries(st.stages || {}).map(([k, v]) => [k, v.status])) };
+    if (st.status !== 'done') fail(`the build of the upload ended ${st.status || 'in a timeout'}`);
+    else run = BUILD;
+  }
+}
+
 // ------------------------------------------------------------------ one run: explorer, layers, controls
-if (RUN) {
-  await page.goto(`${URL_}/#/run/${encodeURIComponent(RUN)}`);
+if (run) {
+  await page.goto(`${URL_}/#/run/${encodeURIComponent(run)}`);
   await page.waitForFunction(() => window.__explorer?.x.models.length && window.__explorer.x.models[0].meshObj, null, { timeout: 90000 });
   await page.evaluate(() => document.querySelector('#xp').scrollIntoView());
   await sleep(2500);

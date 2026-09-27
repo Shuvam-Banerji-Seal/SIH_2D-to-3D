@@ -60,7 +60,7 @@ await smoothScroll(0, 1400); await hold(800);
 await go('#/new', 2200);
 await click('#videos .choice:nth-child(10)'); await hold(900);
 await to('#res', 1200); await click('[data-r="ultra"]'); await hold(1400); await click('[data-r="high"]'); await hold(700);
-await to('#mods', 1100); await click('[data-m="splat"]'); await hold(1600);
+await to('#mods', 1100); await click('label.sw:has(input[data-m="splat"])'); await hold(1100); await click('label.sw:has(input[data-m="splat"])'); await hold(1100); // off and on again: splats are on by default
 await to('#sections', 1300);
 await page.locator('#oq').click(); await page.keyboard.type('trunc', { delay: 110 }); await hold(2600);
 await page.locator('#oq').fill(''); await page.keyboard.press('Backspace'); await hold(500);

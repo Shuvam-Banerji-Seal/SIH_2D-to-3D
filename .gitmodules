@@ -7,3 +7,6 @@
 [submodule "third_party/javascript-animation-skills"]
 	path = third_party/javascript-animation-skills
 	url = https://github.com/iart-ai/javascript-animation-skills.git
+[submodule "third_party/pdoom-video"]
+	path = third_party/pdoom-video
+	url = https://github.com/mexicat/pdoom-video

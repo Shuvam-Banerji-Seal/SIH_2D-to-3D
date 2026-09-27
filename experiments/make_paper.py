@@ -133,7 +133,8 @@ FAST_RUNS = {  # run -> (video, analysis rate, overlap)
 
 def short_title_run(run: str) -> str:
     """``map_the_messiah_cristo_redentor_4k_drone_foo`` -> a short name for tables."""
-    names = {"messiah": "Cristo Redentor", "jal_mahal": "Jal Mahal", "qutub": "Qutub Minar"}
+    names = {"messiah": "Cristo Redentor", "jal_mahal": "Jal Mahal", "qutub": "Qutub Minar", "kinbane": "Kinbane",
+             "dunluce": "Dunluce"}
     return next((v for k, v in names.items() if k in run), tex(run.removeprefix("map_")[:18]))
 
 
@@ -188,6 +189,41 @@ def fast_section(macros: dict[str, str]) -> list[str]:
         parts.append(table("TSDF truncation band on Jal Mahal's two largest models (voxel = 3 pixel footprints at the median "
                            "depth): view completeness, median depth error against the triangulated depth, triangles.",
                            "tab:tsdf", ["Model", "Band (vox.)", "Completeness", "Depth err. (\\%)", "Triangles"], rows, "lrrrr"))  # fmt: skip
+    tw = load(FIG / "tsdf_weight.json")
+    if tw:
+        by: dict = {}
+        for r in tw:
+            if r.get("min_views"):
+                by.setdefault((r["run"], r["model"]), {})[r["min_views"]] = r
+        rows, gain_small, gain_large = [], [], []
+        for (run, model), v in by.items():
+            n = next(iter(v.values()))["keyframes"]
+            auto = 2 if n <= 12 else 3
+            rows.append([f"{short_title_run(run)} {model}", str(n), *(fmt(v[k]["completeness"], 2) if k in v else DASH for k in (4, 3, 2)),
+                         *(fmt(100 * v[k]["depth_err"], 2) if k in v and v[k]["depth_err"] is not None else DASH for k in (4, 3, 2)),
+                         *(f"{v[k]['triangles'] / 1e3:.0f}k" if k in v else DASH for k in (4, 3, 2)), str(auto)])  # fmt: skip
+            if 4 in v and auto in v:
+                (gain_small if auto == 2 else gain_large).append(100 * (v[auto]["completeness"] - v[4]["completeness"]))
+        large = [v for v in by.values() if next(iter(v.values()))["keyframes"] > 12 and all(k in v and v[k].get("surfaces_per_ray") for k in (3, 2))]
+        worst = max(large, key=lambda v: v[2]["surfaces_per_ray"] - v[3]["surfaces_per_ray"], default=None)
+        lay_txt = (f"{worst[3]['surfaces_per_ray']:.2f} $\\to$ {worst[2]['surfaces_per_ray']:.2f} surfaces per keyframe ray on "
+                   f"{short_title_run(worst[3]['run'])} {worst[3]['model']}") if worst else "more surfaces per ray"
+        tri_x = max((v[2]["triangles"] / v[3]["triangles"] for v in large if v[3]["triangles"]), default=1.0)
+        parts.append(
+            "\\paragraph{How many views make a surface.} Open3D extracts a voxel when its integration weight, the number of "
+            "depth maps that saw it, exceeds a threshold whose default asks for four. On single-pass footage that discards "
+            "the edges of every model's coverage and small models altogether (Kinbane's five-view shot came out empty). "
+            "The profile asks for three views on models of more than 12 depth maps and two on smaller ones "
+            f"(Table~\\ref{{tab:views}}): {min(gain_large):.0f}--{max(gain_large):.0f} points of view completeness on the large "
+            f"models and {min(gain_small):.0f}--{max(gain_small):.0f} on the small, for at most 0.1\\,\\% more median depth error. "
+            "Two views on the large models would add more still, but as stacked layers in the far field "
+            f"({lay_txt}), and up to {tri_x:.1f} times the triangles.\n"
+        )
+        parts.append(table("Minimum views per surface voxel: view completeness, median depth error against the triangulated "
+                           "depth (\\%) and triangles when 4 (Open3D's default), 3 or 2 depth maps must see a voxel; last column: "
+                           "the profile's choice.", "tab:views",
+                           ["Model", "Maps", "C$_4$", "C$_3$", "C$_2$", "E$_4$", "E$_3$", "E$_2$", "T$_4$", "T$_3$", "T$_2$", "Uses"],
+                           rows, "lrrrrrrrrrrr", wide=True))  # fmt: skip
     far = load(FIG / "far_field.json")
     if far:
         bins = [e["ratio"] for e in far[0]["extrapolation"] if e["ratio"] != "0-1"]

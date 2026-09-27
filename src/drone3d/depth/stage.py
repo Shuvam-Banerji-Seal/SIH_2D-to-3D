@@ -12,6 +12,7 @@ delta1), the measurement of how far the monocular prior can be trusted.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 from dataclasses import dataclass, field
@@ -144,7 +145,8 @@ def run_depth(
         sfm_depth_observations,
         write_depth_png,
     )
-    from drone3d.depth.marigold import MarigoldDepth, processing_size
+    from drone3d.depth.marigold import processing_size
+    from drone3d.engine import models
 
     started = time.perf_counter()
     images_dir = dataset / "images"
@@ -156,7 +158,8 @@ def run_depth(
             jobs.append((str(model_dir), obs))
     if not jobs:
         return DepthStageResult(0, 0.0, 0.0)
-    net = MarigoldDepth(quantization=quantization, device=device)
+    stack = contextlib.ExitStack()  # frees Marigold at the end unless the engine keeps it warm
+    net = stack.enter_context(models.marigold(quantization=quantization, device=device))
     first = jobs[0][1]
     size = processing_size(first.width, first.height, long_side)
     result = DepthStageResult(
@@ -220,7 +223,7 @@ def run_depth(
     result.per_model = aggregate(result.per_image)
     result.seconds = time.perf_counter() - started
     result.seconds_inference = infer_time
-    net.close()
+    stack.close()
     return result
 
 

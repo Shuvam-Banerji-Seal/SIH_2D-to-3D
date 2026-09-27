@@ -91,6 +91,17 @@ def build_parser() -> argparse.ArgumentParser:
     ui_parser.add_argument("--port", type=int, default=8080)
     ui_parser.set_defaults(func=cmd_ui)
 
+    engine_parser = subparsers.add_parser(
+        "engine", help="Resident GPU engine: keeps the models warm and runs reconstructions and live streams"
+    )
+    engine_parser.add_argument("--host", default="127.0.0.1")
+    engine_parser.add_argument("--port", type=int, default=8770)
+    engine_parser.add_argument("--outputs", type=Path, default=Path("outputs"), help="where runs are written")
+    engine_parser.add_argument("--warm", default=None,
+                               help="models to load at start, comma-separated (default: what the last engine held)")
+    engine_parser.add_argument("--reserve-gb", type=float, default=2.0, help="GPU memory always left free for others")
+    engine_parser.set_defaults(func=cmd_engine)
+
     subparsers.add_parser("version", help="Print the version").set_defaults(func=cmd_version)
     return parser
 
@@ -244,6 +255,17 @@ def cmd_ui(args: argparse.Namespace) -> int:
     repo = Path.cwd()
     print(f"drone3d ui: http://{args.host}:{args.port}/  (runs in {repo / 'outputs'})")
     uvicorn.run(create_app(repo), host=args.host, port=args.port, log_level="warning")
+    return 0
+
+
+def cmd_engine(args: argparse.Namespace) -> int:
+    from drone3d.engine.service import serve
+    from drone3d.logging_utils import setup_logging
+
+    setup_logging("INFO")
+    warm = None if args.warm is None else [k.strip() for k in args.warm.split(",") if k.strip()]
+    print(f"drone3d engine: http://{args.host}:{args.port}/status  (runs in {args.outputs.resolve()})")
+    serve(Path.cwd(), args.outputs.resolve(), host=args.host, port=args.port, warm=warm, reserve_gb=args.reserve_gb)
     return 0
 
 

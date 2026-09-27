@@ -18,21 +18,26 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-__all__ = ["MonoDepth", "calibrate_fill"]
+__all__ = ["MonoDepth", "calibrate_fill", "load_mono"]
 
 _MEAN = torch.tensor([0.485, 0.456, 0.406])
 _STD = torch.tensor([0.229, 0.224, 0.225])
+
+
+def load_mono(model: str = "depth-anything/Depth-Anything-V2-Large-hf", device: str = "cuda") -> torch.nn.Module:
+    """A transformers depth model in fp16, eval mode, on ``device`` (weights from ``/store/huggingface``)."""
+    from transformers import AutoModelForDepthEstimation
+
+    os.environ.setdefault("HF_HUB_CACHE", "/store/huggingface")
+    return AutoModelForDepthEstimation.from_pretrained(model, dtype=torch.float16).to(device).eval()
 
 
 class MonoDepth:
     """Batched Depth Anything V2 (transformers) in fp16 -> relative disparity at the frames' size."""
 
     def __init__(self, model: str = "depth-anything/Depth-Anything-V2-Large-hf", *, device: str = "cuda",
-                 long_side: int = 700, batch: int = 16) -> None:  # fmt: skip
-        from transformers import AutoModelForDepthEstimation
-
-        os.environ.setdefault("HF_HUB_CACHE", "/store/huggingface")
-        self.net = AutoModelForDepthEstimation.from_pretrained(model, torch_dtype=torch.float16).to(device).eval()
+                 long_side: int = 700, batch: int = 16, net: torch.nn.Module | None = None) -> None:  # fmt: skip
+        self.net = net if net is not None else load_mono(model, device)
         self.device, self.long_side, self.batch, self.name = torch.device(device), long_side, batch, model
 
     @torch.inference_mode()

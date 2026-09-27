@@ -99,7 +99,8 @@ class DenseConfig:
 
     backend: str = "flow"  # flow | none
     long_side: int = 480
-    gaps: list[int] = field(default_factory=lambda: [2, 4, 8, 12])
+    gaps: list[int] = field(default_factory=lambda: [2, 4, 8, 12])  # in keyframes
+    keyframe_stride: int = 1  # depth maps for every N-th keyframe (the TSDF still fuses them all)
     min_angle_deg: float = 0.5
     rel_tol: float = 0.05
     mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf"  # null: triangulated depth only

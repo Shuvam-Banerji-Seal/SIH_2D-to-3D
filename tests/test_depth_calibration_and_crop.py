@@ -69,3 +69,35 @@ def test_detect_letterbox_on_synthetic_clip(tmp_path: Path, bars: int) -> None:
         x0, y0, x1, y1 = crop
         assert (x0, x1) == (0, 640)
         assert bars <= y0 <= bars + 4 and 360 - bars - 4 <= y1 <= 360 - bars
+
+
+def test_aggregate_reports_every_model_including_all_failed() -> None:
+    from drone3d.depth.stage import aggregate
+
+    cv = {
+        "affine": {"abs_rel_median": 0.05, "delta1": 0.9},
+        "monotone": {"abs_rel_median": 0.03, "delta1": 0.95},
+    }
+    ok = {
+        "model": "m0",
+        "abs_rel": 0.06,
+        "abs_rel_median": 0.05,
+        "delta1": 0.9,
+        "valid_fraction": 1.0,
+        "cv": cv,
+    }
+    per_image = {
+        "a.jpg": ok,
+        "b.jpg": dict(ok),
+        "c.jpg": {"model": "m1", "status": "alignment-failed"},
+    }
+    out = aggregate(per_image)
+    assert set(out) == {"m0", "m1"}
+    assert out["m0"]["aligned"] == 2 and out["m0"]["cv_monotone_abs_rel_median"] == 0.03
+    assert out["m1"] == {
+        **out["m1"],
+        "images": 1,
+        "aligned": 0,
+        "abs_rel_median": None,
+        "cv_monotone_delta1": None,
+    }

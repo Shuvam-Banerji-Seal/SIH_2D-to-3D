@@ -94,7 +94,16 @@ class GpuMonitor:
                 foreign = sum(1 for p in procs if p.pid not in children)
                 rss = sum(_rss_bytes(pid) for pid in children) / 1e9
                 self._rows.append(
-                    (time.perf_counter() - self._t0, float(util.gpu), power, mem, own, foreign, dec, rss)
+                    (
+                        time.perf_counter() - self._t0,
+                        float(util.gpu),
+                        power,
+                        mem,
+                        own,
+                        foreign,
+                        dec,
+                        rss,
+                    )
                 )
             except Exception:  # a transient NVML error must not kill the stage
                 pass

@@ -259,6 +259,8 @@ class Engine:
                 log.error("engine: %s; saving the queue and exiting for a restart", self.poisoned)
                 self._save_queue()
                 self._write_warm_list()
+                with contextlib.suppress(OSError):  # tells any supervisor -- even one that did not start us -- to restart
+                    (self.outputs / ".engine_poisoned").write_text(self.poisoned)
                 os._exit(POISONED_EXIT)
 
     def _execute(self, job: Job) -> None:

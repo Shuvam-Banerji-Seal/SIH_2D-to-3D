@@ -61,7 +61,15 @@ def run_status(run_dir: Path) -> dict:
                 )
                 if current == m.group(2):
                     current = None
-    status = job.get("status") or ("done" if (run_dir / "manifest.json").is_file() else "unknown")
+    manifest = _read(run_dir / "manifest.json") or {}
+    if not any("seconds" in v for v in stages.values()) and manifest:  # a log without INFO lines (older --quiet runs)
+        planned = (manifest.get("config") or {}).get("stages") or []
+        done = {r["name"]: r for r in (manifest.get("result") or {}).get("stages", [])}
+        stages = {st: {"status": done[st]["status"], "seconds": round(done[st].get("duration_s", 0.0), 2),
+                       "message": done[st].get("message", "")} if st in done else {"status": "pending"}
+                  for st in planned or list(done)}  # fmt: skip
+        cfg = cfg or {"stages": planned}
+    status = job.get("status") or ("done" if manifest else "unknown")
     if status == "running" and job.get("pid") and not _alive(job["pid"]):
         status = "done" if job.get("exit_code") == 0 else "stopped"
     metrics = _read(run_dir / "metrics" / "metrics.json") or {}

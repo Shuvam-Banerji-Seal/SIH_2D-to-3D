@@ -131,9 +131,11 @@ uv run drone3d engine --warm raft_large,depth_anything_v2_large   # or run the e
   profile), NVML gauges and ten-minute charts, the processes on the GPU with
   ours marked, a capability check of the machine (CUDA, NVDEC/NVENC, nvJPEG,
   Open3D CUDA, GLOMAP, splat trainer, FBX writer, weights), work in flight.
-- **Build** — a video from the library or an upload, a flight log, a profile,
-  a resolution preset (draft / high / ultra), module switches (depth fill,
-  photo texture, Gaussian splats, georeference, LAS, GeoTIFF, FBX) and every
+- **Build** — a video from the library or an upload (drop or pick a file;
+  progress and time left are shown, and an upload never replaces a file of the
+  same name that earlier runs use), a flight log, a profile, a resolution
+  preset (draft / high / ultra), module switches (depth fill, photo texture,
+  Gaussian splats, georeference, LAS, GeoTIFF, FBX, STL, Blender) and every
   option of the configuration, generated from the config dataclasses.
 - **Live** — an RTSP / RTMP / SRT / UDP / HLS / HTTP stream, a V4L2 camera, or
   a recorded flight replayed at its frame rate. ffmpeg cuts it into segments at
@@ -141,14 +143,21 @@ uv run drone3d engine --warm raft_large,depth_anything_v2_large   # or run the e
   engine, ahead of other work (Qutub Minar replayed in 30 s segments: a model
   26–38 s after each segment closed). With a flight log every segment is
   georeferenced into one ENU frame.
-- **Explorer** — textured mesh, dense cloud and Gaussian splats in one scene;
-  orbit, fly (<kbd>W A S D Q E</kbd>) or *follow flight* along the drone's own
-  path and view; click a keyframe to look through it with its photo over the
-  model; texture / shaded / wireframe; 0.5–2× render resolution; measuring;
-  screenshots. The same explorer ships with every export (`export/index.html`).
+- **Explorer** — every product as a layer with its own switch: the textured
+  mesh (texture / shaded / wireframe), the dense cloud, the Gaussian splats, the
+  flight path with camera frusta, the keyframe photos and their depth maps
+  placed where they were taken, the source video picture-in-picture, a grid.
+  Orbit, fly (<kbd>W A S D Q E</kbd>) or *follow flight* along the drone's own
+  path and view (the video follows); zoom, fit, all models; click a keyframe
+  to look through it with its photo over the model; 0.5–2× render resolution;
+  measuring; screenshots. The run page adds the keyframe filmstrip, a photo /
+  depth comparison slider and every deliverable (OBJ, PLY, GLB, FBX, STL,
+  .blend, LAS, GeoTIFF). The same explorer ships with every export
+  (`export/index.html`).
 
 The **engine** (`drone3d engine`) is a resident GPU process: RAFT and Depth
-Anything stay loaded and RAFT's CUDA graphs are captured once. It loads a model
+Anything stay loaded and RAFT's CUDA graphs are captured once per frame size
+(the three most recent kept, so memory stays flat over many videos). It loads a model
 only if the GPU has its footprint plus a reserve free at that moment (other
 users' processes included), never unloads one a run is using, fits
 memory-hungry settings (TSDF budget, flow batch, texture size) to the free

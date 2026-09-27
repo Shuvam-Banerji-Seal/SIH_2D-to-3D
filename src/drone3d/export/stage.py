@@ -195,6 +195,7 @@ def _frame_previews(posed: list, images: Path | None, depth_dir: Path | None, ou
         stem = Path(im.name).stem
         (out / "photo").mkdir(parents=True, exist_ok=True)
         with Image.open(src) as pic:
+            pic.draft("RGB", (width, width))  # decode at 1/2..1/8 scale: the preview needs no more
             pic.thumbnail((width, width))
             pic.convert("RGB").save(out / "photo" / f"{stem}.jpg", "JPEG", quality=80)
         if depth_dir is not None and (depth_dir / f"{stem}.jpg").is_file():
@@ -248,6 +249,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
 
     pool = ThreadPoolExecutor(max_workers=2)
     bg_jobs: list = []
+    frames_jobs: list = []
     clock = _Clock()
     for m in dense.get("models", []):
         if m.get("status") != "ok":
@@ -316,9 +318,10 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 baked = (baked[0] @ rot.T, *baked[1:])
             units, frame = "model units", "SfM (levelled, not georeferenced)"
             to_export = {"scale": 1.0, "rotation": rot.tolist(), "translation": [0.0, 0.0, 0.0]}
-        with clock("frames"):
-            frames = _frame_previews(posed, images, Path(m["depth_previews"]) if m.get("depth_previews") else None,
-                                     mdir / "frames")  # fmt: skip
+        # keyframe / depth previews for the viewer's image layers: CPU work, in the background
+        frames_job = pool.submit(_frame_previews, posed, images, Path(m["depth_previews"]) if m.get("depth_previews") else None,
+                                 mdir / "frames")  # fmt: skip
+        frames_jobs.append((frames_job, len(rows), name))
         # SfM frame -> this model's export frame, for renderers that follow the keyframe cameras
         (mdir / "frame.json").write_text(json.dumps({**to_export, "frame": frame, "units": units}, indent=1))
         splat_file, splat_info = None, None
@@ -372,7 +375,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             "name": f"model {name}",
             "mesh": f"model_{name}/mesh_textured.glb" if baked is not None else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),
             "points": f"model_{name}/points.ply", "cameras": cams.round(4).tolist(), "units": units, "dir": f"model_{name}", "gltf_up": "y",
-            "frames": {**frames, "photo_dir": f"model_{name}/frames/photo", "depth_dir": f"model_{name}/frames/depth"} if frames else None,
+            "frames": None,  # filled in when the background previews finish
             "camera_rotations": cam_rots.reshape(len(cam_rots), 9).round(5).tolist(), "intrinsics": intr,
             "images": [im.name for im in posed],
             "splat": f"model_{name}/splats.splat" if splat_file is not None else None,
@@ -384,6 +387,11 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             "stats": {"keyframes": m.get("keyframes"), "triangles": f"{len(f):,}", "points": f"{len(p):,}",
                       "depth coverage": f"{100 * m.get('coverage', 0):.0f} %", "frame": frame, **({"EPSG": epsg} if epsg else {})},
         })  # fmt: skip
+    for fut, k, name in frames_jobs:
+        with clock("frames_wait"):
+            fr = fut.result()
+        if fr:
+            scene_models[k]["frames"] = {**fr, "photo_dir": f"model_{name}/frames/photo", "depth_dir": f"model_{name}/frames/depth"}
     for fut, k in bg_jobs:  # attach the background files to their models' rows and download lists
         with clock("background_wait"):
             written = fut.result()

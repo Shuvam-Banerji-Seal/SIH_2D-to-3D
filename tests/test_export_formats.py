@@ -110,3 +110,25 @@ def test_frame_previews_for_the_viewer(tmp_path: Path) -> None:
         assert max(im.size) == 320
     assert (tmp_path / "frames" / "depth" / "f_000020.jpg").is_file()
     assert _frame_previews([], images, depth, tmp_path / "x") is None
+
+
+def test_decimation_keeps_shape_and_colour(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import sys
+
+    import open3d as o3d
+
+    from drone3d.export.stage import _decimate
+
+    sphere = o3d.geometry.TriangleMesh.create_sphere(radius=2.0, resolution=80)
+    v, f = np.asarray(sphere.vertices), np.asarray(sphere.triangles)
+    vc = np.where(v[:, 2:3] > 0, [[200, 40, 40]], [[40, 40, 200]]).astype(
+        np.uint8
+    )  # red north, blue south
+    sphere.vertex_colors = o3d.utility.Vector3dVector(vc / 255.0)
+    for fast in (True, False):
+        if not fast:  # the Open3D fallback, as without fast-simplification installed
+            monkeypatch.setitem(sys.modules, "fast_simplification", None)
+        dv, df, dvc = _decimate(sphere, v, f, vc, 2000)
+        assert 1800 <= len(df) <= 2000
+        np.testing.assert_allclose(np.linalg.norm(dv, axis=1), 2.0, atol=0.08)  # still the sphere
+        assert (dvc[dv[:, 2] > 0.5, 0] > 150).all() and (dvc[dv[:, 2] < -0.5, 2] > 150).all()

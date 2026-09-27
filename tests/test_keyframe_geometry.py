@@ -114,3 +114,14 @@ def test_padding_weights_are_ignored() -> None:
     assert padded.num_valid.item() == len(x)
     assert padded.prefers_3d.item() and clean.prefers_3d.item()
     assert abs(padded.parallax_px.item() - clean.parallax_px.item()) < 1e-3
+
+
+def test_pass_ends_that_fade_out_are_trimmed() -> None:
+    import numpy as np
+
+    from drone3d.keyframes.select import _trim_fades
+
+    luma = np.r_[np.linspace(0.05, 0.4, 6), np.full(40, 0.4), np.linspace(0.4, 0.05, 8)]
+    s, e = _trim_fades(luma, 0, len(luma) - 1, 0.8)
+    assert luma[s] >= 0.32 and luma[e] >= 0.32
+    assert (s, e) == (4, 47)  # 0.33 and 0.35 clear the 0.8 x 0.4 = 0.32 threshold

@@ -65,6 +65,7 @@ class KeyframeConfig:
     parallax_snr: float = 2.0
     output_long_side: int | None = None  # None keeps the source resolution
     jpeg_quality: int = 95
+    crop_letterbox: bool = True  # detect and remove black bars before analysis
     passes: list[int] = field(default_factory=list)  # restrict to these pass ids
     skip_degenerate: bool = True  # drop passes with no recoverable 3D structure
     hwaccel: bool = True
@@ -93,6 +94,7 @@ class DepthConfig:
     quantization: str = "4bit"  # 4bit | 8bit | none
     far_factor: float = 3.0  # beyond this x the SfM depth range counts as sky
     out_long_side: int | None = 1920
+    calibration: str = "monotone"  # monotone (isotonic vs SfM) | affine
 
 
 @dataclass

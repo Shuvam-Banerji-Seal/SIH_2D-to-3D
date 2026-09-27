@@ -38,10 +38,13 @@ from drone3d.logging_utils import get_logger
 __all__ = [
     "StreamInfo",
     "analysis_size",
+    "detect_letterbox",
     "extract_frames",
     "ffmpeg_bin",
     "nv12_to_rgb",
     "probe_stream",
+    "sample_frames",
+    "scaled_crop",
     "stream_analysis_chunks",
 ]
 
@@ -172,7 +175,11 @@ def analysis_size(width: int, height: int, long_side: int, multiple: int = 8) ->
 
 
 def _ffmpeg_cmd(
-    info: StreamInfo, size: tuple[int, int] | None, pre_filters: list[str], hwaccel: bool
+    info: StreamInfo,
+    size: tuple[int, int] | None,
+    pre_filters: list[str],
+    hwaccel: bool,
+    input_args: tuple[str, ...] = (),
 ) -> list[str]:
     """ffmpeg command that writes raw NV12 frames to stdout."""
     use_gpu = hwaccel and info.codec in _NVDEC_CODECS
@@ -184,7 +191,7 @@ def _ffmpeg_cmd(
         dec = ["-threads", "0"]
         scale = [f"scale={size[0]}:{size[1]}:flags=area"] if size else []
         filters = [*pre_filters, *scale, "format=nv12"]
-    return [ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", *dec,
+    return [ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", *dec, *input_args,
             "-i", str(info.path), "-vf", ",".join(filters), "-fps_mode", "passthrough",
             "-f", "rawvideo", "-pix_fmt", "nv12", "pipe:1"]  # fmt: skip
 
@@ -297,11 +304,16 @@ def stream_analysis_chunks(
     device: str = "cuda",
     hwaccel: bool = True,
     prefetch: int = 3,
+    crop: tuple[int, int, int, int] | None = None,
+    keyframes_only: bool = False,
 ) -> Iterator[tuple[np.ndarray, object]]:
     """Yield ``(source_frame_indices, rgb_uint8[B, H, W, 3] on device)`` chunks.
 
     Decoding runs ahead in a background thread (``prefetch`` chunks deep), so
-    the GPU work the caller does per chunk overlaps with NVDEC.
+    the GPU work the caller does per chunk overlaps with NVDEC. ``crop`` is a
+    source-pixel rectangle ``(x0, y0, x1, y1)`` (e.g. from
+    :func:`detect_letterbox`); it is mapped to ``size`` and rounded inwards to
+    multiples of 8, as RAFT needs.
     """
     import torch
 
@@ -310,8 +322,10 @@ def stream_analysis_chunks(
     width, height = size
     if width % 2 or height % 2:
         raise ValueError("NV12 needs even dimensions")
-    pre = [f"select='not(mod(n\\,{stride}))'"] if stride > 1 else []
-    cmd = _ffmpeg_cmd(info, size, pre, hwaccel)
+    pre = [f"select='not(mod(n\\,{stride}))'"] if stride > 1 and not keyframes_only else []
+    # keyframes_only decodes just the stream's I-frames (for sampling, not
+    # analysis): indices are then ordinals, not source frame numbers.
+    cmd = _ffmpeg_cmd(info, size, pre, hwaccel, ("-skip_frame", "nokey") if keyframes_only else ())
     frame_bytes = width * height * 3 // 2
     q: queue.Queue = queue.Queue(maxsize=prefetch)
     stop, handle = threading.Event(), []
@@ -332,6 +346,9 @@ def stream_analysis_chunks(
             n = len(item) // frame_bytes
             nv12 = torch.from_numpy(item).view(n, height * 3 // 2, width).to(device, non_blocking=True)
             rgb = nv12_to_rgb(nv12, height, width, **color)
+            if crop is not None:
+                x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), size, multiple=8)
+                rgb = rgb[:, y0:y1, x0:x1].contiguous()
             indices = (np.arange(produced, produced + n) * stride).astype(np.int64)
             produced += n
             yield indices, rgb
@@ -345,6 +362,93 @@ def stream_analysis_chunks(
         while not q.empty():
             q.get_nowait()
         thread.join(timeout=10)
+
+
+def scaled_crop(
+    crop: tuple[int, int, int, int], src: tuple[int, int], dst: tuple[int, int], multiple: int = 2
+) -> tuple[int, int, int, int]:
+    """Map a source-pixel crop to a ``dst``-sized frame, rounded inwards to ``multiple``."""
+    sx, sy = dst[0] / src[0], dst[1] / src[1]
+    x0, y0 = int(np.ceil(crop[0] * sx)), int(np.ceil(crop[1] * sy))
+    x1, y1 = int(np.floor(crop[2] * sx)), int(np.floor(crop[3] * sy))
+    w = (x1 - x0) // multiple * multiple
+    h = (y1 - y0) // multiple * multiple
+    x0 += (x1 - x0 - w) // 2
+    y0 += (y1 - y0 - h) // 2
+    return x0, y0, x0 + w, y0 + h
+
+
+def sample_frames(
+    info: StreamInfo,
+    times_s: Sequence[float],
+    size: tuple[int, int],
+    *,
+    hwaccel: bool = True,
+    workers: int = 3,
+) -> list[np.ndarray]:
+    """Decode one frame near each timestamp (fast input seek), as NV12 arrays.
+
+    Each sample seeks to the nearest preceding key frame and decodes one frame,
+    so a dozen samples cost a few seconds however long the clip is.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    frame_bytes = size[0] * size[1] * 3 // 2
+
+    def one(t: float) -> np.ndarray | None:
+        cmd = _ffmpeg_cmd(info, size, [], hwaccel, ("-ss", f"{max(0.0, t):.3f}"))
+        at = cmd.index("-f")
+        cmd = [*cmd[:at], "-frames:v", "1", *cmd[at:]]
+        out = subprocess.run(cmd, capture_output=True, check=False).stdout
+        return np.frombuffer(out[:frame_bytes], dtype=np.uint8) if len(out) >= frame_bytes else None
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return [f for f in pool.map(one, times_s) if f is not None]
+
+
+def detect_letterbox(
+    info: StreamInfo,
+    *,
+    samples: int = 12,
+    threshold: float = 24.0,
+    hwaccel: bool = True,
+) -> tuple[int, int, int, int] | None:
+    """Source-pixel rectangle inside black letterbox / pillarbox bars, or ``None``.
+
+    Bars are black in every frame, a fade only in some, so each row and column
+    is judged by its *maximum* luma over ``samples`` frames spread over the
+    clip. Returns ``None`` when there are no bars or when cropping would remove
+    more than half the frame (a dark video, not bars).
+    """
+    size = analysis_size(info.width, info.height, 640, multiple=2)
+    w, h = size
+    duration = info.duration_s or info.num_frames / max(info.fps, 1e-9)
+    times = [duration * (k + 0.5) / samples for k in range(samples)]
+    frames = sample_frames(info, times, size, hwaccel=hwaccel)
+    if not frames:
+        return None
+    luma = np.stack([f[: w * h].reshape(h, w) for f in frames]).astype(np.float32)
+    if not _color_args(info)["full_range"]:
+        luma = (luma - 16.0) * (255.0 / 219.0)
+    peak = luma.max(axis=0)
+    rows = np.flatnonzero(peak.max(axis=1) > threshold)
+    cols = np.flatnonzero(peak.max(axis=0) > threshold)
+    if rows.size == 0 or cols.size == 0:
+        return None
+    # One analysis pixel of margin past the last bar row, to skip the soft edge.
+    y0 = int(rows[0]) + (1 if rows[0] > 0 else 0)
+    y1 = int(rows[-1]) + (0 if rows[-1] < h - 1 else 1)
+    x0 = int(cols[0]) + (1 if cols[0] > 0 else 0)
+    x1 = int(cols[-1]) + (0 if cols[-1] < w - 1 else 1)
+    if (y0, y1, x0, x1) == (0, h, 0, w):
+        return None
+    if (y1 - y0) * (x1 - x0) < 0.5 * h * w:
+        log.warning("letterbox detection would keep < 50%% of the frame; not cropping")
+        return None
+    sx, sy = info.width / w, info.height / h
+    crop = (int(round(x0 * sx)) // 2 * 2, int(round(y0 * sy)) // 2 * 2,
+            int(round(x1 * sx)) // 2 * 2, int(round(y1 * sy)) // 2 * 2)  # fmt: skip
+    return None if crop == (0, 0, info.width, info.height) else crop
 
 
 def _decode_group(cmd: list[str], frame_bytes: int, expect: int) -> list[np.ndarray]:
@@ -370,6 +474,7 @@ def extract_frames(
     device: str = "cuda",
     group_size: int = 24,
     workers: int = 2,
+    crop: tuple[int, int, int, int] | None = None,
 ) -> list[Path]:
     """Write source frames ``indices`` (0-based decode order) to ``out_paths``.
 
@@ -440,6 +545,9 @@ def extract_frames(
                 .to(device)
             )
             rgb = nv12_to_rgb(nv12, height, width, **color)
+            if crop is not None:
+                x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), (width, height), multiple=2)
+                rgb = rgb[:, y0:y1, x0:x1]
             for k in range(len(frames)):
                 target = Path(out_paths[order[rank]])
                 target.parent.mkdir(parents=True, exist_ok=True)

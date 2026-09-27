@@ -114,14 +114,13 @@ def _release_host_memory() -> None:
     glibc keep the freed arenas, so without a trim the process holds several GB
     of RAM it no longer uses while inference runs for many minutes.
     """
+    import contextlib
     import ctypes
     import gc
 
     gc.collect()
-    try:
+    with contextlib.suppress(OSError):  # not glibc
         ctypes.CDLL("libc.so.6").malloc_trim(0)
-    except OSError:  # not glibc
-        pass
 
 
 def processing_size(width: int, height: int, long_side: int) -> tuple[int, int]:

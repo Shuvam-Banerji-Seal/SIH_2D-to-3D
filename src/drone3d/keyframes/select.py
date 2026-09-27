@@ -54,6 +54,7 @@ class SelectorConfig:
     max_gap_s: float = 2.0  # never leave more than this between keyframes
     cut_consistency: float = 0.35  # consecutive consistency below this is a cut
     dark_luma: float = 0.06  # mean luma below this is a black / fade frame
+    fade_ratio: float = 0.8  # pass ends darker than this x the pass median are a fade
     flat_std: float = 0.025  # luma std below this is a blank frame
     min_pass_s: float = 2.0  # shorter runs are dropped
     grid_stride: int = 8  # tracked point spacing, analysis pixels
@@ -210,7 +211,21 @@ def find_passes(flow: ConsecutiveFlow, fps: float, cfg: SelectorConfig) -> list[
             if i - start + 1 >= min_len:
                 passes.append((start, i))
             start = None
-    return passes
+    return [p for p in (_trim_fades(flow.luma_mean, s, e, cfg.fade_ratio) for s, e in passes) if p[1] - p[0] + 1 >= min_len]
+
+
+def _trim_fades(luma: np.ndarray, s: int, e: int, ratio: float) -> tuple[int, int]:
+    """Drop fade-in / fade-out frames: pass ends darker than ``ratio`` x the pass median.
+
+    A fade is not scene content: its frames track badly (so they pile up as
+    keyframes), carry no consistent exposure, and score as bad held-out views.
+    """
+    ref = float(np.median(luma[s : e + 1]))
+    while s < e and luma[s] < ratio * ref:
+        s += 1
+    while e > s and luma[e] < ratio * ref:
+        e -= 1
+    return s, e
 
 
 def _rolling_relative(values: np.ndarray, window: int) -> np.ndarray:

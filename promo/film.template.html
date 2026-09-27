@@ -57,7 +57,7 @@ const EVENTS = [
   [T(8).from + b(1), 'whoosh'], [T(9).from + b(1), 'whooshIn'], [T(10).from + b(1), 'click'], [T(10).from + b(2.5), 'ding'],
   [T(13).from + b(1), 'notify'],
 ];
-const STAGES = ['video', 'decode', 'passes', 'keyframes', 'is it 3D?', 'SfM', 'depth', 'splats', 'map'];
+const STAGES = ['video', 'decode', 'passes', 'keyframes', 'is it 3D?', 'poses', 'depth', 'mesh', 'map'];
 const STAGE_AT = [T(2).from, T(3).from, T(4).from, T(5).from, T(6).from, T(7).from, T(8).from, T(9).from, T(10).from];
 
 // Real-output slots (screen pixels); build.py composites the named sources here.
@@ -268,7 +268,7 @@ const SCENES = {
       thumb(lerp(160, W * .5 - 60, easeOut(p)), 420, 110, 62, k + 2, { alpha: 1 - prog(p, .8, 1) });
       const q = prog(lt, b(2 + k), b(2 + k) + .7); if (q > 0) thumb(lerp(W * .5 + 60, W - 280, easeOut(q)), 420 + (k % 3 - 1) * 90, 110, 62, k + 2, { alpha: 1 - prog(q, .85, 1), border: SAFFRON }); }
     text(`${F('decode_fps', '—')} frames / s`, W * .5, 700, { size: 40, align: 'center', col: SAFFRON, weight: 800, p: prog(lt, 1.5, 2.2), id: 'fps' });
-    caption('4K video decoded on NVDEC, never touching the CPU.', t, T(3).from + 1);
+    caption('One NVDEC decode feeds the analysis and the keyframes.', t, T(3).from + 1);
   },
   4(t, lt) {   // passes: flow arrows, a cut; then the real run's timeline
     grid(); kicker('2 · Find the passes', t, T(4).from);
@@ -310,51 +310,53 @@ const SCENES = {
     caption('Measured before any reconstruction is attempted.', t, T(6).from + 1.5);
   },
   7(t, lt) {   // SfM: one straight flight line of cameras, the model assembling in front of it
-    grid(); kicker('5 · Structure from motion on the GPU', t, T(7).from);
+    grid(); kicker('5 · Camera poses from the flow itself', t, T(7).from);
     const cam = { yaw: .35 + lt * .06, pitch: .62, dist: 16, fov: 1150, cx: W * .56, cy: 600 };
     cloud(t, cam, prog(lt, .3, 6.5) * .7, { size: 2.6 });
     for (let k = 0; k < 9; k++) { const u = -5 + 1.25 * k, pos = [u * Math.cos(.575), 8, -u * Math.sin(.575)];   // a straight flight line above the model, parallel to the screen mid-shot (stays in y 180-360)
       frustum(cam, pos, [0, 1, 0], 1.4, k % 4 ? CYAN : SAFFRON, prog(lt, .15 * k, .15 * k + .4)); }
     claim('cloud', 'keep', 380, 160, 1460, 620);
-    text(`${F('registered', '—')} keyframes registered`, 120, 836, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 3, 4), id: 'reg' });
-    caption(`Camera poses and ${F('sfm_points', '—')} tie points.`, t, T(7).from + 1.2);
+    text(`${F('registered', '—')} keyframes registered · within ${F('pose_agreement', '—')} of feature SfM`, 120, 836, { size: 36, col: SAFFRON, weight: 800, p: prog(lt, 3, 4), id: 'reg' });
+    caption('No feature matching: the optical flow already knows where every pixel went.', t, T(7).from + 1.2);
   },
   8(t, lt) {   // depth
-    grid(); kicker('6 · A depth prior, checked against geometry', t, T(8).from);
+    grid(); kicker('6 · Depth from parallax, completed by a prior', t, T(8).from);
     const cam = { yaw: .35 + (T(8).from - T(7).from + lt) * .06, pitch: .42, dist: 17, fov: 900, cx: 470, cy: 540 };
     cloud(t, cam, .7, { size: 2.4, alpha: 1 - prog(lt, 1, 2) * .4 });
     claim('cloud8', 'keep', 120, 330, 720, 440);
-    bezel(SLOTS[2], t, SLOTS[2].t0, 'REAL RUN · KEYFRAME | MARIGOLD V2 DEPTH');
-    text(`held-out error vs SfM: ${F('depth_absrel', '—')}`, 120, 250, { size: 36, col: SAFFRON, weight: 800, p: prog(lt, 2, 3), id: 'absrel' });
-    text('(median, per-image calibration)', 120, 296, { size: 22, col: CYAN, alpha: prog(lt, 2.5, 3.2), id: 'absrel2' });
-    caption('Diffusion-transformer depth, calibrated per image to SfM.', t, T(8).from + 1);
+    bezel(SLOTS[2], t, SLOTS[2].t0, 'REAL RUN · KEYFRAME | TRIANGULATED | COMPLETED');
+    text('triangulated from the flow', 120, 250, { size: 36, col: SAFFRON, weight: 800, p: prog(lt, 2, 3), id: 'absrel' });
+    text('Depth Anything V2 fills the rest, never the sky', 120, 296, { size: 22, col: CYAN, alpha: prog(lt, 2.5, 3.2), id: 'absrel2' });
+    caption('Wide baselines for geometry; a calibrated prior for water and far field.', t, T(8).from + 1);
   },
   9(t, lt) {   // splats
-    grid(); kicker('7 · 3D Gaussian splatting', t, T(9).from);
+    grid(); kicker('7 · Fused into one textured model', t, T(9).from);
     const cam = { yaw: .2 + lt * .18, pitch: .34, dist: 20, fov: 950, cx: 560, cy: 540 };
     splats(t, cam, prog(lt, .2, 5), 1);
     claim('splats', 'keep', 120, 260, 900, 560);
-    text(`${F('splats', '—')} Gaussians`, 120, 212, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 1, 2), id: 'ng' });
-    bezel(SLOTS[3], t, SLOTS[3].t0, 'REAL RUN · TRAINED MODEL');
-    text(`held-out PSNR ${F('psnr', '—')} dB`, 1040, 700, { size: 32, col: WHITE, p: prog(lt, b(6), b(6) + .8), id: 'psnr' });
-    caption('Trained on the GPU from the keyframes and the depth prior.', t, T(9).from + 1);
+    text(`${F('triangles', '—')} triangles`, 120, 212, { size: 40, col: SAFFRON, weight: 800, p: prog(lt, 1, 2), id: 'ng' });
+    bezel(SLOTS[3], t, SLOTS[3].t0, 'REAL RUN · TEXTURED MESH');
+    text(`${F('completeness', '—')} of what the camera saw`, 1040, 700, { size: 32, col: WHITE, p: prog(lt, b(6), b(6) + .8), id: 'psnr' });
+    caption('GPU TSDF fusion, textured from the keyframes on the GPU.', t, T(9).from + 1);
   },
   10(t, lt) {   // georeference
-    grid(); kicker('8 · On the map', t, T(10).from);
+    grid(); kicker('8 · On the map, in every format', t, T(10).from);
     const tilt = lerp(.18, 0, easeOut(prog(lt, b(1), b(2.5))));
     ctx.save(); ctx.translate(W * .38, 560); ctx.rotate(tilt); ctx.strokeStyle = CYAN; ctx.lineWidth = 2; ctx.globalAlpha = .7;
     for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(i * 60, -200); ctx.lineTo(i * 60, 200); ctx.moveTo(-360, i * 33); ctx.lineTo(360, i * 33); ctx.stroke(); }
     ctx.restore(); palace(W * .38, 560, .8, { reflect: false, alpha: .95 });
     ctx.save(); ctx.fillStyle = SAFFRON; ctx.beginPath(); ctx.arc(W * .38, 380, 22, Math.PI, 0); ctx.lineTo(W * .38, 440); ctx.closePath(); ctx.fill(); ctx.restore();
     claim('map', 'keep', W * .38 - 380, 340, 760, 440);
-    text('levelled on the ground, fitted to GPS', 1180, 460, { size: 32, p: prog(lt, .2, 1), id: 'g1' });
-    text(`metric scale error < ${F('scale_err', '—')}`, 1180, 520, { size: 32, col: SAFFRON, p: prog(lt, b(2.5), b(2.5) + .6), id: 'g2' });
+    text('levelled on the ground, fitted to GPS', 1180, 400, { size: 32, p: prog(lt, .2, 1), id: 'g1' });
+    text(`${F('near_track', '—')} near the track`, 1180, 460, { size: 32, col: SAFFRON, p: prog(lt, b(1.5), b(1.5) + .6), id: 'g2' });
+    text('OBJ · PLY · LAS · GeoTIFF · GLB · FBX', 1180, 540, { size: 30, col: CYAN, p: prog(lt, b(2.5), b(2.5) + .6), id: 'g3' });
+    text(`${F('proc_time', '—')} for a ${F('video_len', '—')} video`, 1180, 600, { size: 30, col: WHITE, p: prog(lt, b(3), b(3) + .6), id: 'g4' });
   },
   11() { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); },            // break
   12(t, lt) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); claim('flythrough', 'keep', 0, 0, W, 980);
-    text('The reconstructed model', 120, 110, { size: 30, col: WHITE, alpha: prog(lt, .5, 1) * (1 - prog(lt, 4, 5)), id: 'fly' }); },
+    text('The reconstructed, textured model', 120, 110, { size: 30, col: WHITE, alpha: prog(lt, .5, 1) * (1 - prog(lt, 4, 5)), id: 'fly' }); },
   13(t, lt) {   // recap
-    grid(); text('Video → passes → keyframes → poses → depth → splats → map', W / 2, 420, { size: 44, align: 'center', weight: 700, p: prog(lt, 0, 1.2), id: 'recap' });
+    grid(); text('Video → keyframes → poses → depth → textured mesh → map', W / 2, 420, { size: 44, align: 'center', weight: 700, p: prog(lt, 0, 1.2), id: 'recap' });
     text('One pass. One GPU. One world in 3D.', W / 2, 520, { size: 60, align: 'center', weight: 800, col: SAFFRON, p: prog(lt, .6, 1.6), id: 'tag' });
     text('Smart India Hackathon 2026 · Problem Statement 26158 · NTRO', W / 2, 640, { size: 28, align: 'center', col: CYAN, alpha: prog(lt, 1, 1.6), id: 'sih' });
   },

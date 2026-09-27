@@ -512,12 +512,11 @@ def capabilities(repo: Path) -> dict[str, Any]:
             if "cuda" not in out:
                 raise RuntimeError("ffmpeg has no cuda hwaccel")
             return f"{Path(exe).parent.parent.name or 'ffmpeg'}: -hwaccel cuda"
-        out = subprocess.run(
-            [exe, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=10
-        ).stdout
-        if "h264_nvenc" not in out:
-            raise RuntimeError("ffmpeg has no h264_nvenc")
-        return "h264_nvenc, hevc_nvenc"
+        from drone3d.io.nvdec import h264_encoder
+
+        if h264_encoder() != "h264_nvenc":  # a real one-frame encode: listing the encoder is not having one
+            raise RuntimeError("no hardware encoder on this GPU (an A100 has none); cameras are encoded with libx264")
+        return "h264_nvenc (a one-frame encode succeeded)"
 
     def open3d() -> str:
         import open3d as o3d

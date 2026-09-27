@@ -129,6 +129,8 @@ def test_recorder_commands() -> None:
     )
     cam = recorder_command("ffmpeg", "/dev/video0", seg, 20)
     assert cam[cam.index("-f") + 1] == "v4l2" and "h264_nvenc" in cam
+    cpu = recorder_command("ffmpeg", "/dev/video0", seg, 20, encoder="libx264")
+    assert "libx264" in cpu and "h264_nvenc" not in cpu
     replay = recorder_command("ffmpeg", "flight.mp4", seg, 10, simulate=True)
     assert replay[replay.index("-re") + 1] == "-i" and "-rw_timeout" not in replay
     assert replay[-1].endswith("seg_%04d.mkv") and replay[replay.index("-segment_time") + 1] == "10"

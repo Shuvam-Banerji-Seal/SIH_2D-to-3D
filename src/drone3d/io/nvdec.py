@@ -467,6 +467,22 @@ def scaled_crop(
     return x0, y0, x0 + w, y0 + h
 
 
+@functools.lru_cache(maxsize=4)
+def h264_encoder() -> str:
+    """``h264_nvenc`` if this GPU really has a hardware encoder, else ``libx264``.
+
+    ffmpeg lists NVENC whenever it was built with it; an A100 has no encoder
+    engine and fails to open a session, so a one-frame encode decides.
+    """
+    try:
+        ok = subprocess.run([ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                             "color=c=black:s=256x256:d=0.04", "-frames:v", "1", "-c:v", "h264_nvenc", "-f", "null", "-"],
+                            capture_output=True, timeout=30, check=False).returncode == 0  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        ok = False
+    return "h264_nvenc" if ok else "libx264"
+
+
 @functools.lru_cache(maxsize=64)
 def keyframe_times(path: str) -> tuple[float, ...]:
     """Presentation times of the video's key frames, from the packet index (nothing is decoded)."""

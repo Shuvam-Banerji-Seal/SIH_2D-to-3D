@@ -216,7 +216,7 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
 
 def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, long_side: int,
                  gaps: tuple[int, ...], keyframe_stride: int, min_angle_deg: float, rel_tol: float,
-                 voxel_px: float, trunc_voxels: float = 12.0, tsdf_memory_gb: float = 8.0) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+                 voxel_px: float, trunc_voxels: float = 12.0, tsdf_memory_gb: float = 8.0, fusion=None) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Depth, fusion and mesh for one SfM model -> its result record."""
     import open3d as o3d
 
@@ -233,15 +233,28 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     voxel = voxel_px * med / cams[0].f
     t0 = time.perf_counter()
     rgb = frames.cpu().numpy()
-    vbg, voxel = tsdf_fuse([(depths[i], rgb[i], cams[i]) for i in range(n)], voxel=voxel,
-                           depth_max=float(np.percentile(valid, 99.5)), trunc_voxels=trunc_voxels,
-                           memory_gb=tsdf_memory_gb)  # fmt: skip
-    log.info("dense %s: TSDF voxel %.4g, %d active blocks of %d", name, voxel, int(vbg.hashmap().size()),
-             int(vbg.hashmap().capacity()))  # fmt: skip
-    mesh = vbg.extract_triangle_mesh().to_legacy()
-    pcd = vbg.extract_point_cloud().to_legacy()
+    fused_frames = [(depths[i], rgb[i], cams[i]) for i in range(n)]
+    tsdf_kw = {"voxel": voxel, "depth_max": float(np.percentile(valid, 99.5)), "trunc_voxels": trunc_voxels,
+               "memory_gb": tsdf_memory_gb}  # fmt: skip
+    if fusion is not None:  # in a child process: an Open3D CUDA fault cannot poison this one
+        f = fusion.fuse(fused_frames, **tsdf_kw)
+        voxel = f["voxel"]
+        mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(f["vertices"]), o3d.utility.Vector3iVector(f["triangles"]))
+        if f["vertex_colors"] is not None:
+            mesh.vertex_colors = o3d.utility.Vector3dVector(f["vertex_colors"].astype(np.float64))
+        pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(f["points"]))
+        if f["point_colors"] is not None:
+            pcd.colors = o3d.utility.Vector3dVector(f["point_colors"].astype(np.float64))
+        active, capacity = f["active"], f["capacity"]
+    else:
+        vbg, voxel = tsdf_fuse(fused_frames, **tsdf_kw)
+        active, capacity = int(vbg.hashmap().size()), int(vbg.hashmap().capacity())
+        mesh = vbg.extract_triangle_mesh().to_legacy()
+        pcd = vbg.extract_point_cloud().to_legacy()
+        del vbg
+    log.info("dense %s: TSDF voxel %.4g, %d active blocks of %d", name, voxel, active, capacity)
     timing["tsdf"] = time.perf_counter() - t0
-    del frames, vbg
+    del frames, fused_frames
     _release_gpu()
     if not len(mesh.triangles) and not len(pcd.points):
         log.info("dense %s: %d keyframes, the TSDF produced no surface", name, n)
@@ -281,13 +294,19 @@ def run_dense(
     voxel_px: float = 3.0,
     trunc_voxels: float = 12.0,
     tsdf_memory_gb: float = 8.0,
+    isolate_fusion: str = "auto",
 ) -> dict:
     import torch
 
     from drone3d.engine import models
+    from drone3d.fastsfm.fusion_worker import FusionWorker
 
     started = time.perf_counter()
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Open3D in a process of its own, booting while the first depth maps are computed (see fusion_worker)
+    # auto: in the warm engine, whose process outlives many videos (one video per process is safe in-process)
+    isolate = isolate_fusion == "always" or (isolate_fusion == "auto" and models.active() is not None)
+    fusion = FusionWorker() if isolate else None
     raft = models.raft("raft_large", batch=16, iters=12)
     mono = None
     if mono_model:
@@ -298,11 +317,14 @@ def run_dense(
             results.append(_dense_model(model_dir, images, out_dir, raft, mono, long_side=long_side, gaps=gaps,
                                         keyframe_stride=keyframe_stride, min_angle_deg=min_angle_deg, rel_tol=rel_tol,
                                         voxel_px=voxel_px, trunc_voxels=trunc_voxels,
-                                        tsdf_memory_gb=tsdf_memory_gb))  # fmt: skip
-        except RuntimeError as exc:  # a CUDA / Open3D failure on one model must not lose the others
+                                        tsdf_memory_gb=tsdf_memory_gb, fusion=fusion))  # fmt: skip
+        except RuntimeError as exc:  # a CUDA / Open3D failure on one model must not lose the others (FusionError too)
             log.warning("dense %s failed: %s", model_dir.name, str(exc)[:300])
             results.append({"model": str(model_dir), "status": "failed", "error": str(exc)[:300]})
             torch.cuda.empty_cache()
     del raft, mono
+    if fusion is not None:
+        fusion.close()
     torch.cuda.empty_cache()
-    return {"models": results, "seconds": round(time.perf_counter() - started, 2)}
+    return {"models": results, "seconds": round(time.perf_counter() - started, 2),
+            "fusion_restarts": fusion.restarts if fusion is not None else None}  # fmt: skip

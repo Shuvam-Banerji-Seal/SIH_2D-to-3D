@@ -49,7 +49,7 @@ export async function viewRun(main, name) {
   function head(r, live) {
     const s = r.summary;
     const via = r.job?.engine ? 'warm engine' : r.job?.pid ? 'subprocess' : 'command line';
-    $('#head').innerHTML = `<h1>${esc(r.name)}<small>${esc(prettyVideo(s.video) || '')}${s.resolution?.[0] ? ` · ${s.resolution[0]}×${s.resolution[1]}` : ''}${s.video_seconds ? ` · ${fmtS(s.video_seconds)}` : ''} · ${via}</small></h1>
+    $('#head').innerHTML = `<h1>${esc(r.name)}<small>${esc(prettyVideo((s.video || '').split('/').pop()) || '')}${s.resolution?.[0] ? ` · ${s.resolution[0]}×${s.resolution[1]}` : ''}${s.video_seconds ? ` · ${fmtS(s.video_seconds)}` : ''} · ${via}</small></h1>
       <div class="row" style="margin-left:auto">
         <span class="st ${esc(r.status)}">${esc(r.status)}</span>${live ? '<span class="pill" style="color:var(--red);border-color:#6b2a2a">live</span>' : ''}
         ${ACTIVE.includes(r.status) ? `<button class="btn small danger" id="stop">${icon.stop}${live ? 'Stop recording' : 'Stop'}</button>` : ''}

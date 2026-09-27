@@ -40,7 +40,7 @@ export function mountExplorer(el, { imageBase = null, height = null } = {}) {
   x.addEventListener('status', (e) => { $('.status', el).textContent = e.detail; });
   x.addEventListener('tick', () => {
     const s = x.stats();
-    $('#xpHud', el).textContent = `${s.fps} fps · ${fmtN(s.triangles)} tris · ${fmtN(s.points)} pts · ${fmtN(s.splats)} splats · ${s.pixelRatio.toFixed(2)} px`;
+    $('#xpHud', el).textContent = `${x.idle ? 'idle' : `${s.fps} fps`} · ${fmtN(s.triangles)} tris · ${fmtN(s.points)} pts · ${fmtN(s.splats)} splats · ${s.pixelRatio.toFixed(2)} px`;
   });
   x.addEventListener('models', () => drawModels());
   x.addEventListener('measure', () => {

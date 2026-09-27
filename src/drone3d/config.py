@@ -118,6 +118,9 @@ class DenseConfig:
     voxel_px: float = 3.0  # TSDF voxel in pixel footprints at the median depth
     trunc_voxels: float = 12.0  # TSDF truncation band in voxels (4 -> 12: completeness 0.47 -> 0.80)
     tsdf_memory_gb: float = 8.0  # GPU memory for the TSDF hash map; the voxel grows if the scene needs more
+    # auto | always | never: fuse in a child process (auto: inside the warm engine, where Open3D's CUDA state
+    # accumulates over many videos; a fault then kills the child, not the engine)
+    isolate_fusion: str = "auto"
     min_model_images: int = 3  # SfM models with fewer registered keyframes are skipped
 
 
@@ -263,6 +266,8 @@ class PipelineConfig:
             raise ConfigError("sfm.mapper must be incremental or global")
         if self.dense.backend not in {"flow", "none"}:
             raise ConfigError("dense.backend must be flow or none")
+        if self.dense.isolate_fusion not in {"auto", "always", "never"}:
+            raise ConfigError("dense.isolate_fusion must be auto, always or never")
         if not self.dense.gaps or min(self.dense.gaps) < 1:
             raise ConfigError("dense.gaps must be positive keyframe offsets")
         if self.depth.backend not in {"marigold", "none"}:

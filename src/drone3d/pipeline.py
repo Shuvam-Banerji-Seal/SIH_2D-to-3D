@@ -437,6 +437,7 @@ class Pipeline:
             tsdf_memory_gb=cfg.tsdf_memory_gb,
             isolate_fusion=cfg.isolate_fusion,
             refine=cfg.refine,
+            min_views=cfg.min_views,
         )
         _write_json(self._stage_dir("dense") / "result.json", payload)
         ok = [m for m in payload["models"] if m.get("status") == "ok"]

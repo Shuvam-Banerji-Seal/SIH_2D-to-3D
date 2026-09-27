@@ -33,3 +33,14 @@ def test_worker_fuses_a_plane_twice_and_survives_a_crash() -> None:
         fw._proc.join()
         c = fw.fuse(_plane_frames(), **kw)
         assert len(c["triangles"]) == len(a["triangles"]) and fw.restarts == 1
+
+
+def test_worker_extraction_weight_counts_views() -> None:
+    from drone3d.fastsfm.dense_stage import extraction_weight
+    from drone3d.fastsfm.fusion_worker import FusionWorker
+
+    kw = {"voxel": 0.05, "depth_max": 10.0, "trunc_voxels": 4.0, "memory_gb": 0.5}
+    with FusionWorker() as fw:
+        assert len(fw.fuse(_plane_frames(3), **kw)["triangles"]) == 0  # Open3D's default (> 3) wants four views
+        assert len(fw.fuse(_plane_frames(3), weight_threshold=extraction_weight(3, 3), **kw)["triangles"]) > 100
+        assert len(fw.fuse(_plane_frames(2), weight_threshold=extraction_weight(3, 2), **kw)["triangles"]) == 0

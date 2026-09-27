@@ -540,8 +540,7 @@ class Pipeline:
             models = models[:1]
         have_depth = (self.dataset / "depths").is_dir()
         dense = {m["model"]: m for m in (self._stage_result("dense") or {}).get("models", []) if m.get("status") == "ok"}
-        trained = []
-        for model in models:
+        def train(model: dict) -> dict:
             recon = Path(model["path"]).relative_to(self.dataset)
             if cfg.init == "dense" and model["path"] in dense:  # start from the TSDF cloud, not ~1000 SfM points
                 from drone3d.splat.spirula import dense_init_model
@@ -569,9 +568,15 @@ class Pipeline:
                 eval_interval=cfg.eval_interval,
                 flags=flags,
             )
-            trained.append(
-                {"model": model["path"], "passes": model.get("passes"), **result.to_dict()}
-            )
+            return {"model": model["path"], "passes": model.get("passes"), **result.to_dict()}
+
+        if cfg.parallel > 1 and len(models) > 1:  # one trainer leaves the GPU idle between its small kernels
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(min(cfg.parallel, len(models)), thread_name_prefix="splat") as pool:
+                trained = list(pool.map(train, models))  # model order kept
+        else:
+            trained = [train(m) for m in models]
         payload = {"models": trained, "depth_supervised": have_depth and cfg.depth_weight > 0}
         _write_json(self._stage_dir("splat") / "result.json", payload)
         summary = "; ".join(

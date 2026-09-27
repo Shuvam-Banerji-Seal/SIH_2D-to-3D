@@ -80,6 +80,8 @@ def test_runs_scene_and_frames(client: TestClient) -> None:
     assert frames["frames"][1]["depth"] == "/runs/demo/dense/model_0/depth/f_000008.jpg"
     thumb = client.get(frames["frames"][0]["image"] + "?w=160")
     assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg"
+    # the cache lives outside the run's images: fetching a thumbnail must not add a keyframe
+    assert client.get("/api/runs/demo/frames").json()["total"] == 2
     assert client.get("/api/runs/nope/scene").status_code == 404
 
 

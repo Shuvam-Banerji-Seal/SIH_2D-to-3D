@@ -329,6 +329,8 @@ def create_app(
             rel = rd.relative_to(outputs)
             depth = {p.stem: p for p in (rd / "dense").glob("model_*/depth/*.jpg")}
             for img in sorted((rd / "dataset" / "images").rglob("*.jpg")):
+                if any(part.startswith(".") for part in img.relative_to(rd).parts):
+                    continue  # caches and other hidden files are not keyframes
                 items.append({"image": f"/api/thumb/{rel}/{img.relative_to(rd)}",
                               "full": f"/runs/{rel}/{img.relative_to(rd)}", "pass": img.parent.name,
                               "depth": f"/runs/{rel}/{depth[img.stem].relative_to(rd)}" if img.stem in depth else None})  # fmt: skip
@@ -343,11 +345,14 @@ def create_app(
             or src.suffix.lower() != ".jpg"
         ):
             raise HTTPException(404, "no such image")
-        cache = src.parent / ".thumbs" / f"{src.stem}_{w}.jpg"
+        if any(part.startswith(".") for part in Path(path).parts):
+            raise HTTPException(404, "no such image")
+        # one hidden cache for every run, outside the runs' own folders (stages scan dataset/images)
+        cache = outputs / ".thumbs" / f"{Path(path).with_suffix('')}_{w}.jpg"
         if not cache.is_file() or cache.stat().st_mtime < src.stat().st_mtime:
             from PIL import Image
 
-            cache.parent.mkdir(exist_ok=True)
+            cache.parent.mkdir(parents=True, exist_ok=True)
             with Image.open(src) as im:
                 im.thumbnail((w, w))
                 im.convert("RGB").save(cache, "JPEG", quality=82)

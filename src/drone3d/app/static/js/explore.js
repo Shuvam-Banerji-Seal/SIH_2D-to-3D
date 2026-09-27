@@ -21,7 +21,7 @@ export function mountExplorer(el, { imageBase = null, height = null } = {}) {
         <div class="seg" style="width:100%">${[0.5, 1, 1.5, 2].map((s) => `<button data-rs="${s}" class="${s === 1 ? 'on' : ''}" style="flex:1">${s}×</button>`).join('')}</div>
         <div class="seg" style="width:100%;margin-top:6px">${Object.keys(BACKGROUNDS).map((b) => `<button data-bg="${b}" class="${b === 'dark' ? 'on' : ''}" style="flex:1">${b}</button>`).join('')}</div>
         <div class="row" style="margin-top:8px;font-size:12px"><span class="muted">point size</span><input type="range" min="0.5" max="6" step="0.5" value="1.5" id="xpPs" style="flex:1"></div>
-        <div class="row" style="margin-top:4px;font-size:12px"><span class="muted">keyframes</span><input type="range" min="0.5" max="8" step="0.25" value="1" id="xpIs" style="flex:1"></div></div>
+        <div class="row" style="margin-top:4px;font-size:12px"><span class="muted">keyframes</span><input type="range" min="0.5" max="8" step="0.25" value="2.5" id="xpIs" style="flex:1"></div></div>
       <div class="box"><h3>Models <span class="faint mono" id="xpCount"></span></h3><div class="modellist" id="xpModels"></div></div>
       <div class="box"><h3>Measure <button class="btn tiny ghost" id="xpClear">clear</button></h3>
         <button class="btn tiny" id="xpMeasure" style="width:100%;justify-content:center">${icon.ruler}Measure distance / height</button>

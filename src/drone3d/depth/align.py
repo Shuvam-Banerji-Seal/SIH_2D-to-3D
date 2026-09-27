@@ -25,6 +25,8 @@ import torch.nn.functional as F
 __all__ = [
     "AlignResult",
     "DepthObservations",
+    "MonotoneMap",
+    "cross_validate",
     "fit_log_affine",
     "sample_at",
     "sfm_depth_observations",
@@ -154,3 +156,100 @@ def write_depth_png(path: str | Path, depth: np.ndarray, valid: np.ndarray | Non
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     if not cv2.imwrite(str(path), out):
         raise OSError(f"could not write {path}")
+
+
+def _pav(y: np.ndarray, w: np.ndarray) -> np.ndarray:
+    """Weighted pool-adjacent-violators: the non-decreasing fit to ``y``."""
+    vals, wts, sizes = [], [], []
+    for yi, wi in zip(y, w, strict=True):
+        vals.append(float(yi))
+        wts.append(float(wi))
+        sizes.append(1)
+        while len(vals) > 1 and vals[-2] > vals[-1]:
+            v2, w2, n2 = vals.pop(), wts.pop(), sizes.pop()
+            v1, w1, n1 = vals.pop(), wts.pop(), sizes.pop()
+            vals.append((v1 * w1 + v2 * w2) / (w1 + w2))
+            wts.append(w1 + w2)
+            sizes.append(n1 + n2)
+    return np.repeat(vals, sizes)
+
+
+class MonotoneMap:
+    """Monotone map ``pred -> log depth`` from binned medians (isotonic), linear ends.
+
+    Affine-invariant depth is affine only over the depth range its training
+    data covered; at landscape scale the far field comes out compressed. A
+    monotone calibration keeps the prediction's ordering but lets the mapping
+    bend. Knots are medians of ``log z`` in quantile bins of ``pred`` (robust to
+    outliers), made non-decreasing by weighted PAV; outside the knots the map
+    continues with the robust affine slope.
+    """
+
+    def __init__(self, pred: np.ndarray, z: np.ndarray, *, bins: int = 24, slope: float = 1.0) -> None:
+        p, lz = np.asarray(pred, dtype=np.float64), np.log(np.asarray(z, dtype=np.float64))
+        edges = np.unique(np.quantile(p, np.linspace(0, 1, bins + 1)))
+        which = np.clip(np.searchsorted(edges, p, side="right") - 1, 0, len(edges) - 2)
+        xs, ys, ws = [], [], []
+        for k in range(len(edges) - 1):
+            m = which == k
+            if m.sum() >= 3:
+                xs.append(float(np.median(p[m])))
+                ys.append(float(np.median(lz[m])))
+                ws.append(float(m.sum()))
+        if len(xs) < 2:
+            raise ValueError("not enough spread in the prediction to calibrate")
+        self.x = np.asarray(xs)
+        self.y = _pav(np.asarray(ys), np.asarray(ws))
+        self.slope = max(slope, 1e-3)
+
+    def __call__(self, pred):  # type: ignore[no-untyped-def]
+        """Log depth for ``pred`` (numpy array or torch tensor)."""
+        try:
+            import torch
+
+            if isinstance(pred, torch.Tensor):
+                x = torch.as_tensor(self.x, dtype=pred.dtype, device=pred.device)
+                y = torch.as_tensor(self.y, dtype=pred.dtype, device=pred.device)
+                idx = torch.clamp(torch.searchsorted(x, pred.contiguous()), 1, len(self.x) - 1)
+                x0, x1, y0, y1 = x[idx - 1], x[idx], y[idx - 1], y[idx]
+                t = (pred - x0) / torch.clamp(x1 - x0, min=1e-9)
+                inner = y0 + t * (y1 - y0)
+                lo = y[0] + self.slope * (pred - x[0])
+                hi = y[-1] + self.slope * (pred - x[-1])
+                return torch.where(pred < x[0], lo, torch.where(pred > x[-1], hi, inner))
+        except ImportError:  # pragma: no cover
+            pass
+        p = np.asarray(pred, dtype=np.float64)
+        out = np.interp(p, self.x, self.y)
+        out = np.where(p < self.x[0], self.y[0] + self.slope * (p - self.x[0]), out)
+        return np.where(p > self.x[-1], self.y[-1] + self.slope * (p - self.x[-1]), out)
+
+
+def _scores(d: np.ndarray, z: np.ndarray) -> dict[str, float]:
+    rel = np.abs(d - z) / z
+    return {"abs_rel_median": float(np.median(rel)), "delta1": float(np.mean(np.maximum(d / z, z / d) < 1.25))}
+
+
+def cross_validate(pred: np.ndarray, z: np.ndarray, folds: int = 5, seed: int = 0) -> dict[str, dict[str, float]] | None:
+    """Held-out-point comparison of affine vs monotone calibration."""
+    ok = np.isfinite(pred) & np.isfinite(z) & (z > 0)
+    p, zz = pred[ok], z[ok]
+    if len(p) < 10 * folds:
+        return None
+    order = np.random.default_rng(seed).permutation(len(p))
+    parts = np.array_split(order, folds)
+    out: dict[str, list] = {"affine": [], "monotone": []}
+    for k in range(folds):
+        test = parts[k]
+        train = np.concatenate([parts[j] for j in range(folds) if j != k])
+        fit = fit_log_affine(p[train], zz[train])
+        if fit is None or fit.a <= 0:
+            return None
+        out["affine"].append(np.exp(fit.a * p[test] + fit.b))
+        try:
+            mono = MonotoneMap(p[train], zz[train], slope=fit.a)
+        except ValueError:
+            return None
+        out["monotone"].append(np.exp(mono(p[test])))
+    z_test = np.concatenate([zz[parts[k]] for k in range(folds)])
+    return {name: _scores(np.concatenate(v), z_test) for name, v in out.items()}

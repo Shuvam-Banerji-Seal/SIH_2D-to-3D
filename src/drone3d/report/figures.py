@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-__all__ = ["keyframe_timeline"]
+__all__ = ["depth_panel", "keyframe_timeline"]
 
 _VERDICT_COLOURS = {
     "3d": "#2e7d32",
@@ -86,6 +86,58 @@ def keyframe_timeline(selection: dict, out_path: str | Path, fps: float | None =
     fig.tight_layout()
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    return out
+
+
+def depth_panel(dataset: str | Path, depth_result: dict, out_path: str | Path, names: list[str]) -> Path:
+    """RGB | aligned Marigold depth | predicted-vs-SfM scatter, one row per image."""
+    import cv2
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from drone3d.depth.align import sample_at, sfm_depth_observations
+
+    dataset = Path(dataset)
+    per_image = depth_result["per_image"]
+    obs_cache: dict[str, dict] = {}
+    fig, axes = plt.subplots(len(names), 3, figsize=(10.5, 2.35 * len(names)), gridspec_kw={"width_ratios": [1.6, 1.6, 1]})
+    axes = np.atleast_2d(axes)
+    for row, name in zip(axes, names, strict=True):
+        rec = per_image[name]
+        model = rec["model"]
+        if model not in obs_cache:
+            obs_cache[model] = sfm_depth_observations(model)
+        obs = obs_cache[model][name]
+        rgb = cv2.cvtColor(cv2.imread(str(dataset / "images" / name)), cv2.COLOR_BGR2RGB)
+        pred = np.load(dataset / "depth_raw" / (str(Path(name).with_suffix("")) + ".npz"))["pred"].astype(np.float32)
+        depth = np.exp(rec["a"] * pred + rec["b"])
+        import torch
+
+        p_at = sample_at(torch.from_numpy(pred)[None], obs.uv, obs.width, obs.height)
+        d_at = np.exp(rec["a"] * p_at + rec["b"])
+        row[0].imshow(rgb)
+        row[0].set_title(Path(name).parent.name + "/" + Path(name).name, fontsize=8)
+        lim = np.quantile(depth, [0.02, 0.98])
+        row[1].imshow(np.log(np.clip(depth, *lim)), cmap="Spectral")
+        row[1].set_title(f"Marigold v2 (aligned), AbsRel {rec['abs_rel_median']:.3f}", fontsize=8)
+        z = obs.z
+        row[2].scatter(z, d_at, s=1, alpha=0.25, color="#1565c0", rasterized=True)
+        hi = float(np.quantile(z, 0.99)) * 1.1
+        row[2].plot([0, hi], [0, hi], color="#c62828", lw=0.8)
+        row[2].set_xlim(0, hi)
+        row[2].set_ylim(0, hi)
+        row[2].set_xlabel("SfM depth", fontsize=7)
+        row[2].set_ylabel("prior depth", fontsize=7)
+        row[2].tick_params(labelsize=6)
+        row[2].set_title(f"{len(z)} tie points, $\\delta_1$ {rec['delta1']:.2f}", fontsize=8)
+        for ax in row[:2]:
+            ax.axis("off")
+    fig.tight_layout()
+    out = Path(out_path)
     fig.savefig(out, dpi=150)
     plt.close(fig)
     return out

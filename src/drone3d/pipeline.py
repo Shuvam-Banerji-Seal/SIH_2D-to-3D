@@ -170,7 +170,12 @@ class Pipeline:
     def _stage_keyframes(self) -> StageReport:
         import torch
 
-        from drone3d.io.nvdec import analysis_size, extract_frames, stream_analysis_chunks
+        from drone3d.io.nvdec import (
+            analysis_size,
+            detect_letterbox,
+            extract_frames,
+            stream_analysis_chunks,
+        )
         from drone3d.keyframes.flow import ConsecutiveFlow, RaftFlow
         from drone3d.keyframes.select import SelectorConfig, select_keyframes
 
@@ -179,9 +184,13 @@ class Pipeline:
         stage_dir = self._stage_dir("keyframes")
         stride = max(1, round(info.fps / cfg.analysis_fps))
         size = analysis_size(info.width, info.height, cfg.analysis_long_side)
+        # Letterbox bars are static and black: left in, they count as perfectly
+        # tracked content (inflating overlap), get depth predicted for them and
+        # inflate held-out PSNR with trivially correct pixels.
+        crop = detect_letterbox(info, hwaccel=cfg.hwaccel) if cfg.crop_letterbox else None
         t0 = time.perf_counter()
         flow_model = RaftFlow(cfg.flow_model, batch=cfg.flow_batch)
-        chunks = stream_analysis_chunks(info, size, stride=stride, hwaccel=cfg.hwaccel)
+        chunks = stream_analysis_chunks(info, size, stride=stride, hwaccel=cfg.hwaccel, crop=crop)
         capacity = -(-info.num_frames // stride)  # ceil: analysis frames expected
         flow, indices, thumbs = ConsecutiveFlow.compute(chunks, flow_model, capacity=capacity)
         t1 = time.perf_counter()
@@ -231,6 +240,7 @@ class Pipeline:
             long_side=cfg.output_long_side,
             quality=cfg.jpeg_quality,
             hwaccel=cfg.hwaccel,
+            crop=crop,
         )
         t3 = time.perf_counter()
 
@@ -249,6 +259,7 @@ class Pipeline:
             log.warning("keyframe figure failed: %s", exc)
         passes = [p.__dict__ for p in selection.passes]
         payload = {
+            "crop": list(crop) if crop else None,
             "analysis": analysis,
             "timing_s": {
                 "decode_and_flow": round(t1 - t0, 2),
@@ -355,6 +366,7 @@ class Pipeline:
             quantization=cfg.quantization,
             far_factor=cfg.far_factor,
             out_long_side=cfg.out_long_side,
+            calibration=cfg.calibration,
         )
         payload = result.to_dict()
         _write_json(self._stage_dir("depth") / "result.json", payload)

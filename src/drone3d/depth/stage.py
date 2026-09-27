@@ -73,6 +73,7 @@ def run_depth(
     quantization: str = "4bit",
     far_factor: float = 3.0,
     out_long_side: int | None = 1920,
+    calibration: str = "monotone",
     device: str = "cuda",
 ) -> DepthStageResult:
     """Predict, align and write depth for every image registered in ``model_dirs``.
@@ -82,6 +83,8 @@ def run_depth(
             percentile SfM depth are treated as sky / out of range (written 0).
         out_long_side: long side of the written depth maps (spirula resizes
             bilinearly to the training size anyway).
+        calibration: ``monotone`` (isotonic, default) or ``affine`` mapping
+            from the prediction to log depth.
     """
     configure_bitsandbytes()
     import cv2
@@ -89,6 +92,8 @@ def run_depth(
     import torch.nn.functional as F
 
     from drone3d.depth.align import (
+        MonotoneMap,
+        cross_validate,
         fit_log_affine,
         sample_at,
         sfm_depth_observations,
@@ -143,6 +148,17 @@ def run_depth(
                 result.per_image[obs.name] = record
                 continue
             record.update(fit.to_dict())
+            cv = cross_validate(p_at, obs.z)
+            if cv is not None:
+                record["cv"] = cv
+            # Written depth uses the monotone calibration (better on held-out
+            # tie points at landscape scale); the affine fit is kept for its
+            # slope and as the fallback when the prediction has too little spread.
+            try:
+                calib = MonotoneMap(p_at, obs.z, slope=fit.a) if calibration == "monotone" else None
+            except ValueError:
+                calib = None
+            record["calibration"] = "monotone" if calib is not None else "affine"
             if out_long_side and out_long_side < max(obs.width, obs.height):
                 ow, oh = processing_size(obs.width, obs.height, out_long_side)
             else:
@@ -150,7 +166,8 @@ def run_depth(
             up = F.interpolate(pred[None], size=(oh, ow), mode="bilinear", align_corners=False)[
                 0, 0
             ]
-            depth = torch.exp(fit.a * up + fit.b).cpu().numpy()
+            log_depth = calib(up) if calib is not None else fit.a * up + fit.b
+            depth = torch.exp(log_depth).cpu().numpy()
             limit = far_factor * float(np.quantile(obs.z, 0.99))
             valid = depth < limit
             record["valid_fraction"] = round(float(valid.mean()), 4)

@@ -196,7 +196,9 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
     n, h, w, _ = frames.shape
     timing["load"] = time.perf_counter() - t0
     t0 = time.perf_counter()
-    pairs = [(i, i + d) for d in step_gaps for i in range(n - d)]
+    # neighbours within one pass: a merged model holds several shots, and flow between them is meaningless
+    shot = [im.name.split("/")[0] for im in ims]
+    pairs = [(i, i + d) for d in step_gaps for i in range(n - d) if shot[i] == shot[i + d]]
     cand: list[list[tuple[torch.Tensor, torch.Tensor]]] = [[] for _ in range(n)]
     for s in range(0, len(pairs), 32):
         chunk = pairs[s : s + 32]

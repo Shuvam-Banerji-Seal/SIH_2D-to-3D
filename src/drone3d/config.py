@@ -97,6 +97,10 @@ class SfMConfig:
     flow_stride: int = 16  # seeding grid (px at the tracking resolution)
     flow_max_gap: int = 4  # keyframe pairs matched per track
     mapper: str = "global"  # global (GLOMAP; registered every pass of our footage) | incremental
+    # Put the passes' models into one frame where they see the same things (RoMa v2 matches between passes,
+    # a similarity per pair of models): Colosseum's 11 shots became 3 models, the largest from 7 shots.
+    merge_passes: bool = True
+    merge_pairs: int = 4  # keyframe pairs matched per pair of models
 
 
 @dataclass

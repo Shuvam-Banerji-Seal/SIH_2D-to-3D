@@ -28,7 +28,7 @@ __all__ = ["View", "bake_soup_texture"]
 
 @dataclass
 class View:
-    """A keyframe: pinhole intrinsics at its stored size (COLMAP convention), cam_from_world pose, RGB."""
+    """A keyframe: intrinsics at its stored size (COLMAP convention), cam_from_world pose, RGB."""
 
     fx: float
     cx: float
@@ -36,6 +36,7 @@ class View:
     rotation: np.ndarray
     translation: np.ndarray
     image: torch.Tensor  # uint8 [H, W, 3] on the device
+    k1: float = 0.0  # SIMPLE_RADIAL / RADIAL: at Jal Mahal's k1 = 0.12, 50 px at the image corners
 
 
 def _project(pts: torch.Tensor, v: View) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -43,9 +44,9 @@ def _project(pts: torch.Tensor, v: View) -> tuple[torch.Tensor, torch.Tensor, to
     t = torch.as_tensor(v.translation, dtype=pts.dtype, device=pts.device)
     pc = pts @ r.T + t
     z = pc[..., 2]
-    u = v.fx * pc[..., 0] / z + v.cx - 0.5
-    w = v.fx * pc[..., 1] / z + v.cy - 0.5
-    return u, w, z
+    x, y = pc[..., 0] / z, pc[..., 1] / z
+    d = 1 + v.k1 * (x * x + y * y)
+    return v.fx * d * x + v.cx - 0.5, v.fx * d * y + v.cy - 0.5, z
 
 
 def _view_gains(views: list[View], cen: torch.Tensor, scores: torch.Tensor, *, sigma_n: float = 10.0,

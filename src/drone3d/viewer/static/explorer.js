@@ -24,6 +24,7 @@ export class Explorer extends EventTarget {
     this.renderScale = 1;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.localClippingEnabled = true; // the focus layer clips meshes and points to the subject's box
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.classList.add('x3d-canvas');
     this.scene = new THREE.Scene();
@@ -45,7 +46,7 @@ export class Explorer extends EventTarget {
     this.marks = new THREE.Group();
     this.scene.add(this.root, this.marks);
     this.models = [];
-    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false };
+    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false, focus: true };
     this.pointSize = 1.5;
     this.imageScale = 2.5; // keyframe photo / depth planes: big enough to read at the model's framing
     this.nav = 'orbit';
@@ -233,21 +234,36 @@ export class Explorer extends EventTarget {
     this.dispatchEvent(new CustomEvent('layers'));
   }
 
+  // Four vertical planes a camera distance around what the drone circled: the far field (most of a merged
+  // model's triangles, and its least accurate) is hidden, not deleted -- the files keep all of it.
+  _focusPlanes(entry) {
+    const f = entry.spec.focus;
+    if (!f) return null;
+    if (!entry.focusPlanes) {
+      const [x, y] = f.center, r = f.radius;
+      entry.focusPlanes = [new THREE.Plane(new THREE.Vector3(1, 0, 0), -(x - r)), new THREE.Plane(new THREE.Vector3(-1, 0, 0), x + r),
+        new THREE.Plane(new THREE.Vector3(0, 1, 0), -(y - r)), new THREE.Plane(new THREE.Vector3(0, -1, 0), y + r)];
+    }
+    return entry.focusPlanes;
+  }
+
   _apply(entry) { this.wake();
     const L = this.layers;
+    const clip = L.focus ? this._focusPlanes(entry) : null;
     if (entry.meshObj) {
       entry.meshObj.visible = L.mesh;
       entry.meshObj.traverse((o) => {
         if (!o.isMesh) return;
         const map = L.texture ? o.userData.map : null;
         const vc = !map && L.texture !== false && o.userData.vc;
-        const params = { map, vertexColors: !map && o.userData.vc && L.texture, color: map || vc ? 0xffffff : CLAY, side: THREE.DoubleSide, wireframe: L.wireframe };
+        const params = { map, vertexColors: !map && o.userData.vc && L.texture, color: map || vc ? 0xffffff : CLAY, side: THREE.DoubleSide, wireframe: L.wireframe,
+          clippingPlanes: clip };
         const want = L.shaded ? 'std' : 'basic';
         if (o.userData.kind !== want) { o.material?.dispose?.(); o.material = want === 'std' ? new THREE.MeshStandardMaterial({ ...params, roughness: 0.9, metalness: 0 }) : new THREE.MeshBasicMaterial(params); o.userData.kind = want; }
         else { o.material.setValues(params); o.material.needsUpdate = true; } // setValues: colours stay THREE.Color
       });
     }
-    if (entry.pointsObj) { entry.pointsObj.visible = L.points; entry.pointsObj.material.size = this.pointSize; }
+    if (entry.pointsObj) { entry.pointsObj.visible = L.points; entry.pointsObj.material.size = this.pointSize; entry.pointsObj.material.clippingPlanes = clip; }
     if (entry.splatObj) entry.splatObj.visible = L.splats;
     if (entry.camObj) entry.camObj.visible = L.cameras;
     if (entry.photoObj) entry.photoObj.visible = L.photos;
@@ -258,7 +274,7 @@ export class Explorer extends EventTarget {
     const v = this.models.map((m) => m.spec);
     return { mesh: v.some((m) => m.mesh), texture: v.some((m) => m.mesh), points: v.some((m) => m.points), splats: v.some((m) => m.splat),
       cameras: v.some((m) => (m.cameras || []).length > 1), photos: v.some((m) => m.images && m.camera_rotations && (m.frames?.photo || m.thumb)),
-      depth: v.some((m) => m.images && m.camera_rotations && (m.frames?.depth || m.base)) }[name] ?? true;
+      depth: v.some((m) => m.images && m.camera_rotations && (m.frames?.depth || m.base)), focus: v.some((m) => m.focus) }[name] ?? true;
   }
 
   setPointSize(s) { this.wake(); this.pointSize = s; this.models.forEach((m) => this._apply(m)); }

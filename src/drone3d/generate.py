@@ -40,21 +40,18 @@ def available() -> bool:
 def subject_keyframe(cams: np.ndarray, axes: np.ndarray, *, cone_deg: float = 12.0) -> int:
     """Index of the keyframe that shows the subject whole.
 
-    The subject is the point closest, in least squares, to every optical axis (what an orbit circles);
-    of the keyframes looking at it within ``cone_deg``, the farthest from it frames it whole -- on
-    Colosseum's merged model, pass 9's view of the entire amphitheatre, where the nearest showed one arch.
-    Axes that hardly converge (a survey, a fly-by) give the middle keyframe.
+    The subject is what the optical axes converge on (:func:`drone3d.export.stage._subject`); of the
+    keyframes looking at it within ``cone_deg``, the farthest from it frames it whole -- on Colosseum's
+    merged model, a view of the entire amphitheatre, where the nearest showed one arch. Axes that hardly
+    converge (a survey, a fly-by) give the middle keyframe.
     """
+    from drone3d.export.stage import _subject
+
     mid = len(cams) // 2
-    a, b = np.zeros((3, 3)), np.zeros(3)
-    for c, d in zip(cams, axes):
-        proj = np.eye(3) - np.outer(d, d)
-        a += proj
-        b += proj @ c
-    w = np.linalg.eigvalsh(a)
-    if len(cams) < 3 or w[0] <= 0.02 * w[-1]:
+    sub = _subject(cams, axes)
+    if sub is None:
         return mid
-    rel = np.linalg.solve(a, b) - cams
+    rel = sub[0] - cams
     dist = np.linalg.norm(rel, axis=1)
     looking = np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12) > np.cos(np.radians(cone_deg))
     if not looking.any():

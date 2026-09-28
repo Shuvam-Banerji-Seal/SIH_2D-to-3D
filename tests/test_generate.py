@@ -125,3 +125,16 @@ def test_generate_endpoint_refuses_unknown_runs_and_missing_trellis(tmp_path: Pa
     monkeypatch.setattr(generate, "available", lambda: False)
     r = client.post("/api/runs/demo/generate")
     assert r.status_code == 409 and "TRELLIS.2" in r.json()["detail"]
+
+
+def test_the_focus_box_is_centred_on_what_the_orbit_circles() -> None:
+    from drone3d.export.stage import _subject
+
+    centre = np.array([5.0, -2.0, 0.0])
+    cams = centre + _orbit(12, 10.0, 4.0)
+    axes = np.array([_look_at(c, centre) for c in cams])
+    point, radius = _subject(cams, axes)
+    assert np.allclose(point, centre, atol=1e-6)
+    assert abs(radius - np.hypot(10.0, 4.0)) < 1e-6
+    survey = np.stack([np.linspace(-50, 50, 9), np.zeros(9), np.full(9, 40.0)], 1)
+    assert _subject(survey, np.tile([0.0, 0.0, -1.0], (9, 1))) is None

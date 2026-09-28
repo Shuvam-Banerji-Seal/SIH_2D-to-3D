@@ -76,3 +76,21 @@ def test_extraction_weight_asks_for_min_views() -> None:
     assert extraction_weight("auto", 5) == 1.5 and extraction_weight("auto", 12) == 1.5  # two views
     assert extraction_weight("auto", 13) == 2.5 and extraction_weight("auto", 200) == 2.5  # three
     assert extraction_weight("4", 5) == 3.5 and extraction_weight(1, 40) == 0.5
+
+
+def test_tie_depths_rasterises_tie_points_at_their_camera_depth() -> None:
+    from types import SimpleNamespace as NS
+
+    from drone3d.fastsfm.dense_stage import tie_depths
+
+    pose = NS(rotation=NS(matrix=lambda: np.eye(3)), translation=np.array([0.0, 0.0, 2.0]))
+    pts = {1: NS(xyz=np.array([0.0, 0.0, 3.0])), 2: NS(xyz=np.array([1.0, 0.0, 8.0])), 3: NS(xyz=np.array([0.0, 0.0, -5.0]))}
+    obs = [NS(xy=np.array([20.5, 10.5]), point3D_id=1, has_point3D=lambda: True),
+           NS(xy=np.array([61.0, 30.9]), point3D_id=2, has_point3D=lambda: True),
+           NS(xy=np.array([5.0, 5.0]), point3D_id=3, has_point3D=lambda: True),   # behind the camera
+           NS(xy=np.array([7.0, 7.0]), point3D_id=-1, has_point3D=lambda: False),  # not triangulated
+           NS(xy=np.array([900.0, 5.0]), point3D_id=1, has_point3D=lambda: True)]  # outside the image
+    im = NS(points2D=obs, cam_from_world=lambda: pose)
+    (d,) = tie_depths(NS(points3D=pts), [im], 0.5, (40, 20))
+    assert d.shape == (20, 40) and (d > 0).sum() == 2
+    assert d[5, 10] == 5.0 and d[15, 30] == 10.0  # x, y halved; depth = z + t_z

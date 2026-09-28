@@ -85,7 +85,26 @@ def _model_frames(model_dir: Path, images: Path, long_side: int, stride: int = 1
     for im in ims:
         c = Camera.from_colmap(im, rec.cameras[im.camera_id])
         cams.append(Camera(c.f * s, c.cx * s, c.cy * s, c.k1, c.rotation, c.translation))
-    return ims, cams, frames, stride
+    ties = tie_depths(rec, ims, s, (frames.shape[2], frames.shape[1]))
+    return ims, cams, frames, stride, ties
+
+
+def tie_depths(rec, ims, scale: float, size: tuple[int, int]) -> list[np.ndarray]:  # type: ignore[no-untyped-def]
+    """Each image's SfM tie points as a sparse depth map (0 = none) at the depth-map size ``(w, h)``."""
+    w, h = size
+    out = []
+    for im in ims:
+        d = np.zeros((h, w), np.float32)
+        obs = [(p.xy, rec.points3D[p.point3D_id].xyz) for p in im.points2D if p.has_point3D()]
+        if obs:
+            pose = im.cam_from_world()
+            xy = np.array([o[0] for o in obs], np.float64) * scale  # COLMAP: pixel centres at +0.5
+            z = (np.array([o[1] for o in obs], np.float64) @ np.asarray(pose.rotation.matrix()).T + np.asarray(pose.translation))[:, 2]
+            u, v = np.floor(xy[:, 0]).astype(np.int64), np.floor(xy[:, 1]).astype(np.int64)
+            ok = (z > 0) & (u >= 0) & (u < w) & (v >= 0) & (v < h)
+            d[v[ok], u[ok]] = z[ok]
+        out.append(d)
+    return out
 
 
 def view_coverage(vertices: np.ndarray, triangles: np.ndarray, cams: list[Camera], size: tuple[int, int],
@@ -152,6 +171,10 @@ def mesh_depth_error(vertices: np.ndarray, triangles: np.ndarray, cams: list[Cam
     return float(np.median(np.concatenate(errs))) if errs else float("nan")
 
 
+TIE_FALLBACK_PX = 400  # a view with fewer flow-triangulated pixels uses its SfM tie points
+TIE_MIN_POINTS = 60  # ... if it has at least this many
+
+
 def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int, gaps: tuple[int, ...],
                    keyframe_stride: int, min_angle_deg: float, rel_tol: float, refine: str = "none") -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Per-reference depth maps of one model: flow triangulation, then the monocular fill.
@@ -168,7 +191,7 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
     t0 = time.perf_counter()
     # Depth references: every ``keyframe_stride``-th keyframe; gaps are in original keyframes.
     # Each surface is in ~4 keyframes' views, so the TSDF loses little and every step halves.
-    ims, cams, frames, used_stride = _model_frames(model_dir, images, long_side, keyframe_stride)
+    ims, cams, frames, used_stride, ties = _model_frames(model_dir, images, long_side, keyframe_stride)
     step_gaps = sorted({max(1, round(g / used_stride)) for g in gaps})
     n, h, w, _ = frames.shape
     timing["load"] = time.perf_counter() - t0
@@ -195,7 +218,12 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
     torch.cuda.synchronize()
     timing["triangulate"] = time.perf_counter() - t0
     tri_cov = float(np.mean([(d > 0).mean() for d in depths]))
-    tri_depths = [d.copy() for d in depths]  # triangulated only, before the monocular fill
+    # A view flow could not triangulate (a short shot: its neighbours are too close for min_angle_deg) takes
+    # its SfM tie points instead -- sparse, but enough to calibrate the monocular fill to the model's scale.
+    tie_views = [i for i in range(n) if (depths[i] > 0).sum() < TIE_FALLBACK_PX and (ties[i] > 0).sum() >= TIE_MIN_POINTS]
+    for i in tie_views:
+        depths[i] = np.where(depths[i] > 0, depths[i], ties[i]).astype(np.float32)
+    tri_depths = [d.copy() for d in depths]  # triangulated (flow, or SfM tie points) only, before the monocular fill
     fill_info, sky = None, None
     if mono is not None:
         t0 = time.perf_counter()
@@ -203,7 +231,7 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
         sky = disp <= 0.005 * np.maximum(disp.reshape(len(disp), -1).max(1), 1e-6)[:, None, None]
         infos = []
         for i in range(n):
-            depths[i], inf = calibrate_fill(disp[i], depths[i])
+            depths[i], inf = calibrate_fill(disp[i], depths[i], min_samples=TIE_MIN_POINTS if i in tie_views else 400)
             infos.append(inf)
         filled = [x for x in infos if x["status"] == "filled"]
         fill_info = {"model": mono.name, "filled_images": len(filled),
@@ -216,7 +244,7 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
         depths = refine_depths(depths, frames.cpu().numpy(), tri_depths, method=refine)
         timing["refine"] = time.perf_counter() - t0
     return {"ims": ims, "cams": cams, "frames": frames, "depths": depths, "tri_depths": tri_depths, "sky": sky,
-            "used_stride": used_stride,
+            "used_stride": used_stride, "tie_views": len(tie_views),
             "tri_cov": tri_cov, "fill_info": fill_info, "timing": timing}  # fmt: skip
 
 
@@ -285,7 +313,7 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     _write_depth_previews(r["ims"], depths, mdir / "depth")
     rec = {
         "model": str(model_dir), "status": "ok", "keyframes": n, "keyframe_stride": used_stride, "size": [w, h], "gaps": list(gaps),
-        "coverage_triangulated": round(tri_cov, 4),
+        "coverage_triangulated": round(tri_cov, 4), "tie_point_views": r["tie_views"],
         "coverage": round(float(np.mean([(d > 0).mean() for d in depths])), 4),
         "view_completeness": round(completeness, 4),
         "voxel": round(voxel, 6), "weight_threshold": wt, "mesh": str(mdir / "mesh.ply"), "points": str(mdir / "points.ply"),

@@ -106,8 +106,12 @@ class _Entry:
 class ModelCache:
     """Loaded networks by key, their wrappers (with CUDA graphs) and bookkeeping."""
 
-    def __init__(self, device: str = "cuda", reserve_gb: float = 2.0) -> None:
+    def __init__(self, device: str = "cuda", reserve_gb: float = 2.0, *, concurrent: bool = False) -> None:
         self.device, self.reserve_gb = device, reserve_gb
+        # With several engine slots, RAFT runs eagerly: capturing a CUDA graph while another slot launches
+        # kernels fails ("unjoined work", "illegal state") and a failed capture left state behind that a later
+        # kernel tripped over (a device-side assert on a two-slot engine). Graphs gain 1-27 % on one slot.
+        self.cuda_graphs = not concurrent
         self._lock = threading.RLock()
         self._entries = {k: _Entry() for k in SPECS}
         self._wrappers: dict[tuple, Any] = {}
@@ -251,7 +255,7 @@ class ModelCache:
                 k not in self._wrappers
             ):  # one per batch size and engine slot: its CUDA graphs and buffers are its own
                 self._wrappers[k] = RaftFlow(
-                    model, batch=batch, iters=iters, device=self.device, net=net
+                    model, batch=batch, iters=iters, device=self.device, net=net, cuda_graph=self.cuda_graphs
                 )
             return self._wrappers[k]
 

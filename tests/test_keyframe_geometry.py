@@ -125,3 +125,26 @@ def test_pass_ends_that_fade_out_are_trimmed() -> None:
     s, e = _trim_fades(luma, 0, len(luma) - 1, 0.8)
     assert luma[s] >= 0.32 and luma[e] >= 0.32
     assert (s, e) == (4, 47)  # 0.33 and 0.35 clear the 0.8 x 0.4 = 0.32 threshold
+
+
+def test_null_vector_survives_a_solver_failure(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import torch
+
+    from drone3d.keyframes import geometry
+
+    rows = torch.randn(3, 40, 9, dtype=torch.float64)
+    w = torch.ones(3, 40, dtype=torch.float64)
+    good = geometry._smallest_eigvec(rows, w)
+    real = torch.linalg.eigh
+
+    def failing(m):  # type: ignore[no-untyped-def]
+        raise torch.linalg.LinAlgError("linalg.eigh: (Batch element 1): The algorithm failed to converge")
+
+    monkeypatch.setattr(torch.linalg, "eigh", failing)
+    rows_nan = rows.clone()
+    rows_nan[2, 0, 0] = float("nan")
+    fallback = geometry._smallest_eigvec(rows_nan, w)
+    monkeypatch.setattr(torch.linalg, "eigh", real)
+    for k in (0, 1):  # the same null vector, up to sign
+        assert torch.allclose(fallback[k].abs(), good[k].abs(), atol=1e-8)
+    assert torch.isfinite(fallback[2]).all()  # the non-finite member does not poison the batch

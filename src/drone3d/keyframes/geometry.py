@@ -59,9 +59,23 @@ def _apply(t: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
 
 
 def _smallest_eigvec(rows: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
-    """Weighted least-squares null vector of ``rows [B, R, 9]`` (weights ``[B, R]``)."""
-    m = (rows * w[..., None]).transpose(-1, -2) @ rows
-    _, vecs = torch.linalg.eigh(m.double())
+    """Weighted least-squares null vector of ``rows [B, R, 9]`` (weights ``[B, R]``).
+
+    cuSOLVER's batched Jacobi solver can stop short on an ill-conditioned member, and
+    did on a two-slot engine (never on one slot); the batch is then solved by LAPACK on
+    the CPU -- 9 x 9 matrices, microseconds -- instead of failing the keyframe stage.
+    A non-finite member gets an identity, and its pair a meaningless model the robust
+    weights reject.
+    """
+    m = ((rows * w[..., None]).transpose(-1, -2) @ rows).double()
+    try:
+        _, vecs = torch.linalg.eigh(m)
+    except torch.linalg.LinAlgError:
+        import numpy as np
+
+        finite = torch.isfinite(m).all(dim=-1).all(dim=-1)
+        m = torch.where(finite[:, None, None], m, torch.eye(m.shape[-1], dtype=m.dtype, device=m.device))
+        vecs = torch.from_numpy(np.linalg.eigh(m.cpu().numpy())[1]).to(m.device)
     return vecs[..., 0].to(rows.dtype)
 
 

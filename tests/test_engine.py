@@ -104,7 +104,7 @@ def test_engine_cache_shares_one_network_across_wrappers(monkeypatch: pytest.Mon
     made = []
 
     class FakeRaft:
-        def __init__(self, model: str, *, batch: int, iters: int, device: str, net: object) -> None:
+        def __init__(self, model: str, *, batch: int, iters: int, device: str, net: object, cuda_graph: bool = True) -> None:
             self.net, self.batch = net, batch
             made.append(batch)
 
@@ -266,7 +266,7 @@ def test_raft_wrappers_are_per_engine_slot(monkeypatch: pytest.MonkeyPatch) -> N
     cache = _fake_cache(monkeypatch, free_gb=40.0)
 
     class FakeRaft:
-        def __init__(self, model: str, *, batch: int, iters: int, device: str, net: object) -> None:
+        def __init__(self, model: str, *, batch: int, iters: int, device: str, net: object, cuda_graph: bool = True) -> None:
             self.net = net
 
     monkeypatch.setattr("drone3d.keyframes.flow.RaftFlow", FakeRaft)
@@ -363,3 +363,13 @@ def test_front_jobs_go_ahead_of_work_but_keep_their_own_order(tmp_path: Path) ->
         engine.submit(f"seg_{k}", cfg, kind="segment", front=True)
     engine.submit("run_next", cfg, front=True)  # a console build with "run next"
     assert [j.name for j in engine.queue] == ["seg_0", "seg_1", "seg_2", "run_next", "batch_a", "batch_b"]
+
+
+def test_raft_runs_eagerly_on_a_multi_slot_engine(tmp_path: Path) -> None:
+    from drone3d.engine.service import Engine
+
+    for slots, graphs in ((1, True), (2, False)):
+        engine = Engine(tmp_path, tmp_path / f"outputs{slots}", device="cpu", slots=slots)
+        engine._stop.set()
+        engine._wake.set()
+        assert engine.cache.cuda_graphs is graphs  # capturing while another slot runs kernels is unsafe

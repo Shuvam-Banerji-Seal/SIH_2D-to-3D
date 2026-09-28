@@ -46,6 +46,41 @@ LOG_EXT = {".srt", ".csv", ".gpx", ".json", ".tsv", ".txt"}
 _NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 
+def model_catalog(run: Path) -> dict:
+    """The run's models, largest first: shots, keyframes, completeness, triangles, splat quality, and a role.
+
+    A model is a *main* piece when it holds at least 15 % of the registered keyframes (the largest always
+    is), a *fragment* otherwise -- a short shot nothing else overlaps; fragments are kept, not shown first.
+    """
+    sfm, dense = _read(run / "sfm" / "result.json") or {}, _read(run / "dense" / "result.json") or {}
+    splat = _read(run / "splat" / "result.json") or {}
+    d_by = {Path(m["model"]).name: m for m in dense.get("models", [])}
+    s_by = {Path(m["model"]).name: m for m in splat.get("models", []) if m.get("model")}
+    total = sum(m.get("images") or 0 for m in sfm.get("models", [])) or 1
+    out = []
+    for m in sfm.get("models", []):
+        k = Path(m["path"]).name
+        d, sp = d_by.get(k, {}), s_by.get(k, {})
+        photos = sorted((run / "export" / f"model_{k}" / "frames" / "photo").glob("*.jpg"))
+        ev = sp.get("eval_metrics") or {}
+        psnr = ev.get("avg_psnr", ev.get("psnr"))
+        if isinstance(psnr, list):
+            psnr = sum(psnr) / len(psnr) if psnr else None
+        out.append({"model": k, "images": m.get("images"), "share": round((m.get("images") or 0) / total, 3),
+                    "shots": sorted(m.get("passes") or {}), "merged_from": m.get("merged_from"),
+                    "completeness": d.get("view_completeness"), "triangles": d.get("mesh_triangles"),
+                    "status": d.get("status"), "splat_psnr": round(psnr, 2) if isinstance(psnr, (int, float)) else None,
+                    "splats": sp.get("num_splats"),
+                    "thumb": f"/runs/{run.name}/export/model_{k}/frames/photo/{photos[len(photos) // 2].name}" if photos else None,
+                    "glb": f"model_{k}/mesh_textured.glb" if (run / "export" / f"model_{k}" / "mesh_textured.glb").is_file() else None})  # fmt: skip
+    out.sort(key=lambda e: -(e["images"] or 0))
+    for i, e in enumerate(out):
+        e["role"] = "main" if i == 0 or e["share"] >= 0.15 else "fragment"
+    merge = sfm.get("merge") or {}
+    return {"models": out, "registered": total, "merged": merge.get("status") == "ok",
+            "models_before_merge": merge.get("models_before"), "models_after_merge": merge.get("models_after")}
+
+
 def _group(name: str, kind: str) -> str:
     """Where a run is listed: the sample-video benchmark, the user's builds and uploads, live sessions, or development."""
     if kind == "live" or name.startswith("live_"):
@@ -372,6 +407,13 @@ def create_app(
             return {"title": name, "live": True, "models": models}
         title = (_read(d / "export" / "scene.json") or {}).get("title", name)
         return {"title": title, "live": False, "models": scene_of(d, f"/runs/{name}")}
+
+    @app.get("/api/runs/{name}/models")
+    def run_models(name: str) -> dict:
+        """One entry per model of a run: what it covers and how good it is, main pieces first."""
+        if not _NAME.match(name) or not (outputs / name).is_dir():
+            raise HTTPException(404, "no such run")
+        return model_catalog(outputs / name)
 
     @app.get("/api/runs/{name}/frames")
     def frames(name: str, limit: int = Query(400, le=2000)) -> dict:

@@ -1,0 +1,62 @@
+[
+ {
+  "video": "Jal Mahal",
+  "rate": "adaptive, 3.0 fps",
+  "overlap": "absolute",
+  "keyframes": 128,
+  "registered": 128,
+  "completeness": 0.8763,
+  "seconds": 72.7,
+  "budget_s": 82.3
+ },
+ {
+  "video": "Jal Mahal",
+  "rate": "fixed 12 fps",
+  "overlap": "absolute",
+  "keyframes": 213,
+  "registered": 213,
+  "completeness": 0.8885,
+  "seconds": 109.9,
+  "budget_s": 82.3
+ },
+ {
+  "video": "Jal Mahal",
+  "rate": "adaptive, 3.0 fps",
+  "overlap": "relative",
+  "keyframes": 52,
+  "registered": 52,
+  "completeness": 0.8667,
+  "seconds": 44.4,
+  "budget_s": 82.3
+ },
+ {
+  "video": "Qutub Minar",
+  "rate": "adaptive, 3.3 fps",
+  "overlap": "absolute",
+  "keyframes": 113,
+  "registered": 106,
+  "completeness": 0.5124,
+  "seconds": 97.5,
+  "budget_s": 281.2
+ },
+ {
+  "video": "Qutub Minar",
+  "rate": "fixed 12 fps",
+  "overlap": "absolute",
+  "keyframes": 110,
+  "registered": 102,
+  "completeness": 0.8486,
+  "seconds": 130.4,
+  "budget_s": 281.2
+ },
+ {
+  "video": "Qutub Minar",
+  "rate": "adaptive, 3.3 fps",
+  "overlap": "relative",
+  "keyframes": 70,
+  "registered": 63,
+  "completeness": 0.7552,
+  "seconds": 74.1,
+  "budget_s": 281.2
+ }
+]

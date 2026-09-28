@@ -263,3 +263,10 @@ frames/
 .playwright-mcp/
 uploads/
 node_modules/
+
+# source checkouts fetched by tools/setup_third_party.sh, tools/setup_trellis2.sh, tools/setup_priors.sh
+third_party/RoMaV2/
+third_party/MoGe/
+third_party/TRELLIS.2/
+third_party/Mira-Scene/
+third_party/priors/

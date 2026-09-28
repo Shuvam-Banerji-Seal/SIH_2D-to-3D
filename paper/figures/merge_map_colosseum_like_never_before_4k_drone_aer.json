@@ -1,0 +1,457 @@
+{
+ "run": "map_colosseum_like_never_before_4k_drone_aer",
+ "models": {
+  "0": 12,
+  "1": 10,
+  "2": 9,
+  "3": 8,
+  "4": 6,
+  "5": 6,
+  "6": 5,
+  "7": 5,
+  "8": 5,
+  "9": 5,
+  "10": 4
+ },
+ "edges": [
+  {
+   "a": "0",
+   "b": "1",
+   "pairs": 4,
+   "inliers": 15,
+   "candidates": 41,
+   "inlier_share": 0.366,
+   "median_residual_rel": 0.0152,
+   "scale": 1.447
+  },
+  {
+   "a": "0",
+   "b": "2",
+   "pairs": 4,
+   "inliers": 8,
+   "candidates": 24,
+   "inlier_share": 0.333,
+   "median_residual_rel": 0.0,
+   "scale": 0.7154
+  },
+  {
+   "a": "0",
+   "b": "3",
+   "pairs": 4,
+   "inliers": 17,
+   "candidates": 37,
+   "inlier_share": 0.459,
+   "median_residual_rel": 0.0201,
+   "scale": 1.0191
+  },
+  {
+   "a": "0",
+   "b": "4",
+   "pairs": 4,
+   "inliers": 12,
+   "candidates": 34,
+   "inlier_share": 0.353,
+   "median_residual_rel": 0.0156,
+   "scale": 0.4935
+  },
+  {
+   "a": "0",
+   "b": "5",
+   "pairs": 4,
+   "inliers": 16,
+   "candidates": 38,
+   "inlier_share": 0.421,
+   "median_residual_rel": 0.0184,
+   "scale": 0.4505
+  },
+  {
+   "a": "0",
+   "b": "6",
+   "pairs": 4,
+   "inliers": 10,
+   "candidates": 31,
+   "inlier_share": 0.323,
+   "median_residual_rel": 0.0085,
+   "scale": 0.268
+  },
+  {
+   "a": "0",
+   "b": "8",
+   "pairs": 4,
+   "inliers": 39,
+   "candidates": 62,
+   "inlier_share": 0.629,
+   "median_residual_rel": 0.0169,
+   "scale": 0.5523
+  },
+  {
+   "a": "0",
+   "b": "9",
+   "pairs": 4,
+   "inliers": 15,
+   "candidates": 38,
+   "inlier_share": 0.395,
+   "median_residual_rel": 0.0175,
+   "scale": 0.4637
+  },
+  {
+   "a": "0",
+   "b": "10",
+   "pairs": 4,
+   "inliers": 12,
+   "candidates": 24,
+   "inlier_share": 0.5,
+   "median_residual_rel": 0.0212,
+   "scale": 0.3605
+  },
+  {
+   "a": "1",
+   "b": "3",
+   "pairs": 4,
+   "inliers": 31,
+   "candidates": 43,
+   "inlier_share": 0.721,
+   "median_residual_rel": 0.0134,
+   "scale": 0.7141
+  },
+  {
+   "a": "1",
+   "b": "4",
+   "pairs": 4,
+   "inliers": 9,
+   "candidates": 16,
+   "inlier_share": 0.562,
+   "median_residual_rel": 0.0103,
+   "scale": 0.3459
+  },
+  {
+   "a": "1",
+   "b": "5",
+   "pairs": 4,
+   "inliers": 31,
+   "candidates": 39,
+   "inlier_share": 0.795,
+   "median_residual_rel": 0.0104,
+   "scale": 0.3006
+  },
+  {
+   "a": "1",
+   "b": "6",
+   "pairs": 4,
+   "inliers": 16,
+   "candidates": 19,
+   "inlier_share": 0.842,
+   "median_residual_rel": 0.0079,
+   "scale": 0.1836
+  },
+  {
+   "a": "1",
+   "b": "8",
+   "pairs": 4,
+   "inliers": 12,
+   "candidates": 32,
+   "inlier_share": 0.375,
+   "median_residual_rel": 0.0201,
+   "scale": 0.3752
+  },
+  {
+   "a": "2",
+   "b": "4",
+   "pairs": 4,
+   "inliers": 12,
+   "candidates": 51,
+   "inlier_share": 0.235,
+   "median_residual_rel": 0.0248,
+   "scale": 1.0616
+  },
+  {
+   "a": "2",
+   "b": "6",
+   "pairs": 4,
+   "inliers": 21,
+   "candidates": 40,
+   "inlier_share": 0.525,
+   "median_residual_rel": 0.0169,
+   "scale": 0.5103
+  },
+  {
+   "a": "2",
+   "b": "7",
+   "pairs": 4,
+   "inliers": 13,
+   "candidates": 38,
+   "inlier_share": 0.342,
+   "median_residual_rel": 0.0093,
+   "scale": 0.2467
+  },
+  {
+   "a": "2",
+   "b": "9",
+   "pairs": 4,
+   "inliers": 7,
+   "candidates": 37,
+   "inlier_share": 0.189,
+   "median_residual_rel": 0.0126,
+   "scale": 0.8467
+  },
+  {
+   "a": "3",
+   "b": "4",
+   "pairs": 4,
+   "inliers": 13,
+   "candidates": 30,
+   "inlier_share": 0.433,
+   "median_residual_rel": 0.0163,
+   "scale": 0.4812
+  },
+  {
+   "a": "3",
+   "b": "5",
+   "pairs": 4,
+   "inliers": 24,
+   "candidates": 35,
+   "inlier_share": 0.686,
+   "median_residual_rel": 0.0178,
+   "scale": 0.4311
+  },
+  {
+   "a": "3",
+   "b": "6",
+   "pairs": 4,
+   "inliers": 27,
+   "candidates": 44,
+   "inlier_share": 0.614,
+   "median_residual_rel": 0.0142,
+   "scale": 0.2632
+  },
+  {
+   "a": "3",
+   "b": "7",
+   "pairs": 4,
+   "inliers": 15,
+   "candidates": 77,
+   "inlier_share": 0.195,
+   "median_residual_rel": 0.0212,
+   "scale": 0.1183
+  },
+  {
+   "a": "3",
+   "b": "8",
+   "pairs": 4,
+   "inliers": 21,
+   "candidates": 44,
+   "inlier_share": 0.477,
+   "median_residual_rel": 0.0188,
+   "scale": 0.5502
+  },
+  {
+   "a": "3",
+   "b": "9",
+   "pairs": 4,
+   "inliers": 10,
+   "candidates": 31,
+   "inlier_share": 0.323,
+   "median_residual_rel": 0.0207,
+   "scale": 0.4442
+  },
+  {
+   "a": "3",
+   "b": "10",
+   "pairs": 4,
+   "inliers": 11,
+   "candidates": 56,
+   "inlier_share": 0.196,
+   "median_residual_rel": 0.0144,
+   "scale": 0.3387
+  },
+  {
+   "a": "4",
+   "b": "5",
+   "pairs": 4,
+   "inliers": 15,
+   "candidates": 37,
+   "inlier_share": 0.405,
+   "median_residual_rel": 0.0152,
+   "scale": 0.9388
+  },
+  {
+   "a": "4",
+   "b": "6",
+   "pairs": 4,
+   "inliers": 18,
+   "candidates": 32,
+   "inlier_share": 0.562,
+   "median_residual_rel": 0.0188,
+   "scale": 0.5413
+  },
+  {
+   "a": "4",
+   "b": "8",
+   "pairs": 4,
+   "inliers": 30,
+   "candidates": 64,
+   "inlier_share": 0.469,
+   "median_residual_rel": 0.0199,
+   "scale": 1.1089
+  },
+  {
+   "a": "4",
+   "b": "9",
+   "pairs": 4,
+   "inliers": 53,
+   "candidates": 71,
+   "inlier_share": 0.746,
+   "median_residual_rel": 0.0139,
+   "scale": 0.9532
+  },
+  {
+   "a": "4",
+   "b": "10",
+   "pairs": 4,
+   "inliers": 9,
+   "candidates": 23,
+   "inlier_share": 0.391,
+   "median_residual_rel": 0.016,
+   "scale": 0.7145
+  },
+  {
+   "a": "5",
+   "b": "6",
+   "pairs": 4,
+   "inliers": 19,
+   "candidates": 28,
+   "inlier_share": 0.679,
+   "median_residual_rel": 0.0153,
+   "scale": 0.6015
+  },
+  {
+   "a": "5",
+   "b": "8",
+   "pairs": 4,
+   "inliers": 33,
+   "candidates": 49,
+   "inlier_share": 0.673,
+   "median_residual_rel": 0.0156,
+   "scale": 1.2142
+  },
+  {
+   "a": "5",
+   "b": "9",
+   "pairs": 4,
+   "inliers": 15,
+   "candidates": 45,
+   "inlier_share": 0.333,
+   "median_residual_rel": 0.0202,
+   "scale": 1.0534
+  },
+  {
+   "a": "5",
+   "b": "10",
+   "pairs": 4,
+   "inliers": 24,
+   "candidates": 48,
+   "inlier_share": 0.5,
+   "median_residual_rel": 0.02,
+   "scale": 0.8
+  },
+  {
+   "a": "6",
+   "b": "7",
+   "pairs": 4,
+   "inliers": 36,
+   "candidates": 53,
+   "inlier_share": 0.679,
+   "median_residual_rel": 0.0191,
+   "scale": 0.4409
+  },
+  {
+   "a": "6",
+   "b": "8",
+   "pairs": 4,
+   "inliers": 8,
+   "candidates": 29,
+   "inlier_share": 0.276,
+   "median_residual_rel": 0.0173,
+   "scale": 1.9605
+  },
+  {
+   "a": "6",
+   "b": "9",
+   "pairs": 4,
+   "inliers": 10,
+   "candidates": 37,
+   "inlier_share": 0.27,
+   "median_residual_rel": 0.0177,
+   "scale": 1.6912
+  },
+  {
+   "a": "8",
+   "b": "9",
+   "pairs": 4,
+   "inliers": 25,
+   "candidates": 50,
+   "inlier_share": 0.5,
+   "median_residual_rel": 0.0204,
+   "scale": 0.8366
+  },
+  {
+   "a": "8",
+   "b": "10",
+   "pairs": 4,
+   "inliers": 20,
+   "candidates": 54,
+   "inlier_share": 0.37,
+   "median_residual_rel": 0.0129,
+   "scale": 0.6529
+  },
+  {
+   "a": "9",
+   "b": "10",
+   "pairs": 4,
+   "inliers": 8,
+   "candidates": 34,
+   "inlier_share": 0.235,
+   "median_residual_rel": 0.0201,
+   "scale": 0.8185
+  }
+ ],
+ "groups": [
+  {
+   "models": [
+    "0",
+    "1",
+    "3",
+    "4",
+    "5",
+    "8",
+    "9"
+   ],
+   "images": 52
+  },
+  {
+   "models": [
+    "2"
+   ],
+   "images": 9
+  },
+  {
+   "models": [
+    "6",
+    "7"
+   ],
+   "images": 10
+  },
+  {
+   "models": [
+    "10"
+   ],
+   "images": 4
+  }
+ ],
+ "seconds": {
+  "load": 13.8,
+  "descriptors": 6.0,
+  "matching": 59.6,
+  "pairs": 220
+ }
+}

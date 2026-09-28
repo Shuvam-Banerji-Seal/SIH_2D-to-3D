@@ -160,6 +160,22 @@ if (run) {
   // every download link answers
   const links = await page.evaluate(() => [...document.querySelectorAll('#downloads a[download]')].map((a) => a.href));
   for (const href of links) { const r = await page.request.head(href).catch(() => null); if (!r || r.status() >= 400) fail(`download ${href.split('/').slice(-2).join('/')} -> ${r ? r.status() : 'error'}`); }
+  // the file viewer: every viewable file of the first model opens, loads and draws
+  const views = await page.evaluate(() => [...new Set([...document.querySelectorAll('#downloads a[href^="#/model/"]')].map((a) => a.getAttribute('href')))]);
+  report.controls.file_viewer = {};
+  for (const href of views.filter((h) => h.includes('/model_0/') || !h.includes('/model_')).slice(0, 8)) {
+    await page.goto(`${URL_}/${href}`);
+    const ok = await page.waitForFunction(() => document.querySelector('#mvInfo')?.textContent.includes('format') || document.querySelector('#mv .err'), null, { timeout: 90000 }).then(() => true).catch(() => false);
+    await sleep(800);
+    const drawn = ok && await page.evaluate(() => { const c = document.querySelector('#mv canvas'); if (!c) return 0; const g = c.getContext('webgl2') || c.getContext('webgl');
+      const w = g.drawingBufferWidth, h = g.drawingBufferHeight, px = new Uint8Array(w * h * 4); g.readPixels(0, 0, w, h, g.RGBA, g.UNSIGNED_BYTE, px);
+      let lit = 0; for (let i = 0; i < px.length; i += 64) if (px[i] + px[i + 1] + px[i + 2] > 90) lit++; return lit / (px.length / 64); });
+    const name = decodeURIComponent(href.split('/').pop());
+    report.controls.file_viewer[name] = drawn ? +drawn.toFixed(3) : 0;
+    const err = await page.evaluate(() => document.querySelector('#mv .err')?.textContent);
+    if (!ok || err) fail(`file viewer ${name}: ${err || 'did not load'}`);
+    else if (drawn < 0.01) fail(`file viewer ${name}: the canvas is empty`);
+  }
 }
 
 report.errors = [...new Set(report.errors)];

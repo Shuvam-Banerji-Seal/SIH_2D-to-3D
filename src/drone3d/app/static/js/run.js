@@ -1,6 +1,12 @@
 // One run (or live session): the pipeline as it happens, then the model -- mesh, points, splats, depth.
+import { VIEWABLE } from './model.js';
 import { $, $$, api, esc, every, fmtN, fmtS, icon, onLeave, pct, post, prettyVideo, toast } from './util.js';
 import { mountExplorer } from './explore.js';
+
+const EXTRA = ['splat', 'depth', 'mesh', 'render']; // the 3DGS stages: after the deliverable, outside its budget
+const stageSum = (r, pick) => Object.entries(r.stages || {}).filter(([st]) => pick(st)).reduce((a, [, x]) => a + (x.seconds || 0), 0);
+const deliverableS = (r) => stageSum(r, (st) => !EXTRA.includes(st));
+const extraS = (r) => stageSum(r, (st) => EXTRA.includes(st));
 
 const ACTIVE = ['running', 'queued', 'stopping'];
 
@@ -66,7 +72,10 @@ export async function viewRun(main, name) {
     const now = Date.now() / 1000;
     const elapsed = r.job?.started ? (r.job.finished || now) - r.job.started : null;
     const budget = p?.budget_seconds ?? (s.video_seconds ? 1.5 * s.video_seconds : null);
-    const used = p?.seconds ?? elapsed;
+    // the budget is for the deliverable (mesh + cloud); splat training comes after it and is shown on its own
+    const deliverable = planned.filter((st) => !EXTRA.includes(st)).reduce((a, st) => a + (r.stages[st]?.seconds || 0), 0);
+    const extra = planned.filter((st) => EXTRA.includes(st)).reduce((a, st) => a + (r.stages[st]?.seconds || 0), 0);
+    const used = ACTIVE.includes(r.status) && !deliverable ? elapsed : deliverable || (p?.seconds ?? elapsed);
     const frac = budget && used != null ? used / budget : null;
     const total = Math.max(1, planned.reduce((a, st) => a + (r.stages[st]?.seconds || 0), 0));
     $('#pipe').innerHTML = `<h2>Pipeline <span class="tag">every stage writes its own files; any subset can be re-run</span></h2>
@@ -76,7 +85,7 @@ export async function viewRun(main, name) {
           ${x.seconds ? `<div class="fill" style="width:${Math.min(100, (100 * x.seconds) / total)}%"></div>` : ''}</div>`;
       }).join('')}</div>
       <div class="budget-meter" style="margin-top:14px"><div class="used ${frac > 1 ? 'over' : ''}" style="width:${frac != null ? Math.min(100, 100 * frac) : 0}%"></div>
-        <div class="lbl"><span>time vs budget · 15 min per 10-min video</span><span><b>${fmtS(used)}</b> of ${fmtS(budget)}${frac != null ? ` · ${Math.round(100 * frac)}%` : ''}</span></div></div>
+        <div class="lbl"><span>mesh + cloud vs budget · 15 min per 10-min video</span><span><b>${fmtS(used)}</b> of ${fmtS(budget)}${frac != null ? ` · ${Math.round(100 * frac)}%` : ''}${extra ? ` <span class="muted">· + ${fmtS(extra)} Gaussian splats</span>` : ''}</span></div></div>
       ${planned.filter((st) => r.stages[st]?.status === 'failed').map((st) => `<div class="err"><b>${esc(st)} failed:</b> ${esc(r.stages[st].message || 'see the log below')}${hint(r.stages[st].message) ? `\n${esc(hint(r.stages[st].message))}` : ''}</div>`).join('')}`;
     if (!ACTIVE.includes(r.status) && !s.viewer) { // finished without a model: say so, not "appears when export finishes"
       const failed = planned.find((st) => r.stages[st]?.status === 'failed');
@@ -102,7 +111,7 @@ export async function viewRun(main, name) {
       <div class="tile"><div class="k">Models</div><div class="v">${s.models ?? '—'}<small> passes</small></div></div>
       <div class="tile"><div class="k">Mesh</div><div class="v">${fmtN(s.triangles)}<small> triangles</small></div></div>
       <div class="tile accent"><div class="k">Completeness</div><div class="v">${pct(s.completeness)}<small> of what the camera saw</small></div></div>
-      <div class="tile ${p?.within_budget ? 'accent' : ''}"><div class="k">Processing</div><div class="v">${fmtS(p?.seconds)}<small> / ${fmtS(p?.budget_seconds)}</small></div></div>
+      <div class="tile ${deliverableS(r) <= (p?.budget_seconds ?? Infinity) ? 'accent' : ''}"><div class="k">Mesh + cloud time</div><div class="v">${fmtS(deliverableS(r))}<small> / ${fmtS(p?.budget_seconds)} budget</small></div>${extraS(r) ? `<div class="note">+ ${fmtS(extraS(r))} Gaussian splats</div>` : ''}</div>
       <div class="tile"><div class="k">Georeferencing</div><div class="v" style="font:500 13px var(--sans);margin-top:10px">${geo}</div></div></div>`;
   }
 
@@ -112,7 +121,7 @@ export async function viewRun(main, name) {
     const el = $('#downloads'); el.hidden = false;
     el.innerHTML = `<h2>Deliverables <span class="tag">OBJ · PLY · LAS · GeoTIFF · GLB · FBX · STL · Blender · web splats</span></h2>` + s.files.map((m) => `
       <div style="padding:10px 0;border-top:1px solid var(--line)"><div class="between"><b>model ${esc(m.model)}</b><span class="note mono">${fmtN(m.triangles)} triangles · ${fmtN(m.points)} points${m.epsg ? ` · EPSG:${m.epsg}` : ''}</span></div>
-        <div class="row" style="margin-top:8px;gap:6px">${m.files.map((f) => `<a class="btn tiny" href="/runs/${enc}/export/${esc(f)}" download>${icon.down}${esc(f.split('/').pop())}</a>`).join('')}</div></div>`).join('');
+        <div class="row" style="margin-top:8px;gap:6px">${m.files.map((f) => `<span class="row" style="gap:0">${VIEWABLE.includes(f.split('.').pop().toLowerCase()) ? `<a class="btn tiny" href="#/model/${enc}/${f.split('/').map(encodeURIComponent).join('/')}" title="open this file in the 3D viewer" style="border-top-right-radius:0;border-bottom-right-radius:0">${icon.eye}view</a>` : ''}<a class="btn tiny" href="/runs/${enc}/export/${esc(f)}" download ${VIEWABLE.includes(f.split('.').pop().toLowerCase()) ? 'style="border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px"' : ''}>${icon.down}${esc(f.split('/').pop())}</a></span>`).join('')}</div></div>`).join('');
   }
 
   async function loadScene() {

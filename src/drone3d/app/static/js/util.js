@@ -35,6 +35,7 @@ export function onLeave(fn) { cleanups.add(fn); }
 export function leave() { cleanups.forEach((f) => { try { f(); } catch { /* page teardown */ } }); cleanups.clear(); clearTimers(); }
 
 export const icon = {
+  eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></svg>',
   stop: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>',
   power: '<svg viewBox="0 0 24 24"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>',

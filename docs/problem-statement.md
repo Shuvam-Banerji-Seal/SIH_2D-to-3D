@@ -43,9 +43,9 @@ analysis.
 
 | # | Challenge | Where it is addressed | Status |
 |---|---|---|---|
-| 1 | Limited viewing angles from one flight path | Overlap-band keyframes (~1/(1−τ) views per point); per-pass "is it 3D?" parallax test; flow triangulation against neighbours up to 12 keyframes away (single-pass baselines are 0.1–1°); Depth Anything V2 fill calibrated to the triangulated depth (`keyframes/`, `fastsfm/`) | implemented, evaluated (completeness 0.75–0.78) |
+| 1 | Limited viewing angles from one flight path | Overlap-band keyframes (~1/(1−τ) views per point); per-pass "is it 3D?" parallax test; flow triangulation against neighbours up to 12 keyframes away (single-pass baselines are 0.1–1°); Depth Anything V2 fill calibrated to the triangulated depth (`keyframes/`, `fastsfm/`) | implemented, evaluated (completeness: median 0.88 over the 15 sample videos, 0.48–0.95) |
 | 2 | Motion blur and compression artefacts | Keyframe choice prefers the sharpest frame inside the overlap band (Laplacian variance vs a rolling median) | implemented; no explicit deblurring |
-| 3 | Variable illumination and shadows | Fades trimmed from passes; per-triangle best-view texturing (fast profile); bilateral-grid exposure correction in 3DGS training (accurate profile) | implemented; no photometric harmonisation across views in the fast profile |
+| 3 | Variable illumination and shadows | Fades trimmed from passes; per-triangle best-view texturing with exposure gain compensation across views (OpenCV 5, fast profile); bilateral-grid exposure correction in 3DGS training (accurate profile) | implemented |
 | 4 | Dynamic objects | Not handled explicitly beyond the photometric robustness of training; spirula-studio's `--distraction-robustness` and SAM masking are available but not wired in | **open** |
 | 5 | GPS inaccuracies and sensor noise | Ground-levelled 4-DoF alignment, leave-one-out error, jackknife scale uncertainty (`geo/georef.py`) | implemented; evaluated in simulation (sample videos have no GPS) |
 | 6 | Real-time / near-real-time | Fast profile: one NVDEC decode, motion-adaptive analysis rate, SfM from optical flow (no SIFT) with passes mapped while the next is tracked, GPU TSDF and texture baking; a warm engine keeps the networks loaded; **live mode** records RTSP/RTMP/SRT/UDP/HLS or a camera in segments and models each one while the next is recorded (`engine/`) | see the benchmark table in the README (every sample video, warm engine); live: a model 26–38 s after each 30 s segment closes |
@@ -79,11 +79,11 @@ linked in [`resources.md`](../resources.md)):
 | Parameter | Target | This repository today |
 | --- | --- | --- |
 | Reconstruction type | 3D mesh / point cloud | Textured mesh + dense point cloud (fast profile); 3DGS + mesh (accurate profile) |
-| Processing time | **< 15 minutes for a 10-minute video** | Fast profile: 1.3 s per video second on Qutub Minar (budget 1.5), 2.7 on the edited Jal Mahal clip; shared A100 |
+| Processing time | **< 15 minutes for a 10-minute video** | Fast profile on one A100: 0.64 s per video second over the 11 survey-style sample videos (budget 1.5), 11 of 15 within the budget; the misses are FPV flights and clips under half a minute (README, Measured) |
 | Spatial accuracy | ≤ 1 m | < 1 m within 100 m of the flight track with 1.5 m GPS noise (synthetic GPS on real models, `experiments/georef_e2e.py`); error grows with distance (7–18 m at 300 m+) |
-| Coverage | Entire visible scene | Measured as the share of each keyframe's non-sky pixels the mesh covers: 0.75 (Qutub Minar), 0.78 (Jal Mahal) |
+| Coverage | Entire visible scene | Measured as the share of every registered keyframe's non-sky pixels the mesh covers: median 0.88 over the 15 sample videos; lowest where the far field lies beyond three times the triangulated range (Cristo Redentor 0.49) |
 | Output formats | OBJ, PLY, LAS, GeoTIFF, .glb/.gltf, .fbx | All: OBJ (textured), PLY, LAS (UTM + EPSG), GeoTIFF (DSM + orthophoto), GLB (y-up, as glTF requires), FBX; also STL, a Blender scene (.blend, texture packed) and web Gaussian splats |
-| Visualization | Web-based or desktop viewer | Web console (`drone3d ui`): engine and model control, GPU telemetry, every option, live sessions, and an explorer with every layer as a switch -- textured / shaded / wireframe mesh, dense cloud, Gaussian splats, flight path, keyframe photos, fused depth maps, the source video -- orbit, fly and follow-flight navigation, look-through-keyframe, measuring, screenshots; the same explorer ships with every export. Blender opens the .blend directly. |
+| Visualization | Web-based or desktop viewer | Web console (`drone3d ui`): engine and model control, GPU telemetry, every option, live sessions, and an explorer with every layer as a switch -- textured / shaded / wireframe mesh, dense cloud, Gaussian splats, flight path, keyframe photos, fused depth maps, the source video -- orbit, fly and follow-flight navigation, look-through-keyframe, measuring, screenshots; the same explorer ships with every export; a file viewer opens any GLB, OBJ, PLY, STL or FBX on its own. Blender opens the .blend directly. |
 
 ## Evaluation criteria (official weights)
 

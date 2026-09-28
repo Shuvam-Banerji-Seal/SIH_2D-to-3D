@@ -17,6 +17,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from names import video_name  # noqa: E402  (experiments/names.py)
+
 import drone3d  # noqa: E402, F401  (first: undoes OpenMP thread binding before torch loads)
 
 OUT = ROOT / "paper" / "generated"
@@ -133,21 +135,12 @@ FAST_RUNS = {  # run -> (video, analysis rate, overlap)
 
 def short_title_run(run: str) -> str:
     """``map_the_messiah_cristo_redentor_4k_drone_foo`` -> a short name for tables."""
-    names = {"messiah": "Cristo Redentor", "jal_mahal": "Jal Mahal", "qutub": "Qutub Minar", "kinbane": "Kinbane",
-             "dunluce": "Dunluce"}
-    return next((v for k, v in names.items() if k in run), tex(run.removeprefix("map_")[:18]))
+    return tex(video_name(run))
 
 
 def short_title(video: str) -> str:
-    """A sample video's name for a table: before the first separator, whole words, at most 26 characters."""
-    name = re.split(r"[｜|：:,]| - |\[|\(", video)[0].strip()
-    name = re.sub(r"\b(4K|4k|HD|Drone|Video|Cinematic|FPV drone|in FPV drone)\b.*$", "", name).strip() or name
-    words, out = name.split(), ""
-    for w in words:
-        if len(out) + len(w) + 1 > 26:
-            break
-        out = f"{out} {w}".strip()
-    return tex(out or name[:26])
+    """A sample video's name for a table."""
+    return tex(video_name(video))
 
 
 def fast_section(macros: dict[str, str]) -> list[str]:

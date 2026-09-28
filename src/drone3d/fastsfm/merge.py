@@ -52,22 +52,57 @@ def invert(p: Sim3) -> Sim3:
     return 1.0 / s, r.T, -(r.T @ t) / s
 
 
-def ransac_sim3(a: np.ndarray, b: np.ndarray, thresh: float, *, iters: int = 2000, seed: int = 0) -> dict | None:
-    """Robust similarity taking ``a`` onto ``b`` (``[N, 3]`` each) -> fit with inlier count and residual, or None."""
+def _umeyama_batch(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """:func:`umeyama` for ``[K, m, 3]`` point sets at once -> ``s [K], R [K, 3, 3], t [K, 3]``."""
+    ma, mb = a.mean(1), b.mean(1)
+    ca, cb = a - ma[:, None], b - mb[:, None]
+    u, d, vt = np.linalg.svd(np.einsum("kni,knj->kij", cb, ca) / a.shape[1])
+    fix = np.ones((len(a), 3))
+    fix[:, 2] = np.where(np.linalg.det(u) * np.linalg.det(vt) < 0, -1.0, 1.0)
+    r = u @ (fix[:, :, None] * vt)
+    s = (d * fix).sum(1) / np.maximum((ca**2).sum((1, 2)) / a.shape[1], 1e-12)
+    return s, r, mb - s[:, None] * np.einsum("kij,kj->ki", r, ma)
+
+
+def ransac_sim3(a: np.ndarray, b: np.ndarray, thresh: float, *, iters: int = 2000, seed: int = 0,
+                chunk: int = 512) -> dict | None:  # fmt: skip
+    """Robust similarity taking ``a`` onto ``b`` (``[N, 3]`` each) -> fit with inlier count and residual, or None.
+
+    Every hypothesis is fitted in one batched SVD and scored ``chunk`` at a time, on the GPU when there is
+    one: one at a time in numpy, 2000 per model pair were 44 of the 83 s Colosseum's merge took.
+    """
     if len(a) < 8:
         return None
     rng = np.random.default_rng(seed)
-    best_n, best = 0, None
-    for _ in range(iters):
-        idx = rng.choice(len(a), 4, replace=False)
-        s, r, t = umeyama(a[idx], b[idx])
-        if not np.isfinite(s) or s <= 0:
-            continue
-        inl = np.linalg.norm(s * a @ r.T + t - b, axis=1) < thresh
-        if inl.sum() > best_n:
-            best_n, best = int(inl.sum()), inl
-    if best is None or best_n < 8:
+    idx = rng.integers(0, len(a), (iters, 4))
+    idx = idx[(np.diff(np.sort(idx, axis=1), axis=1) > 0).all(1)]  # four distinct points
+    s, r, t = _umeyama_batch(a[idx], b[idx])
+    ok = np.isfinite(s) & (s > 0) & np.isfinite(r).all((1, 2)) & np.isfinite(t).all(1)
+    m = s[ok, None, None] * r[ok]  # s R
+    t = t[ok]
+    if not len(m):
         return None
+    counts = np.zeros(len(m), dtype=np.int64)
+    try:
+        import torch
+
+        dev = "cuda" if torch.cuda.is_available() else None
+    except ImportError:
+        dev = None
+    if dev:
+        ta, tb = torch.as_tensor(a, device=dev), torch.as_tensor(b, device=dev)
+        for c in range(0, len(m), chunk):
+            d = ta[None] @ torch.as_tensor(m[c : c + chunk], device=dev).transpose(1, 2)
+            d += torch.as_tensor(t[c : c + chunk], device=dev)[:, None] - tb[None]
+            counts[c : c + chunk] = ((d * d).sum(2) < thresh**2).sum(1).cpu().numpy()
+    else:
+        for c in range(0, len(m), chunk):
+            d = a[None] @ m[c : c + chunk].transpose(0, 2, 1) + t[c : c + chunk, None] - b[None]
+            counts[c : c + chunk] = (np.einsum("kni,kni->kn", d, d) < thresh**2).sum(1)
+    k = int(np.argmax(counts))
+    if counts[k] < 8:
+        return None
+    best = np.linalg.norm(a @ m[k].T + t[k] - b, axis=1) < thresh
     s, r, t = umeyama(a[best], b[best])
     res = np.linalg.norm(s * a @ r.T + t - b, axis=1)
     inl = res < thresh

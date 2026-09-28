@@ -21,7 +21,10 @@ def test_two_threads_encode_and_decode_on_the_gpu() -> None:
             for _ in range(20):
                 img = torch.randint(0, 255, (3, 360 + 8 * seed, 640), dtype=torch.uint8, device="cuda", generator=g)
                 data = encode_jpeg([img, img], quality=90)
-                back = decode_jpeg(data[0].cpu(), device="cuda")
+                blobs = [d.numpy().tobytes() for d in data]  # after the call, as the keyframe writer does
+                for blob in blobs:  # every bitstream is a complete JPEG
+                    assert blob[:2] == b"\xff\xd8" and blob[-2:] == b"\xff\xd9"
+                back = decode_jpeg(data[0], device="cuda")
                 assert back.shape == img.shape
         except BaseException as exc:  # noqa: BLE001  (report any failure from the thread)
             errors.append(exc)

@@ -99,7 +99,7 @@ def generated_object(run: Path) -> dict:
             "glb": "generated/object.glb" if state == "ok" and rec.get("glb") else None,
             "input": f"{base}/{rec['input']}" if rec.get("input") else None, "started": rec.get("started"),
             "error": (rec.get("log") or [""])[-1][:300] if state == "failed" else None,
-            "placed": (rec.get("aligned") or {}).get("measured_covered")}  # fmt: skip
+            "placed": (rec.get("aligned") or {}).get("measured_covered") if (rec.get("aligned") or {}).get("placed") else None}  # fmt: skip
 
 
 def _alive(pid: int | None) -> bool:

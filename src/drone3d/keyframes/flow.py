@@ -123,10 +123,13 @@ def load_raft(model: str = "raft_large", device: str | torch.device = "cuda") ->
 class RaftFlow:
     """Batched RAFT inference in bfloat16, replayed from a CUDA Graph.
 
-    Kernel launches, not arithmetic, bound stock RAFT at this resolution: a
-    call costs about the same whatever the batch. The network is therefore
-    captured once per input shape and replayed with a single launch; the last
-    chunk of a call is padded to the captured batch size.
+    Stock RAFT's refinement loop issues hundreds of small kernels and host syncs
+    per call; the network is therefore captured once per input shape and replayed
+    with a single launch (87 -> 110 flows/s at 640x360 on a busy GPU,
+    ``paper/figures/bench_gpu.json``); the last chunk of a call is padded to the
+    captured batch size. Once captured it is compute-bound: on an idle A100,
+    16, 32 and 64 pairs per replay give the same 205 flows/s at 480x272
+    (``experiments/bench_raft_batch.py``), so a bigger batch buys nothing.
 
     Args:
         model: ``raft_large`` (accurate) or ``raft_small`` (about 2x faster).

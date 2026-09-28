@@ -250,6 +250,25 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
             "tri_cov": tri_cov, "fill_info": fill_info, "timing": timing}  # fmt: skip
 
 
+def _drop_specks(mesh, *, share: float = 0.0005, least: int = 50) -> dict:  # type: ignore[no-untyped-def]
+    """Remove the mesh's tiny disconnected pieces (in place) -> what went.
+
+    A fused mesh held 1,500-3,400 disconnected pieces; those under 0.05 % of its triangles were 7-14 % of them,
+    speckle around the surface, and removing them cost Colosseum 0.5 points of camera coverage (0.899 -> 0.894).
+    """
+    import numpy as np
+
+    if not len(mesh.triangles):
+        return {"components": 0, "triangles": 0}
+    cluster, count, _ = mesh.cluster_connected_triangles()
+    cluster, count = np.asarray(cluster), np.asarray(count)
+    small = count[cluster] < max(least, share * len(cluster))
+    if small.any():
+        mesh.remove_triangles_by_mask(small)
+        mesh.remove_unreferenced_vertices()
+    return {"components": int((count < max(least, share * len(cluster))).sum()), "triangles": int(small.sum())}
+
+
 def extraction_weight(min_views: str | int, depth_maps: int) -> float:
     """Open3D's extraction ``weight_threshold`` for ``dense.min_views``.
 
@@ -304,6 +323,7 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     timing["tsdf"] = time.perf_counter() - t0
     del frames, fused_frames
     _release_gpu()
+    specks = _drop_specks(mesh)
     if not len(mesh.triangles) and not len(pcd.points):
         log.info("dense %s: %d keyframes, the TSDF produced no surface", name, n)
         return {"model": str(model_dir), "status": "empty", "keyframes": n}
@@ -321,6 +341,7 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
         "voxel": round(voxel, 6), "weight_threshold": wt, "mesh": str(mdir / "mesh.ply"), "points": str(mdir / "points.ply"),
         "depth_previews": str(mdir / "depth"),
         "mesh_vertices": len(mesh.vertices), "mesh_triangles": len(mesh.triangles), "num_points": len(pcd.points),
+        "specks_removed": specks,
         "mono": fill_info, "timing_s": {k: round(v, 2) for k, v in timing.items()},
     }  # fmt: skip
     log.info("dense %s: %d keyframes, coverage %.2f, completeness %.2f, %d triangles",

@@ -74,19 +74,8 @@ flowchart LR
 
 ## Measured
 
-Shared A100 80 GB (another user's job held ~40 GB and most of the GPU
-throughout), budget = 1.5 × video length (the problem statement's 15 minutes
-for a 10-minute video). *Completeness* is the share of each registered
-keyframe's non-sky pixels whose ray hits the reconstructed mesh
-([`experiments/eval_completeness.py`](experiments/eval_completeness.py)).
-
-| Video | Length | Keyframes | Registered | Completeness | Processing | Budget |
-|---|---|---|---|---|---|---|
-| Qutub Minar, New Delhi | 187 s | 113 | 106 | 0.75 | **243 s** | 281 s ✓ |
-| Jal Mahal, Jaipur (edited cinematic, lake) | 55 s | 128 | 128 | 0.78 | 147 s | 82 s ✗ |
-
-The trade-off is set in [`configs/fast.yaml`](configs/fast.yaml): analysing at
-a fixed 12 fps gives 0.81 / 307 s and 0.82 / 262 s respectively.
+<!-- measured:start -->
+<!-- measured:end -->
 
 Georeferencing, with synthetic GPS (1.5 m horizontal / 3 m vertical noise) on
 the real Jal Mahal models ([`experiments/georef_e2e.py`](experiments/georef_e2e.py)):
@@ -223,13 +212,16 @@ tools/                  dataset download, synthetic control clip, FBX converter,
 
 ## Limitations
 
-Timings are from a shared GPU; Jal Mahal (an edited clip with five camera moves
-and a lake that defeats optical flow) is 1.8× over its budget. Completeness is
-~0.75 of what the camera saw: surfaces the single pass never faced cannot be
-reconstructed, and flow fails on water and sky. Georeferencing is verified with
-synthetic GPS only. Dynamic objects are not masked. Fast FPV footage needs
-~10 keyframes per second (GoPro waterfall: 179 keyframes for 18 s) and is far
-over its budget. Live segments cut a camera move at their boundary.
+Completeness is measured against what the camera saw: surfaces the single
+pass never faced cannot be reconstructed; the far field beyond three times the
+triangulated range is left empty rather than guessed (the depth prior is
+47–87 % off out there); shots of three or four keyframes, as in montage edits,
+get no depth; and water reflections become mirrored geometry below the
+surface. Georeferencing is verified with synthetic GPS only. Dynamic objects
+are not masked. Fast FPV footage needs ~10 keyframes per second and clips
+under half a minute carry fixed per-run costs, so both exceed a budget
+proportional to their length. Live segments cut a camera move at their
+boundary.
 
 ## Licences
 

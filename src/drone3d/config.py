@@ -101,6 +101,9 @@ class SfMConfig:
     # a similarity per pair of models): Colosseum's 11 shots became 3 models, the largest from 7 shots.
     merge_passes: bool = True
     merge_pairs: int = 4  # keyframe pairs matched per pair of models
+    # Re-map passes whose self-calibration ran away (8-178 deg fields of view on the samples) with the video's
+    # consensus focal length and k1 (see fastsfm.stage._consensus_intrinsics).
+    consensus_intrinsics: bool = True
 
 
 @dataclass

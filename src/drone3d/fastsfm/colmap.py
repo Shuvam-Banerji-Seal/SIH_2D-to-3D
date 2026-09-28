@@ -90,9 +90,24 @@ def map_tracks(
     init_min_tri_angle: float = 2.0,
     min_tri_angle: float = 0.5,
     verify: bool = True,
+    fixed_intrinsics: tuple[float, float] | None = None,
 ) -> tuple[dict, dict]:
-    """Verify the matched pairs and map them -> ``({model_id: Reconstruction}, timing)``."""
+    """Verify the matched pairs and map them -> ``({model_id: Reconstruction}, timing)``.
+
+    ``fixed_intrinsics`` = (focal px, k1): the camera is set to them and bundle adjustment keeps them.
+    """
     import pycolmap
+
+    if fixed_intrinsics is not None:
+        db = pycolmap.Database.open(str(db_path))
+        for cam in db.read_all_cameras():
+            params = list(cam.params)
+            params[0] = fixed_intrinsics[0]
+            if len(params) > 3:
+                params[3] = fixed_intrinsics[1]
+            cam.params = params
+            db.update_camera(cam)
+        db.close()
 
     out_dir.mkdir(parents=True, exist_ok=True)
     timing = {}
@@ -113,6 +128,9 @@ def map_tracks(
         db.close()
         opts.mapper.keep_max_num_tracks = max(1000, 12 * n_images)
         opts.mapper.skip_retriangulation = True
+        if fixed_intrinsics is not None:
+            opts.mapper.bundle_adjustment.refine_focal_length = False
+            opts.mapper.bundle_adjustment.refine_extra_params = False
         recs = pycolmap.global_mapping(str(db_path), str(image_dir), str(out_dir), opts)
     elif mapper == "incremental":
         opts = pycolmap.IncrementalPipelineOptions()
@@ -123,6 +141,9 @@ def map_tracks(
         opts.mapper.init_min_tri_angle = init_min_tri_angle
         opts.mapper.filter_min_tri_angle = min_tri_angle
         opts.triangulation.min_angle = min_tri_angle
+        if fixed_intrinsics is not None:
+            opts.ba_refine_focal_length = False
+            opts.ba_refine_extra_params = False
         recs = pycolmap.incremental_mapping(str(db_path), str(image_dir), str(out_dir), opts)
     else:
         raise ValueError(f"unknown mapper {mapper!r} (global | incremental)")

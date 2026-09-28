@@ -159,8 +159,11 @@ def _decimate(mesh, v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, target:
 
     fast-simplification (C++ quadric collapses) took 8.4 s for Petronas's
     3.7M-triangle model where Open3D took 56 s, and stayed as close to the
-    original surface (median vertex offset 0.024 vs 0.028 model units); the
-    colour of each kept vertex is the mean of the vertices collapsed into it.
+    original surface (median vertex offset 0.024 vs 0.028 model units). Each
+    kept vertex takes the mean colour of its 4 nearest original vertices:
+    replaying the collapses to average exactly the merged ones cost 31 s on a
+    3.3M-triangle model, the k-d tree 1.5 s, and the colours differ by 0.3/255
+    (median; 3.6 at the 90th percentile).
     """
     try:
         import fast_simplification as fs
@@ -168,14 +171,13 @@ def _decimate(mesh, v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, target:
         small = mesh.simplify_quadric_decimation(target_number_of_triangles=target)
         colours = (np.asarray(small.vertex_colors) * 255).astype(np.uint8) if small.has_vertex_colors() else None
         return np.asarray(small.vertices), np.asarray(small.triangles), colours
-    v32, f32 = v.astype(np.float32), f.astype(np.int32)
-    _, _, collapses = fs.simplify(v32, f32, target_reduction=1.0 - target / len(f), return_collapses=True)
-    dv, df, where = fs.replay_simplification(v32, f32, collapses)
+    dv, df = fs.simplify(v.astype(np.float32), f.astype(np.int32), target_reduction=1.0 - target / len(f))
     colours = None
     if vc is not None:
-        acc = np.zeros((len(dv), 3), np.float64)
-        np.add.at(acc, where, vc[:, :3].astype(np.float64))
-        colours = np.round(acc / np.maximum(np.bincount(where, minlength=len(dv)), 1)[:, None]).astype(np.uint8)
+        from scipy.spatial import cKDTree
+
+        _, idx = cKDTree(v).query(dv, k=4, workers=8)
+        colours = np.round(vc[:, :3][idx].astype(np.float64).mean(1)).astype(np.uint8)
     return dv.astype(np.float64), df.astype(np.int64), colours
 
 

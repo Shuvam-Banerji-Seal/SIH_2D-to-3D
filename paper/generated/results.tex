@@ -1,6 +1,6 @@
 \section{Experiments}\label{sec:exp}
 
-\paragraph{Setup.} One NVIDIA A100 80\,GB PCIe and 24 CPU cores; the fast profile's timings are taken on the warm engine running one job at a time. PyTorch 2.14.0+cu132 with CUDA 13.2, Python 3.14, ffmpeg 9.0 (NVDEC/NVENC), spirula-studio 2026.9.24 (Vulkan backend). Data: fifteen public drone videos (Table~\ref{tab:data}); they carry no flight logs.
+\paragraph{Setup.} One NVIDIA A100 80\,GB PCIe and 24 CPU cores; the fast profile's timings are taken on the warm engine running one job at a time. PyTorch 2.14.0+cu132 with CUDA 13.2, Python 3.14, ffmpeg 9.0 (NVDEC; the A100 has no video encoder), spirula-studio 2026.9.24 (Vulkan backend). Data: fifteen public drone videos (Table~\ref{tab:data}); they carry no flight logs.
 
 \begin{table}[htbp]
 \centering\small
@@ -240,7 +240,7 @@ Tracks & Mapper & Flow (s) & Map (s) & Reg. & Reproj. (px) & Centre (\% ext.) & 
 \par\smallskip\footnotesize Reference: spirula-studio SIFT SfM of all 213 Jal Mahal keyframes, 255\,s for extraction, matching and mapping.
 \end{table*}
 
-\paragraph{Fusion.} The depth maps (triangulated, then filled by the calibrated prior) cover every non-sky pixel of the references, yet a TSDF with the usual 4-voxel truncation band keeps only part of the view: neighbouring views disagree slightly and their signed distances cancel. Widening the band recovers most of it at a small cost in depth error against the triangulated geometry (Table~\ref{tab:tsdf}); the profile uses 12 voxels.
+\paragraph{Fusion.} The depth maps (triangulated, then filled by the calibrated prior) cover nearly every non-sky pixel of a scene at the pass's own range, yet a TSDF with the usual 4-voxel truncation band keeps only part of the view: neighbouring views disagree slightly and their signed distances cancel. Widening the band recovers most of it at a small cost in depth error against the triangulated geometry (Table~\ref{tab:tsdf}); the profile uses 12 voxels.
 
 \begin{table}[htbp]
 \centering\small
@@ -263,6 +263,52 @@ Model & Band (vox.) & Completeness & Depth err. (\%) & Triangles \\
 \end{adjustbox}
 \end{table}
 
+\paragraph{How many views make a surface.} Open3D extracts a voxel when its integration weight, the number of depth maps that saw it, exceeds a threshold whose default asks for four. On single-pass footage that discards the edges of every model's coverage and small models altogether (Kinbane's five-view shot came out empty). The profile asks for three views on models of more than 12 depth maps and two on smaller ones (Table~\ref{tab:views}): 3--12 points of view completeness on the large models and 8--65 on the small, for at most 0.1\,\% more median depth error. Two views on the large models would add more still, but as stacked layers in the far field (3.01 $\to$ 3.89 surfaces per keyframe ray on Jal Mahal 1), and up to 3.5 times the triangles.
+
+\begin{table*}[htbp]
+\centering\small
+\caption{Minimum views per surface voxel: view completeness, median depth error against the triangulated depth (\%) and triangles when 4 (Open3D's default), 3 or 2 depth maps must see a voxel; last column: the profile's choice.}\label{tab:views}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lrrrrrrrrrrr}
+\toprule
+Model & Maps & C$_4$ & C$_3$ & C$_2$ & E$_4$ & E$_3$ & E$_2$ & T$_4$ & T$_3$ & T$_2$ & Uses \\
+\midrule
+Jal Mahal 0 & 21 & 0.91 & 0.94 & 0.97 & 1.30 & 1.31 & 1.32 & 454k & 508k & 591k & 3 \\
+Jal Mahal 1 & 39 & 0.83 & 0.88 & 0.94 & 0.58 & 0.63 & 0.70 & 713k & 1392k & 2994k & 3 \\
+Jal Mahal 2 & 19 & 0.68 & 0.73 & 0.80 & 1.32 & 1.33 & 1.34 & 103k & 292k & 974k & 3 \\
+Jal Mahal 4 & 10 & 0.23 & 0.73 & 0.88 & 0.37 & 0.39 & 0.41 & 34k & 86k & 145k & 2 \\
+Kinbane 0 & 10 & 0.75 & 0.81 & 0.87 & 1.02 & 1.03 & 1.04 & 150k & 203k & 310k & 2 \\
+Kinbane 4 & 6 & 0.42 & 0.62 & 0.74 & 0.51 & 0.53 & 0.55 & 37k & 111k & 316k & 2 \\
+Kinbane 5 & 5 & 0.00 & 0.44 & 0.65 & --- & 0.42 & 0.44 & 0k & 41k & 104k & 2 \\
+Cristo Redentor 0 & 26 & 0.41 & 0.53 & 0.69 & 2.58 & 2.59 & 2.69 & 77k & 268k & 947k & 3 \\
+Cristo Redentor 3 & 10 & 0.55 & 0.60 & 0.64 & 0.32 & 0.34 & 0.35 & 17k & 19k & 21k & 2 \\
+Cristo Redentor 5 & 6 & 0.00 & 0.00 & 0.22 & --- & --- & 0.29 & 0k & 0k & 14k & 2 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table*}
+
+\paragraph{The far field.} On footage with a distant background the far field is the largest gap. The fill writes a pixel only where the calibrated prior puts it within three times the 99th-percentile triangulated depth; beyond, the pixel stays empty --- 24\,\% of the pixels of Cristo Redentor's largest model on average, whose hills and city lie kilometres behind a statue filmed from tens of metres. Raising the cut is not free: calibrating each keyframe on its nearer 80\,\% of triangulated pixels and predicting the farthest 20\,\% measures how the prior extrapolates (Table~\ref{tab:far}). Just past the calibrated range the median error is 3--42\,\%; beyond three times it, 47--87\,\%, which would place those surfaces at the wrong distance altogether. The profile keeps the cut; the lake model (Jal Mahal 1) shows that water, whose triangulated depth includes reflections, calibrates the prior badly even at short range.
+
+\begin{table*}[htbp]
+\centering\small
+\caption{Far field: share of keyframe pixels that are sky, triangulated, filled by the prior, or left empty beyond the far cut (\%), and the prior's median relative error on held-out triangulated pixels by distance past the calibrated range (\%).}\label{tab:far}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Model & Sky & Tri. & Fill & Beyond & 1--1.25$\times$ & 1.25--1.5$\times$ & 1.5--2$\times$ & 2--3$\times$ & 3+$\times$ \\
+\midrule
+Cristo Redentor 0 & 17 & 22 & 35 & 23 & 6 & 18 & 25 & 26 & 59 \\
+Cristo Redentor 1 & 21 & 20 & 47 & 12 & 4 & 15 & 67 & 157 & 87 \\
+Cristo Redentor 2 & 18 & 17 & 40 & 24 & 15 & 49 & 35 & 100 & 87 \\
+Jal Mahal 0 & 15 & 56 & 29 & 0 & 6 & 11 & 20 & 18 & --- \\
+Jal Mahal 1 & 37 & 27 & 36 & 0 & 42 & 66 & 63 & 65 & 73 \\
+Jal Mahal 2 & 45 & 24 & 30 & 1 & 3 & 6 & 7 & 6 & 47 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table*}
+
 \paragraph{Analysis rate and overlap.} A fixed 12\,fps analysis rate places more keyframes and gains a few points of completeness at a large cost in time; measuring overlap against the points that survive the first tracking step (so that water does not force a keyframe every step) does not pay off either (Table~\ref{tab:fastruns}). The profile uses the motion-adaptive rate with absolute overlap.
 
 \begin{table*}[htbp]
@@ -273,13 +319,16 @@ Model & Band (vox.) & Completeness & Depth err. (\%) & Triangles \\
 \toprule
 Video & Analysis & Overlap & KF & Reg. & Compl. & Time (s) & Budget (s) \\
 \midrule
-Jal Mahal & adaptive, 3.0 fps & absolute & 128 & 128 & 0.66 & 79 & 82 \checkmark \\
+Jal Mahal & fixed 12 fps & absolute & 213 & 213 & 0.83 & 157 & 82 \\
+Jal Mahal & adaptive, 3.0 fps & relative & 52 & 52 & 0.52 & 54 & 82 \checkmark \\
+Qutub Minar & fixed 12 fps & absolute & 110 & 102 & 0.76 & 232 & 281 \checkmark \\
+Qutub Minar & adaptive, 3.3 fps & relative & 63 & 56 & 0.55 & 91 & 281 \checkmark \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
 \end{table*}
 
-\paragraph{Every sample video.} On the warm engine the mesh-and-cloud stages processed 1 of the 1 sample videos within the budget (1 minutes of footage at 1.43\,s per second of video overall; Table~\ref{tab:allmaps}). Every model was then given Gaussian splats, trained from its dense cloud; their time is reported separately, since the problem statement asks for a mesh or a point cloud.
+\paragraph{Every sample video.} On the warm engine the mesh-and-cloud stages processed 1 of the 4 sample videos within the budget (2 minutes of footage at 2.97\,s per second of video overall; Table~\ref{tab:allmaps}). The misses are fast FPV flights (GoPro, Petronas Twin Tower), whose speed needs 10, 7 keyframes per second; clips under 30\,s (Aerial Views of Rural), where fixed per-run costs dominate a budget proportional to length. Every model was then given Gaussian splats, trained from its dense cloud; their time is reported separately, since the problem statement asks for a mesh or a point cloud.
 
 \begin{table*}[htbp]
 \centering\small
@@ -289,7 +338,10 @@ Jal Mahal & adaptive, 3.0 fps & absolute & 128 & 128 & 0.66 & 79 & 82 \checkmark
 \toprule
 Video & s & Res. & KF & Reg. & Mod. & Compl. & Time (s) & Budget (s) & s/s & Splat (s) & PSNR \\
 \midrule
-Jal Mahal & 55 & 2160p & 128 & 128/128 & 5 & 0.66 & 79 & 82 \checkmark & 1.43 & 205 & 26.6 \\
+GoPro & 18 & 1920p & 179 & 179/179 & 1 & 0.89 & 97 & 27 & 5.36 & 42 & 25.9 \\
+Aerial Views of Rural & 19 & 1440p & 21 & 21/21 & 1 & 0.85 & 34 & 29 & 1.79 & 41 & 29.8 \\
+Petronas Twin Tower & 35 & 2160p & 251 & 251/251 & 6 & 0.69 & 180 & 53 & 5.08 & 232 & 16.7 \\
+Jal Mahal & 55 & 2160p & 128 & 128/128 & 5 & 0.66 & 68 & 82 \checkmark & 1.23 & 205 & 26.6 \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -399,6 +451,8 @@ jal\_mahal 1 & fgs & 0.661 & 0.58 & 633{,}168 & 0.16 \\
 \end{tabular}
 \end{adjustbox}
 \end{table}
+
+\paragraph{Using the whole GPU.} On an idle A100 RAFT is compute-bound, not launch-bound: 205--207 flows per second at 480$\times$272 for batches of 16 to 64 pairs (and cuDNN refuses 128), so the flow batch is not raised when memory allows. Training several splat models at once is slower than one after another --- Jal Mahal's 5 models took 178\,s in sequence and 249\,s 2 at a time, 264\,s 3 at a time --- because Vulkan contexts time-slice the GPU; one trainer already keeps it busy.
 
 \subsection{Live footage}\label{sec:live-results}
 Qutub Minar was replayed at its frame rate into 30\,s segments: of 7 segments, 4 held parallax and were modelled 26--38\,s after they closed; the others were refused by the parallax test, as a camera that only turns should be.

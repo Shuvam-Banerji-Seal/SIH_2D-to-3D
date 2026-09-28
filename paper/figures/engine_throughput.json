@@ -1,0 +1,41 @@
+[
+ {
+  "slots": 2,
+  "videos": 15,
+  "video_s": 1759.3,
+  "wall_s": 225.9,
+  "per_video_s": [
+   8.7,
+   6.4,
+   10.0,
+   9.6,
+   12.2,
+   19.6,
+   7.9,
+   3.9,
+   27.4,
+   83.4,
+   30.7,
+   130.0,
+   8.6,
+   38.6,
+   12.6
+  ],
+  "failed": [
+   "thr2_gopro_flying_a_drone_through_a_water",
+   "thr2_aerial_views_of_rural_riches_drone_s",
+   "thr2_jal_mahal_jaipur_india_drone_cinemat",
+   "thr2_petronas_twin_tower_in_fpv_drone_4k",
+   "thr2_above_clouds_pnb_merdeka_118_cinemat",
+   "thr2_hagia_sophia_4k_vibes_of_istanbul",
+   "thr2_the_messiah_cristo_redentor_4k_drone",
+   "thr2_fpv_drone_flight_through_beautiful_i",
+   "thr2_qutub_minar_new_delhi_india_4k_drone",
+   "thr2_colosseum_like_never_before_4k_drone",
+   "thr2_notre_dame_drone_paris_4k",
+   "thr2_reichstag_berlin_in_4k_stunning_dron",
+   "thr2_eiffel_tower_drone_4k"
+  ],
+  "one_slot_sum_s": 1576.3
+ }
+]

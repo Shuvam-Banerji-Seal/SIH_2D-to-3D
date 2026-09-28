@@ -1,5 +1,43 @@
 [
  {
+  "run": "map_above_clouds_pnb_merdeka_118_cinematic_a",
+  "video": "Above clouds - PNB Merdeka 118 \uff5c Cinematic Aerial Shots [ucpkDTp1Th4].webm",
+  "seconds": 115.441,
+  "resolution": [
+   2560,
+   1440
+  ],
+  "fps": 50.0,
+  "keyframes": 156,
+  "registered": 156,
+  "models": 4,
+  "completeness": 0.4757,
+  "triangles": 822932,
+  "stage_s": {
+   "keyframes": 19.98,
+   "sfm": 33.69,
+   "dense": 11.57,
+   "splat": 525.23,
+   "export": 14.19
+  },
+  "fast_s": 79.4,
+  "splat_s": 525.23,
+  "total_s": 604.7,
+  "budget_s": 173.2,
+  "fast_within_budget": true,
+  "splat_models": 2,
+  "splats": 1123596,
+  "splat_psnr_mean": 16.42,
+  "splat_cc_psnr_mean": 18.32,
+  "deliverable_mb": 505.5,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.8,
+  "clean": true
+ },
+ {
   "run": "map_aerial_views_of_rural_riches_drone_shot",
   "video": "Aerial Views of Rural Riches\uff1a Drone Shot of Farmland \ud83c\udf3e\ud83d\ude81 [p8eRmxosalI].webm",
   "seconds": 19.081,
@@ -11,29 +49,221 @@
   "keyframes": 21,
   "registered": 21,
   "models": 1,
-  "completeness": 0.8536,
-  "triangles": 753629,
+  "completeness": 0.9444,
+  "triangles": 1032858,
   "stage_s": {
-   "keyframes": 13.81,
-   "sfm": 6.69,
-   "dense": 3.69,
-   "splat": 41.21,
-   "export": 9.99
+   "keyframes": 5.77,
+   "sfm": 6.04,
+   "dense": 5.7,
+   "splat": 59.71,
+   "export": 15.11
   },
-  "fast_s": 34.2,
-  "splat_s": 41.21,
-  "total_s": 75.4,
+  "fast_s": 32.6,
+  "splat_s": 59.71,
+  "total_s": 92.3,
   "budget_s": 28.6,
   "fast_within_budget": false,
   "splat_models": 1,
-  "splats": 200000,
-  "splat_psnr_mean": 29.84,
-  "splat_cc_psnr_mean": 31.09,
-  "deliverable_mb": 277.8,
+  "splats": 1000000,
+  "splat_psnr_mean": 31.1,
+  "splat_cc_psnr_mean": 32.35,
+  "deliverable_mb": 381.2,
   "warm": [
    "raft_large",
    "depth_anything_v2_large"
-  ]
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_angkor_wat_breathtaking_cinematic_aerial",
+  "video": "ANGKOR WAT Breathtaking \u2022 Cinematic Aerial Adventure in 4K [by8H_fLpJpg].webm",
+  "seconds": 193.291,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 24.0,
+  "keyframes": 115,
+  "registered": 115,
+  "models": 8,
+  "completeness": 0.896,
+  "triangles": 4803124,
+  "stage_s": {
+   "keyframes": 40.2,
+   "sfm": 24.59,
+   "dense": 23.04,
+   "splat": 265.12,
+   "export": 37.37
+  },
+  "fast_s": 125.2,
+  "splat_s": 265.12,
+  "total_s": 390.3,
+  "budget_s": 289.9,
+  "fast_within_budget": true,
+  "splat_models": 4,
+  "splats": 4000000,
+  "splat_psnr_mean": 20.36,
+  "splat_cc_psnr_mean": 23.54,
+  "deliverable_mb": 2023.3,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_breathtaking_aerial_views_of_hanoi_opera",
+  "video": "Breathtaking Aerial Views of Hanoi Opera House - Stunning Drone Footage in HD [rkk1QxjYBb4].webm",
+  "seconds": 102.821,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 29.97002997002997,
+  "keyframes": 74,
+  "registered": 74,
+  "models": 3,
+  "completeness": 0.8022,
+  "triangles": 1257500,
+  "stage_s": {
+   "keyframes": 23.72,
+   "sfm": 20.67,
+   "dense": 9.31,
+   "splat": 289.97,
+   "export": 15.15
+  },
+  "fast_s": 68.8,
+  "splat_s": 289.97,
+  "total_s": 358.8,
+  "budget_s": 154.2,
+  "fast_within_budget": true,
+  "splat_models": 2,
+  "splats": 2000000,
+  "splat_psnr_mean": 15.58,
+  "splat_cc_psnr_mean": 16.74,
+  "deliverable_mb": 766.0,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_colosseum_like_never_before_4k_drone_aer",
+  "video": "Colosseum like never before\uff1a 4K drone aerial view [wcl0k1WPat0].webm",
+  "seconds": 135.361,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 29.97002997002997,
+  "keyframes": 75,
+  "registered": 75,
+  "models": 11,
+  "completeness": 0.9545,
+  "triangles": 3490258,
+  "stage_s": {
+   "keyframes": 30.4,
+   "sfm": 13.12,
+   "dense": 13.4,
+   "splat": 327.61,
+   "export": 34.1
+  },
+  "fast_s": 91.0,
+  "splat_s": 327.61,
+  "total_s": 418.6,
+  "budget_s": 203.0,
+  "fast_within_budget": true,
+  "splat_models": 4,
+  "splats": 4000000,
+  "splat_psnr_mean": 21.69,
+  "splat_cc_psnr_mean": 25.15,
+  "deliverable_mb": 2059.1,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_eiffel_tower_drone_4k",
+  "video": "Eiffel Tower Drone 4k [Qx_c1X3zfEc].webm",
+  "seconds": 306.281,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 29.97002997002997,
+  "keyframes": 193,
+  "registered": 193,
+  "models": 10,
+  "completeness": 0.8108,
+  "triangles": 2987435,
+  "stage_s": {
+   "keyframes": 63.59,
+   "sfm": 36.94,
+   "dense": 24.31,
+   "splat": 580.31,
+   "export": 34.08
+  },
+  "fast_s": 158.9,
+  "splat_s": 580.31,
+  "total_s": 739.2,
+  "budget_s": 459.4,
+  "fast_within_budget": true,
+  "splat_models": 10,
+  "splats": 9998750,
+  "splat_psnr_mean": 18.84,
+  "splat_cc_psnr_mean": 20.17,
+  "deliverable_mb": 1700.6,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_fpv_drone_flight_through_beautiful_icela",
+  "video": "FPV Drone Flight through Beautiful Iceland Canyon [kcfs1-ryKWE].webm",
+  "seconds": 67.201,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 30.0,
+  "keyframes": 603,
+  "registered": 603,
+  "models": 6,
+  "completeness": 0.9503,
+  "triangles": 9236744,
+  "stage_s": {
+   "keyframes": 34.43,
+   "sfm": 130.81,
+   "dense": 62.0,
+   "splat": 471.27,
+   "export": 49.53
+  },
+  "fast_s": 276.8,
+  "splat_s": 471.27,
+  "total_s": 748.0,
+  "budget_s": 100.8,
+  "fast_within_budget": false,
+  "splat_models": 6,
+  "splats": 6000000,
+  "splat_psnr_mean": 27.74,
+  "splat_cc_psnr_mean": 31.41,
+  "deliverable_mb": 2237.6,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.6,
+  "clean": true
  },
  {
   "run": "map_gopro_flying_a_drone_through_a_waterfall",
@@ -47,29 +277,69 @@
   "keyframes": 179,
   "registered": 179,
   "models": 1,
-  "completeness": 0.8906,
-  "triangles": 1276202,
+  "completeness": 0.9335,
+  "triangles": 1634829,
   "stage_s": {
-   "keyframes": 16.32,
-   "sfm": 48.95,
-   "dense": 14.79,
-   "splat": 42.0,
-   "export": 16.53
+   "keyframes": 8.24,
+   "sfm": 47.82,
+   "dense": 17.6,
+   "splat": 68.97,
+   "export": 15.05
   },
-  "fast_s": 96.6,
-  "splat_s": 42.0,
-  "total_s": 138.6,
+  "fast_s": 88.7,
+  "splat_s": 68.97,
+  "total_s": 157.7,
   "budget_s": 27.0,
   "fast_within_budget": false,
   "splat_models": 1,
-  "splats": 200000,
-  "splat_psnr_mean": 25.85,
-  "splat_cc_psnr_mean": 26.4,
-  "deliverable_mb": 308.5,
+  "splats": 1000000,
+  "splat_psnr_mean": 26.4,
+  "splat_cc_psnr_mean": 27.11,
+  "deliverable_mb": 413.6,
   "warm": [
    "raft_large",
    "depth_anything_v2_large"
-  ]
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_hagia_sophia_4k_vibes_of_istanbul",
+  "video": "HAGIA SOPHIA 4K \uff5c Vibes of Istanbul [mTlqTdui6Zo].webm",
+  "seconds": 85.481,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 29.97002997002997,
+  "keyframes": 69,
+  "registered": 69,
+  "models": 9,
+  "completeness": 0.8476,
+  "triangles": 1822720,
+  "stage_s": {
+   "keyframes": 27.59,
+   "sfm": 11.62,
+   "dense": 10.2,
+   "splat": 192.57,
+   "export": 22.27
+  },
+  "fast_s": 71.7,
+  "splat_s": 192.57,
+  "total_s": 264.2,
+  "budget_s": 128.2,
+  "fast_within_budget": true,
+  "splat_models": 3,
+  "splats": 3000000,
+  "splat_psnr_mean": 19.26,
+  "splat_cc_psnr_mean": 23.19,
+  "deliverable_mb": 1144.1,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
  },
  {
   "run": "map_jal_mahal_jaipur_india_drone_cinematic",
@@ -82,30 +352,70 @@
   "fps": 24.0,
   "keyframes": 128,
   "registered": 128,
-  "models": 5,
-  "completeness": 0.6603,
-  "triangles": 1391805,
+  "models": 6,
+  "completeness": 0.8763,
+  "triangles": 2631734,
   "stage_s": {
-   "keyframes": 22.14,
-   "sfm": 22.37,
-   "dense": 12.28,
-   "splat": 204.88,
-   "export": 10.68
+   "keyframes": 13.1,
+   "sfm": 21.71,
+   "dense": 15.8,
+   "splat": 398.18,
+   "export": 22.09
   },
-  "fast_s": 67.5,
-  "splat_s": 204.88,
-  "total_s": 272.4,
+  "fast_s": 72.7,
+  "splat_s": 398.18,
+  "total_s": 470.9,
   "budget_s": 82.3,
   "fast_within_budget": true,
   "splat_models": 5,
-  "splats": 1000000,
-  "splat_psnr_mean": 26.56,
-  "splat_cc_psnr_mean": 32.05,
-  "deliverable_mb": 661.0,
+  "splats": 5000000,
+  "splat_psnr_mean": 27.57,
+  "splat_cc_psnr_mean": 32.68,
+  "deliverable_mb": 1239.8,
   "warm": [
    "raft_large",
    "depth_anything_v2_large"
-  ]
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_notre_dame_drone_paris_4k",
+  "video": "Notre Dame Drone Paris 4k [4V1ZGEKQE2A].webm",
+  "seconds": 214.314,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 29.97002997002997,
+  "keyframes": 107,
+  "registered": 107,
+  "models": 6,
+  "completeness": 0.9478,
+  "triangles": 1701522,
+  "stage_s": {
+   "keyframes": 45.52,
+   "sfm": 20.56,
+   "dense": 19.11,
+   "splat": 375.49,
+   "export": 19.43
+  },
+  "fast_s": 104.6,
+  "splat_s": 375.49,
+  "total_s": 480.1,
+  "budget_s": 321.5,
+  "fast_within_budget": true,
+  "splat_models": 6,
+  "splats": 6000000,
+  "splat_psnr_mean": 21.29,
+  "splat_cc_psnr_mean": 24.95,
+  "deliverable_mb": 1133.8,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
  },
  {
   "run": "map_petronas_twin_tower_in_fpv_drone_4k_nich",
@@ -119,28 +429,144 @@
   "keyframes": 251,
   "registered": 251,
   "models": 6,
-  "completeness": 0.6857,
-  "triangles": 5094288,
+  "completeness": 0.7692,
+  "triangles": 6389755,
   "stage_s": {
-   "keyframes": 35.39,
-   "sfm": 51.45,
-   "dense": 28.52,
-   "splat": 232.07,
-   "export": 64.64
+   "keyframes": 22.88,
+   "sfm": 50.81,
+   "dense": 34.53,
+   "splat": 377.41,
+   "export": 41.18
   },
-  "fast_s": 180.0,
-  "splat_s": 232.07,
-  "total_s": 412.1,
+  "fast_s": 149.4,
+  "splat_s": 377.41,
+  "total_s": 526.8,
   "budget_s": 53.1,
   "fast_within_budget": false,
   "splat_models": 6,
-  "splats": 1200000,
-  "splat_psnr_mean": 16.71,
-  "splat_cc_psnr_mean": 18.09,
-  "deliverable_mb": 1108.8,
+  "splats": 6000000,
+  "splat_psnr_mean": 16.6,
+  "splat_cc_psnr_mean": 17.92,
+  "deliverable_mb": 1636.3,
   "warm": [
    "raft_large",
    "depth_anything_v2_large"
-  ]
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_qutub_minar_new_delhi_india_4k_drone_vid",
+  "video": "Qutub Minar, New Delhi, India 4K Drone Video \uff5c UNESCO World Heritage Site [47YrmPhMeho].webm",
+  "seconds": 187.454,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 29.97002997002997,
+  "keyframes": 113,
+  "registered": 106,
+  "models": 6,
+  "completeness": 0.5124,
+  "triangles": 1403421,
+  "stage_s": {
+   "keyframes": 39.66,
+   "sfm": 20.38,
+   "dense": 21.02,
+   "splat": 198.04,
+   "export": 16.43
+  },
+  "fast_s": 97.5,
+  "splat_s": 198.04,
+  "total_s": 295.5,
+  "budget_s": 281.2,
+  "fast_within_budget": true,
+  "splat_models": 4,
+  "splats": 3022498,
+  "splat_psnr_mean": 20.97,
+  "splat_cc_psnr_mean": 25.02,
+  "deliverable_mb": 861.8,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_reichstag_berlin_in_4k_stunning_drone_vi",
+  "video": "Reichstag Berlin \ud83c\udde9\ud83c\uddea in 4K \uff5c Stunning Drone Views of Germany\u2019s Parliament [wXWNsayEP90].webm",
+  "seconds": 130.201,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 30.0,
+  "keyframes": 70,
+  "registered": 70,
+  "models": 8,
+  "completeness": 0.9249,
+  "triangles": 3247558,
+  "stage_s": {
+   "keyframes": 30.76,
+   "sfm": 13.07,
+   "dense": 12.68,
+   "splat": 268.4,
+   "export": 29.51
+  },
+  "fast_s": 86.0,
+  "splat_s": 268.4,
+  "total_s": 354.4,
+  "budget_s": 195.3,
+  "fast_within_budget": true,
+  "splat_models": 4,
+  "splats": 4000000,
+  "splat_psnr_mean": 19.33,
+  "splat_cc_psnr_mean": 20.35,
+  "deliverable_mb": 1856.0,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "video": "The Messiah \uff5c Cristo Redentor 4K Drone Footage [OO4cuHmkm3k].webm",
+  "seconds": 94.041,
+  "resolution": [
+   3840,
+   2160
+  ],
+  "fps": 29.97002997002997,
+  "keyframes": 110,
+  "registered": 110,
+  "models": 8,
+  "completeness": 0.4881,
+  "triangles": 1086530,
+  "stage_s": {
+   "keyframes": 25.27,
+   "sfm": 21.13,
+   "dense": 11.21,
+   "splat": 502.55,
+   "export": 15.36
+  },
+  "fast_s": 73.0,
+  "splat_s": 502.55,
+  "total_s": 575.5,
+  "budget_s": 141.1,
+  "fast_within_budget": true,
+  "splat_models": 5,
+  "splats": 3842112,
+  "splat_psnr_mean": 18.96,
+  "splat_cc_psnr_mean": 21.19,
+  "deliverable_mb": 714.2,
+  "warm": [
+   "raft_large",
+   "depth_anything_v2_large"
+  ],
+  "others_gpu_gb": 2.7,
+  "clean": true
  }
 ]

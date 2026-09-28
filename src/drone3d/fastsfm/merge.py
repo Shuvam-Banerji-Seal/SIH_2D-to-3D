@@ -128,13 +128,41 @@ def _lift(rec, im, xy: np.ndarray, dm: tuple[np.ndarray, float] | None) -> tuple
     return (xc - t) @ r, ok  # R^T (x_cam - t)
 
 
+MATCH_BATCH = 16  # keyframe pairs per RoMa forward: 283 -> 97 ms per pair on the A100, same warps (0.01 px median)
+
+
+def _match_batched(roma, pairs: list[tuple[Any, Any]], matches_per_pair: int) -> list[Any]:  # type: ignore[no-untyped-def]
+    """RoMa v2 ("fast": 512^2, one direction) on ``(A, B)`` pairs of [1, 3, 512, 512] tensors -> sampled matches."""
+    import torch
+    from romav2.romav2 import _map_confidence
+
+    out = []
+    with torch.inference_mode():
+        for s in range(0, len(pairs), MATCH_BATCH):
+            chunk = pairs[s : s + MATCH_BATCH]
+            pred = roma(torch.cat([a for a, _ in chunk]), torch.cat([b for _, b in chunk]))
+            for i in range(len(chunk)):
+                conf = pred["confidence_AB"][i : i + 1]
+                overlap, precision = _map_confidence(confidence=conf, threshold=roma.threshold)
+                one = {"warp_AB": pred["warp_AB"][i : i + 1], "overlap_AB": overlap, "precision_AB": precision}
+                out.append(roma.sample(one, matches_per_pair)[0])
+    return out
+
+
 def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int = 4, matches_per_pair: int = 3000,
                setting: str = "fast", mono=None) -> tuple[list[dict], dict]:  # type: ignore[no-untyped-def]  # fmt: skip
-    """Similarities between every pair of models -> (edges, timing). An edge maps ``b``'s frame onto ``a``'s."""
+    """Similarities between every pair of models -> (edges, timing). An edge maps ``b``'s frame onto ``a``'s.
+
+    Every keyframe is decoded once (nvJPEG) and kept at RoMa's 512^2 on the GPU (75 keyframes: 1.3 s,
+    300 MB); the per-pair path decoded both JPEGs with PIL for every pair, so a keyframe in eight pairs
+    was decoded eight times. The pairs are matched in batches (``MATCH_BATCH``).
+    """
     import torch
-    from PIL import Image
+    import torch.nn.functional as F
+    from torchvision.io import read_file
 
     from drone3d.engine import models
+    from drone3d.gpu.nvjpeg import decode_jpeg
 
     timing = {"load": 0.0, "descriptors": 0.0, "matching": 0.0, "lifting": 0.0}
     mono = mono or models.mono()
@@ -142,64 +170,74 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
     t0 = time.perf_counter()
     roma = _roma(setting)
     timing["load"] = time.perf_counter() - t0
-    keys, desc = [], []
+    keys, small, lr = [], [], {}
     t0 = time.perf_counter()
     with torch.inference_mode():
         for name, rec in recs.items():
             for im in rec.images.values():
                 if not im.has_pose:
                     continue
-                x = torch.from_numpy(np.asarray(Image.open(images / im.name).convert("RGB").resize((448, 256)))).cuda()
-                feats = roma.f(x.permute(2, 0, 1)[None].float() / 255)[-1]
+                x = decode_jpeg(read_file(str(images / im.name)), device="cuda").float()[None] / 255
+                lr[im.name] = F.interpolate(x, size=(roma.H_lr, roma.W_lr), mode="bicubic", align_corners=False, antialias=True)
+                small.append(F.interpolate(x, size=(256, 448), mode="bicubic", align_corners=False, antialias=True))
                 keys.append((name, im.image_id, im.name))
-                desc.append(torch.nn.functional.normalize(feats.float().mean(dim=(1, 2))[0], dim=0).cpu())
+        # a global descriptor per keyframe: RoMa's DINOv3 features of the deeper layer, mean-pooled
+        desc = [F.normalize(roma.f(torch.cat(small[s : s + 32]))[-1].float().mean(dim=(1, 2)), dim=1).cpu()
+                for s in range(0, len(small), 32)]  # fmt: skip
+    del small
     timing["descriptors"] = time.perf_counter() - t0
     if len(keys) < 2:
         return [], timing
-    d = torch.stack(desc).numpy()
+    d = torch.cat(desc).numpy()
     sim = d @ d.T
     model_of = np.array([k[0] for k in keys])
     names = sorted(recs, key=lambda k: -recs[k].num_reg_images())
-    edges = []
+    todo = []  # (a, b, [(key_a, key_b), ...]) for every pair of models: its most similar keyframe pairs
     for i, a in enumerate(names):
         for b in names[i + 1 :]:
             ia, ib = np.where(model_of == a)[0], np.where(model_of == b)[0]
             block = sim[np.ix_(ia, ib)]
             order = np.dstack(np.unravel_index(np.argsort(-block, axis=None), block.shape))[0][:pairs_per_model_pair]
-            pa, pb = [], []
-            for r_, c_ in order:
-                ka, kb = keys[ia[r_]], keys[ib[c_]]
-                t1 = time.perf_counter()
-                matches, *_ = roma.sample(roma.match(str(images / ka[2]), str(images / kb[2])), matches_per_pair)
-                timing["matching"] += time.perf_counter() - t1
-                ima, imb = recs[a].images[ka[1]], recs[b].images[kb[1]]
-                ca, cb = recs[a].cameras[ima.camera_id], recs[b].cameras[imb.camera_id]
-                m = matches.float().cpu().numpy()  # [-1, 1] normalised coordinates in each image
-                xa = np.stack([(m[:, 0] + 1) / 2 * ca.width, (m[:, 1] + 1) / 2 * ca.height], 1)
-                xb = np.stack([(m[:, 2] + 1) / 2 * cb.width, (m[:, 3] + 1) / 2 * cb.height], 1)
-                t1 = time.perf_counter()
-                for key, rec, im in (((a, ima.image_id), recs[a], ima), ((b, imb.image_id), recs[b], imb)):
-                    if key not in depth_cache:
-                        depth_cache[key] = _calibrated_depth(rec, im, images, mono)
-                Xa, oka = _lift(recs[a], ima, xa, depth_cache[(a, ima.image_id)])
-                Xb, okb = _lift(recs[b], imb, xb, depth_cache[(b, imb.image_id)])
-                timing["lifting"] += time.perf_counter() - t1
-                both = oka & okb  # a match lifts only where both keyframes have depth
-                if both.any():
-                    pa.append(Xa[both[oka]])
-                    pb.append(Xb[both[okb]])
-            if not pa or sum(len(x) for x in pa) < 12:
-                continue
-            A, B = np.concatenate(pa), np.concatenate(pb)
-            if len(A) > 4000:  # plenty: a subset keeps RANSAC fast
-                pick = np.random.default_rng(0).choice(len(A), 4000, replace=False)
-                A, B = A[pick], B[pick]
-            scale = float(np.median(np.linalg.norm(A - A.mean(0), axis=1))) or 1.0
-            fit = ransac_sim3(B, A, thresh=0.03 * scale)  # b's points onto a's
-            if fit is None:
-                continue
-            edges.append({"a": a, "b": b, "sim3": fit["sim3"], "inliers": fit["inliers"], "candidates": fit["candidates"],
-                          "residual_rel": fit["median_residual"] / scale})  # fmt: skip
+            todo.append((a, b, [(keys[ia[r_]], keys[ib[c_]]) for r_, c_ in order]))
+    t0 = time.perf_counter()
+    flat = [(lr[ka[2]], lr[kb[2]]) for _, _, kp in todo for ka, kb in kp]
+    sampled = iter(_match_batched(roma, flat, matches_per_pair))
+    torch.cuda.synchronize()
+    timing["matching"] = time.perf_counter() - t0
+    del lr, flat
+    edges = []
+    for a, b, kp in todo:
+        pa, pb = [], []
+        for ka, kb in kp:
+            matches = next(sampled)
+            ima, imb = recs[a].images[ka[1]], recs[b].images[kb[1]]
+            ca, cb = recs[a].cameras[ima.camera_id], recs[b].cameras[imb.camera_id]
+            m = matches.float().cpu().numpy()  # [-1, 1] normalised coordinates in each image
+            xa = np.stack([(m[:, 0] + 1) / 2 * ca.width, (m[:, 1] + 1) / 2 * ca.height], 1)
+            xb = np.stack([(m[:, 2] + 1) / 2 * cb.width, (m[:, 3] + 1) / 2 * cb.height], 1)
+            t1 = time.perf_counter()
+            for key, rec, im in (((a, ima.image_id), recs[a], ima), ((b, imb.image_id), recs[b], imb)):
+                if key not in depth_cache:
+                    depth_cache[key] = _calibrated_depth(rec, im, images, mono)
+            Xa, oka = _lift(recs[a], ima, xa, depth_cache[(a, ima.image_id)])
+            Xb, okb = _lift(recs[b], imb, xb, depth_cache[(b, imb.image_id)])
+            timing["lifting"] += time.perf_counter() - t1
+            both = oka & okb  # a match lifts only where both keyframes have depth
+            if both.any():
+                pa.append(Xa[both[oka]])
+                pb.append(Xb[both[okb]])
+        if not pa or sum(len(x) for x in pa) < 12:
+            continue
+        A, B = np.concatenate(pa), np.concatenate(pb)
+        if len(A) > 4000:  # plenty: a subset keeps RANSAC fast
+            pick = np.random.default_rng(0).choice(len(A), 4000, replace=False)
+            A, B = A[pick], B[pick]
+        scale = float(np.median(np.linalg.norm(A - A.mean(0), axis=1))) or 1.0
+        fit = ransac_sim3(B, A, thresh=0.03 * scale)  # b's points onto a's
+        if fit is None:
+            continue
+        edges.append({"a": a, "b": b, "sim3": fit["sim3"], "inliers": fit["inliers"], "candidates": fit["candidates"],
+                      "residual_rel": fit["median_residual"] / scale})  # fmt: skip
     return edges, timing
 
 

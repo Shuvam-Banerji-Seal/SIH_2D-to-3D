@@ -346,3 +346,20 @@ def test_status_is_not_blocked_by_a_slow_load(monkeypatch: pytest.MonkeyPatch) -
     assert (
         cache._entries["depth_anything_v2_large"].obj.key == "depth"
     )  # one load, shared by both requests
+
+
+def test_front_jobs_go_ahead_of_work_but_keep_their_own_order(tmp_path: Path) -> None:
+    from drone3d.engine.service import Engine
+
+    engine = Engine(tmp_path, tmp_path / "outputs", device="cpu", slots=1)
+    engine._stop.set()  # no slot picks the jobs up: only the queue's order is under test
+    engine._wake.set()
+    for t in engine._threads:
+        t.join(timeout=5)
+    cfg = {"stages": ["ingest"]}
+    engine.submit("batch_a", cfg)
+    engine.submit("batch_b", cfg)
+    for k in range(3):  # live segments close one after another
+        engine.submit(f"seg_{k}", cfg, kind="segment", front=True)
+    engine.submit("run_next", cfg, front=True)  # a console build with "run next"
+    assert [j.name for j in engine.queue] == ["seg_0", "seg_1", "seg_2", "run_next", "batch_a", "batch_b"]

@@ -407,6 +407,7 @@ class Pipeline:
             hfov_deg=self.config.keyframes.hfov_deg,
             merge=cfg.merge_passes,
             merge_pairs=cfg.merge_pairs,
+            consensus=cfg.consensus_intrinsics,
         )
         _write_json(self._stage_dir("sfm") / "result.json", payload)
         best = payload["models"][0] if payload["models"] else {}

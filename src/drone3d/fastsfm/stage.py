@@ -77,6 +77,70 @@ def _map_pass(db: Path, images: Path, work_dir: Path, name: str, n_images: int, 
     return comps, used, recs, t
 
 
+PLAUSIBLE_HFOV = (25.0, 130.0)  # degrees: telephoto-ish cinematic to FPV action cameras
+
+
+def _hfov(cam) -> float:  # type: ignore[no-untyped-def]
+    return math.degrees(2 * math.atan(cam.width / 2 / cam.params[0]))
+
+
+def _consensus_intrinsics(found: list, images: Path, work_dir: Path, mapper: str, min_images: int,
+                          timing: dict) -> tuple[list, dict]:  # fmt: skip
+    """Re-map the passes whose self-calibration ran away, with the video's consensus focal length and k1.
+
+    A single pass constrains focal length and radial distortion weakly, and bundle adjustment wandered: of 114
+    cameras on the sample videos, Eiffel's main model came out at a 110 deg field of view, others at 8 deg
+    with k1 = 27, or 178 deg -- geometry sheared and domed accordingly. One video is usually one camera, so
+    the keyframe-weighted median over the plausible passes is its focal length. A pass is mapped again with
+    the consensus held fixed when its own solution is implausible (field of view outside PLAUSIBLE_HFOV,
+    |k1| > 0.3), or when the consensus holds >= 60 % of the keyframes and the pass is > 1.5x off it --
+    cinematic drones switch lenses, so a moderate disagreement can be real. The re-map is kept if it registers
+    >= 80 % as many keyframes at under 1.5 px of reprojection error.
+    """
+    cams = [(n, p, next(iter(rec.cameras.values()))) for n, p, _, rec in found]
+    good = [(n, c) for n, _, c in cams if PLAUSIBLE_HFOV[0] <= _hfov(c) <= PLAUSIBLE_HFOV[1] and abs(c.params[3] if len(c.params) > 3 else 0) <= 0.3]
+    if not good or sum(n for n, _ in good) < 0.3 * sum(n for n, _, _ in cams):
+        return found, {"status": "no-consensus"}
+    order = sorted(good, key=lambda g: g[1].params[0])
+    w = np.cumsum([n for n, _ in order])
+    focal = float(order[int(np.searchsorted(w, w[-1] / 2))][1].params[0])  # weighted median
+    ks = sorted((c.params[3] if len(c.params) > 3 else 0.0, n) for n, c in good)
+    wk = np.cumsum([n for _, n in ks])
+    k1 = float(ks[int(np.searchsorted(wk, wk[-1] / 2))][0])
+    strong = sum(n for n, c in good if abs(c.params[0] / focal - 1) < 0.25) >= 0.6 * sum(n for n, _, _ in cams)
+    t0 = time.perf_counter()
+    redone, out = [], []
+    for entry in found:
+        n_reg, pass_name, comp, rec = entry
+        cam = next(iter(rec.cameras.values()))
+        implausible = not PLAUSIBLE_HFOV[0] <= _hfov(cam) <= PLAUSIBLE_HFOV[1] or abs(cam.params[3] if len(cam.params) > 3 else 0) > 0.3
+        off = implausible or (strong and not 1 / 1.5 <= cam.params[0] / focal <= 1.5)
+        if not off or comp != 0:  # one re-map per pass: its first component carries the decision
+            out.append(entry)
+            continue
+        db = work_dir / f"{pass_name}.db"
+        try:
+            recs, _ = map_tracks(db, images, work_dir / f"models_{pass_name}_consensus", mapper=mapper, verify=False,
+                                 fixed_intrinsics=(focal, k1))  # fmt: skip
+        except Exception as exc:  # the original mapping stands
+            log.warning("sfm: re-mapping %s with the consensus intrinsics failed: %s", pass_name, str(exc)[:160])
+            out.append(entry)
+            continue
+        comps = _components(recs, min_images)
+        if comps and comps[0].num_reg_images() >= 0.8 * n_reg and comps[0].compute_mean_reprojection_error() < 1.5:
+            out.append((comps[0].num_reg_images(), pass_name, 0, comps[0]))
+            redone.append({"pass": pass_name, "hfov_before": round(_hfov(cam), 1), "k1_before": round(float(cam.params[3]) if len(cam.params) > 3 else 0.0, 3),
+                           "registered_before": n_reg, "registered_after": comps[0].num_reg_images()})  # fmt: skip
+        else:
+            out.append(entry)
+    timing["intrinsics"] = time.perf_counter() - t0
+    info = {"status": "ok", "strong": strong, "focal_px": round(focal, 1), "k1": round(k1, 4), "hfov_deg": round(math.degrees(2 * math.atan(cams[0][2].width / 2 / focal)), 1),
+            "remapped": redone}  # fmt: skip
+    if redone:
+        log.info("sfm: consensus intrinsics (hfov %.0f deg, k1 %.3f) re-mapped %d pass(es)", info["hfov_deg"], k1, len(redone))
+    return out, info
+
+
 def _merge(dataset: Path, models: list[dict], pairs: int, timing: dict) -> tuple[list[dict], dict]:
     """Merge the passes' models that see the same scene (see :mod:`drone3d.fastsfm.merge`) -> (models, info).
 
@@ -138,6 +202,7 @@ def run_flow_sfm(
     map_workers: int = 2,
     merge: bool = True,
     merge_pairs: int = 4,
+    consensus: bool = True,
 ) -> dict:
     """Map every pass of ``dataset/images``; models go to ``dataset/sparse/N``, largest first.
 
@@ -198,6 +263,7 @@ def run_flow_sfm(
         per_pass.append({**row, "mapper": used, "models": summarize(recs), "timing_s": t})
         for c, rec in enumerate(comps):  # every component of the pass with enough images is a model
             found.append((rec.num_reg_images(), row["pass"], c, rec))
+    found, intrinsics = _consensus_intrinsics(found, images, work_dir, mapper, min_images, timing) if consensus else (found, None)
     found.sort(key=lambda f: f[1])  # pass order, so equal-sized models keep a stable numbering
     pool.shutdown()
     per_pass.sort(key=lambda r: r["pass"])
@@ -229,6 +295,7 @@ def run_flow_sfm(
         "models": models,
         "passes": per_pass,
         "merge": merge_info,
+        "intrinsics": intrinsics,
         "settings": {"long_side": long_side, "span": span, "stride": stride, "max_gap": max_gap, "mapper": mapper},
         "stage_seconds": {k: round(v, 2) for k, v in timing.items()},
         "seconds": round(time.perf_counter() - started, 2),

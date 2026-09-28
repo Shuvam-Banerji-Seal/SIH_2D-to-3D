@@ -46,6 +46,17 @@ LOG_EXT = {".srt", ".csv", ".gpx", ".json", ".tsv", ".txt"}
 _NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 
+def _group(name: str, kind: str) -> str:
+    """Where a run is listed: the sample-video benchmark, the user's builds and uploads, live sessions, or development."""
+    if kind == "live" or name.startswith("live_"):
+        return "live"
+    if name.startswith("map_"):
+        return "benchmark"
+    if re.match(r"^(abl_|ded_|q_|eng_|dev_|repro|sample_|cold\d?_)|^(jal_mahal|qutub)(_fast\d*|_rel\d+)?$", name):
+        return "development"  # the runs behind the paper's studies, from earlier versions of the pipeline
+    return "builds"
+
+
 def _same_file(a: Path, b: Path) -> bool:
     if a.stat().st_size != b.stat().st_size:
         return False
@@ -279,6 +290,10 @@ def create_app(
                 s["kind"] = (s.get("job") or {}).get("kind") or (
                     "live" if (d / "live.json").is_file() else "run"
                 )
+                s["group"] = _group(d.name, s["kind"])
+                photos = sorted((d / "export" / "model_0" / "frames" / "photo").glob("*.jpg")) or sorted(
+                    d.glob("segments/*/export/model_0/frames/photo/*.jpg"))  # a live session: its segments' models
+                s["thumb"] = f"/runs/{d.name}/{photos[len(photos) // 2].relative_to(d).as_posix()}" if photos else None
                 items.append(s)
         return sorted(items, key=lambda s: -s["mtime"])
 

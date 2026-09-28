@@ -77,6 +77,53 @@ def _map_pass(db: Path, images: Path, work_dir: Path, name: str, n_images: int, 
     return comps, used, recs, t
 
 
+def _merge(dataset: Path, models: list[dict], pairs: int, timing: dict) -> tuple[list[dict], dict]:
+    """Merge the passes' models that see the same scene (see :mod:`drone3d.fastsfm.merge`) -> (models, info).
+
+    The per-pass models move to ``dataset/sparse_passes``; ``dataset/sparse/N`` become the merged ones.
+    A failure keeps the per-pass models: merging only ever adds to a run.
+    """
+    import shutil
+
+    import pycolmap
+
+    from drone3d.engine import models as engine_models
+    from drone3d.fastsfm.merge import merge_models
+
+    sparse, passes_dir = dataset / "sparse", dataset / "sparse_passes"
+    t0 = time.perf_counter()
+    try:
+        if passes_dir.exists():
+            shutil.rmtree(passes_dir)
+        shutil.copytree(sparse, passes_dir)
+        by_name = {Path(m["path"]).name: m for m in models}
+        with engine_models.gpu_exclusive():
+            out = merge_models([passes_dir / n for n in by_name], dataset / "images", dataset / "sparse_merged", pairs_per_model_pair=pairs)
+    except Exception as exc:  # RoMa missing, out of memory, ...: the per-pass models stand
+        log.warning("merging passes failed (%s); keeping the per-pass models", str(exc)[:200])
+        shutil.rmtree(passes_dir, ignore_errors=True)
+        return models, {"status": "failed", "error": str(exc)[:300]}
+    merged = []
+    shutil.rmtree(sparse)
+    for k, g in enumerate(out["groups"]):
+        dst = sparse / str(k)
+        shutil.move(g["path"], dst)
+        rec = pycolmap.Reconstruction(str(dst))
+        passes: dict[str, int] = {}
+        for name in g["members"]:
+            for p_, n in by_name[name]["passes"].items():
+                passes[p_] = passes.get(p_, 0) + n
+        merged.append({"path": str(dst), "images": int(rec.num_reg_images()), "points": int(rec.num_points3D()),
+                       "mean_reprojection_px": round(float(rec.compute_mean_reprojection_error()), 3),
+                       "mean_track_length": round(float(rec.compute_mean_track_length()), 2),
+                       "passes": passes, "merged_from": g["members"]})  # fmt: skip
+    shutil.rmtree(dataset / "sparse_merged", ignore_errors=True)
+    timing["merge"] = time.perf_counter() - t0
+    info = {"status": "ok", "models_before": len(models), "models_after": len(merged), "edges": out["edges"], "timing": out["timing"]}
+    log.info("sfm: %d pass models merged into %d", len(models), len(merged))
+    return merged, info
+
+
 def run_flow_sfm(
     dataset: Path,
     work_dir: Path,
@@ -89,6 +136,8 @@ def run_flow_sfm(
     hfov_deg: float = 72.0,
     min_images: int = 3,
     map_workers: int = 2,
+    merge: bool = True,
+    merge_pairs: int = 4,
 ) -> dict:
     """Map every pass of ``dataset/images``; models go to ``dataset/sparse/N``, largest first.
 
@@ -168,6 +217,9 @@ def run_flow_sfm(
         registered += n_reg
         err_w += err * n_reg
     _ = pycolmap  # imported for its side effect of failing early when missing
+    merge_info = None
+    if merge and len(models) > 1:
+        models, merge_info = _merge(dataset, models, merge_pairs, timing)
     return {
         "backend": "flow",
         "workspace": str(dataset),
@@ -176,6 +228,7 @@ def run_flow_sfm(
         "mean_reprojection_px": round(err_w / registered, 3) if registered else None,
         "models": models,
         "passes": per_pass,
+        "merge": merge_info,
         "settings": {"long_side": long_side, "span": span, "stride": stride, "max_gap": max_gap, "mapper": mapper},
         "stage_seconds": {k: round(v, 2) for k, v in timing.items()},
         "seconds": round(time.perf_counter() - started, 2),

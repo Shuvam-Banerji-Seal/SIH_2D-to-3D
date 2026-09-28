@@ -302,3 +302,10 @@ h2 select { width: auto; padding: 5px 8px; }
 .rstats b.over { color: var(--red); }
 h2.sect { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
 h2.sect small { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--faint); margin-left: 10px; }
+
+/* model catalog */
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.mcard { background: var(--ink2); border: 1px solid var(--line); border-radius: var(--r2); overflow: hidden; }
+.mcard.main { border-color: #ff9f1c55; }
+.mthumb { position: relative; height: 110px; background: var(--ink3) center / cover no-repeat; }
+.mthumb .pill { position: absolute; left: 8px; top: 8px; background: #0b1118d9; color: var(--text); }

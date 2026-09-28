@@ -996,6 +996,9 @@ def _mean_metric(metrics: dict, key: str) -> float:
     return float("nan") if value is None else float(value)
 
 
+SPLAT_STAGES = ("splat", "depth", "mesh", "render")  # the 3DGS stages, timed apart from the budget
+
+
 def _summary_metrics(run_dir: Path) -> dict[str, Any]:
     """Flatten the headline numbers of every stage into one dictionary."""
     out: dict[str, Any] = {}
@@ -1064,13 +1067,17 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
     }
     if stage_s:
         total = round(sum(stage_s.values()), 1)
+        # the deliverable is the mesh and the point cloud; Gaussian splats (and meshes and renders from them) follow it
+        deliverable = round(sum(v for st, v in stage_s.items() if st not in SPLAT_STAGES), 1)
         budget = round(1.5 * video_s, 1) if video_s else None
         out["processing"] = {
             "seconds": total,
+            "deliverable_seconds": deliverable,
+            "splat_seconds": round(total - deliverable, 1),
             "per_stage_s": stage_s,
             "video_seconds": video_s,
             "budget_seconds": budget,
-            "within_budget": (total <= budget) if budget else None,
+            "within_budget": (deliverable <= budget) if budget else None,
         }
     geo = _read_json(run_dir / "georef" / "result.json")
     if geo and geo.get("models"):

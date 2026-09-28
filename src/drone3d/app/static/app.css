@@ -291,3 +291,14 @@ h2 select { width: auto; padding: 5px 8px; }
 .compare .handle::after { content: "⟷"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--saffron); color: #1a1003; border-radius: 99px; padding: 2px 8px; font-weight: 700; }
 .xp .zoom { position: absolute; right: 12px; top: 56px; display: flex; flex-direction: column; gap: 4px; z-index: 3; }
 .xp .zoom .btn { width: 34px; justify-content: center; padding: 6px 0; font-weight: 700; }
+
+/* runs gallery */
+.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.rcard { background: var(--ink2); border: 1px solid var(--line); border-radius: var(--r2); overflow: hidden; transition: border-color .2s, transform .2s; }
+.rcard:hover { border-color: var(--line2); transform: translateY(-2px); }
+.rthumb { position: relative; height: 150px; background: var(--ink3) center / cover no-repeat; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.rstats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 10px; font-size: 12.5px; }
+.rstats .k { display: block; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.rstats b.over { color: var(--red); }
+h2.sect { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
+h2.sect small { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--faint); margin-left: 10px; }

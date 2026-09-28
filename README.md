@@ -92,6 +92,7 @@ Requires an NVIDIA GPU (tested on A100, driver 610 / CUDA 13.x) and `uv`.
 git clone --recurse-submodules https://github.com/Shuvam-Banerji-Seal/SIH_2D-to-3D
 cd SIH_2D-to-3D
 uv sync --all-extras                       # Python 3.14, torch 2.14 + CUDA 13.2
+tools/setup_third_party.sh                 # RoMa v2 (merges passes) and MoGe (optional prior), from source
 # a static ffmpeg >= 5 with NVDEC is picked up from .tools/ffmpeg (or $DRONE3D_FFMPEG)
 # optional, for FBX: mamba create -p .tools/assimp -c conda-forge assimp && tools/build_meshconv.sh
 uv run drone3d doctor
@@ -228,7 +229,9 @@ src/drone3d/
 ├── pipeline.py, config.py, cli.py
 experiments/            scripts behind every number above and in the paper
 paper/, promo/          LaTeX paper; code-drawn promo film + compositor
-third_party/            spirula-studio, marigold-v2, javascript-animation-skills (submodules)
+third_party/            spirula-studio, marigold-v2, javascript-animation-skills (submodules); RoMaV2,
+                        MoGe (tools/setup_third_party.sh), TRELLIS.2 (tools/setup_trellis2.sh), priors/
+                        (tools/setup_priors.sh, for experiments/prior_bench.py)
 tools/                  dataset download, synthetic control clip, FBX converter, record_ui (console tour)
 ```
 
@@ -250,7 +253,9 @@ boundary.
 This repository is GPL-2.0-only. spirula-studio (GPL-3.0) is used as a separate
 program through its command line; three.js is MIT. **Depth Anything V2 Large,
 the fast profile's default depth prior, is CC-BY-NC-4.0 (non-commercial)**; the
-Small model is Apache-2.0 (`--set dense.mono_model=depth-anything/Depth-Anything-V2-Small-hf`).
+Small model is Apache-2.0 (`--set dense.mono_model=depth-anything/Depth-Anything-V2-Small-hf`),
+and MoGe-3 ViT-L is MIT (`--set dense.mono_model=Ruicheng/moge-3-vitl`: half the
+far-field extrapolation error, about seven times the GPU time).
 Marigold v2 weights are Apache-2.0 on top of Qwen-Image-Edit-2509 (its own
 licence). The optional generated object uses TRELLIS.2 (MIT), RMBG-2.0 (Bria's
 licence, non-commercial) and DINOv3 (Meta's DINOv3 licence); RoMa v2, which merges

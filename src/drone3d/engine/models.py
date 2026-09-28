@@ -38,6 +38,7 @@ __all__ = [
 log = get_logger(__name__)
 GiB = 2**30
 DA_V2_LARGE = "depth-anything/Depth-Anything-V2-Large-hf"
+MOGE_3_VITL = "Ruicheng/moge-3-vitl"
 
 
 class InsufficientMemory(RuntimeError):
@@ -62,10 +63,12 @@ SPECS: dict[str, ModelSpec] = {s.key: s for s in [
               ("keyframes",), "torchvision Raft_Small_Weights.DEFAULT", "BSD-3-Clause"),
     ModelSpec("depth_anything_v2_large", "Depth Anything V2 Large", "monocular depth: fills what flow cannot triangulate",
               3.5, ("dense",), DA_V2_LARGE, "CC-BY-NC-4.0"),
+    ModelSpec("moge_3_vitl", "MoGe-3 ViT-L", "monocular geometry: the fill's prior when dense.mono_model names it",
+              6.6, ("dense",), MOGE_3_VITL, "MIT"),
     ModelSpec("marigold_v2", "Marigold v2 (NF4)", "diffusion depth: supervises the Gaussian splats (accurate profile)",
               15.0, ("depth",), "prs-eth Marigold v2 on Qwen-Image-Edit, 4-bit", "Apache-2.0 / Qwen license"),
 ]}  # fmt: skip
-_MONO_KEYS = {DA_V2_LARGE: "depth_anything_v2_large"}
+_MONO_KEYS = {DA_V2_LARGE: "depth_anything_v2_large", MOGE_3_VITL: "moge_3_vitl"}
 
 
 def _loaders(device: str) -> dict[str, Callable[[], Any]]:
@@ -82,13 +85,18 @@ def _loaders(device: str) -> dict[str, Callable[[], Any]]:
 
         return load_mono(DA_V2_LARGE, device)
 
+    def moge_net() -> Any:
+        from drone3d.fastsfm.mono import load_moge
+
+        return load_moge(MOGE_3_VITL, device)
+
     def marigold_net() -> Any:
         from drone3d.depth.marigold import MarigoldDepth
 
         return MarigoldDepth(quantization="4bit", device=device)
 
     return {"raft_large": raft_net("raft_large"), "raft_small": raft_net("raft_small"),
-            "depth_anything_v2_large": mono_net, "marigold_v2": marigold_net}  # fmt: skip
+            "depth_anything_v2_large": mono_net, "moge_3_vitl": moge_net, "marigold_v2": marigold_net}  # fmt: skip
 
 
 @dataclass
@@ -261,14 +269,12 @@ class ModelCache:
             return self._wrappers[k]
 
     def mono(self, model: str, *, long_side: int, batch: int) -> Any:
-        from drone3d.fastsfm.mono import MonoDepth
+        from drone3d.fastsfm.mono import mono_depth
 
         key = _MONO_KEYS.get(model)
         if key is None:  # another checkpoint: load it uncached rather than evict the warm one
-            return MonoDepth(model, device=self.device, long_side=long_side, batch=batch)
-        return MonoDepth(
-            model, device=self.device, long_side=long_side, batch=batch, net=self._use(key)
-        )
+            return mono_depth(model, device=self.device, long_side=long_side, batch=batch)
+        return mono_depth(model, device=self.device, long_side=long_side, batch=batch, net=self._use(key))
 
     def marigold(self) -> Any:
         return self._use("marigold_v2")
@@ -320,9 +326,9 @@ def raft(model: str = "raft_large", *, batch: int = 32, iters: int = 12) -> Any:
 def mono(model: str = DA_V2_LARGE, *, long_side: int = 700, batch: int = 16) -> Any:
     """A :class:`~drone3d.fastsfm.mono.MonoDepth`, warm when the engine holds one."""
     if _ACTIVE is None:
-        from drone3d.fastsfm.mono import MonoDepth
+        from drone3d.fastsfm.mono import mono_depth
 
-        return MonoDepth(model, long_side=long_side, batch=batch)
+        return mono_depth(model, long_side=long_side, batch=batch)
     return _ACTIVE.mono(model, long_side=long_side, batch=batch)
 
 

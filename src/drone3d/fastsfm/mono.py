@@ -18,7 +18,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-__all__ = ["MonoDepth", "calibrate_fill", "load_mono"]
+__all__ = ["MoGeDepth", "MonoDepth", "calibrate_fill", "load_mono", "load_moge", "mono_depth"]
+
+MOGE_3_VITL = "Ruicheng/moge-3-vitl"
 
 _MEAN = torch.tensor([0.485, 0.456, 0.406])
 _STD = torch.tensor([0.229, 0.224, 0.225])
@@ -32,6 +34,53 @@ def load_mono(model: str = "depth-anything/Depth-Anything-V2-Large-hf", device: 
     return AutoModelForDepthEstimation.from_pretrained(model, dtype=torch.float16).to(device).eval()
 
 
+def load_moge(model: str = MOGE_3_VITL, device: str = "cuda") -> torch.nn.Module:
+    """MoGe (``third_party/MoGe``, MIT): a v3 checkpoint when the name says so, else v2."""
+    from moge.model import import_model_class_by_version
+
+    os.environ.setdefault("HF_HUB_CACHE", "/store/huggingface")
+    return import_model_class_by_version("v3" if "moge-3" in model else "v2").from_pretrained(model).to(device).eval()
+
+
+class MoGeDepth:
+    """Batched MoGe -> the same relative disparity :class:`MonoDepth` gives (1 / depth; 0 where it masks sky).
+
+    MoGe predicts an affine-invariant point map, so its depth is right up to one scale per image, where
+    Depth Anything V2's disparity is affine-invariant and bends at landscape scale. Held out on 103 keyframes
+    of four videos, calibrated on the nearer 80 % of triangulated pixels (experiments/prior_bench.py), MoGe-3
+    ViT-L missed the farthest 20 % by a median 5.9 % against Depth Anything V2 Large's 11.4 %. It takes the
+    keyframes' horizontal field of view when given (the SfM camera's) instead of estimating it.
+    """
+
+    def __init__(self, model: str = MOGE_3_VITL, *, device: str = "cuda", batch: int = 8, resolution_level: int = 0,
+                 net: torch.nn.Module | None = None) -> None:  # fmt: skip
+        self.net = net if net is not None else load_moge(model, device)
+        self.device, self.batch, self.level, self.name = torch.device(device), batch, resolution_level, model
+        # sky is where MoGe's own mask says so (disparity exactly 0): a horizon 200x farther than the nearest
+        # roof is valid depth here, which Depth Anything's relative threshold would call sky
+        self.sky_rel = 0.0
+
+    @torch.inference_mode()
+    def __call__(self, frames: torch.Tensor, fov_x: torch.Tensor | None = None) -> torch.Tensor:
+        """uint8 ``[B, H, W, 3]`` (and optionally ``[B]`` horizontal FoV in degrees) -> float32 ``[B, H, W]``."""
+        b, h, w, _ = frames.shape
+        out = torch.zeros(b, h, w, device=self.device)
+        for i in range(0, b, self.batch):
+            x = frames[i : i + self.batch].to(self.device).permute(0, 3, 1, 2).float() / 255.0
+            fov = None if fov_x is None else torch.as_tensor(fov_x[i : i + len(x)], dtype=torch.float32, device=self.device)
+            d = self.net.infer(x, resolution_level=self.level, use_fp16=True, fov_x=fov)["depth"].float()
+            ok = torch.isfinite(d) & (d > 0)
+            out[i : i + len(x)] = torch.where(ok, 1.0 / d.clamp_min(1e-6), torch.zeros_like(d))
+        return out
+
+
+def mono_depth(model: str, *, device: str = "cuda", long_side: int = 700, batch: int = 16, net=None):  # type: ignore[no-untyped-def]
+    """The wrapper for ``model``: MoGe for ``Ruicheng/moge-*`` checkpoints, a transformers depth model otherwise."""
+    if "moge" in model.lower():
+        return MoGeDepth(model, device=device, batch=min(batch, 8), net=net)
+    return MonoDepth(model, device=device, long_side=long_side, batch=batch, net=net)
+
+
 class MonoDepth:
     """Batched Depth Anything V2 (transformers) in fp16 -> relative disparity at the frames' size."""
 
@@ -39,10 +88,11 @@ class MonoDepth:
                  long_side: int = 700, batch: int = 16, net: torch.nn.Module | None = None) -> None:  # fmt: skip
         self.net = net if net is not None else load_mono(model, device)
         self.device, self.long_side, self.batch, self.name = torch.device(device), long_side, batch, model
+        self.sky_rel = 0.005  # sky: disparity under this x the image's maximum (V2 returns exactly 0 there)
 
     @torch.inference_mode()
-    def __call__(self, frames: torch.Tensor) -> torch.Tensor:
-        """uint8 ``[B, H, W, 3]`` -> float32 ``[B, H, W]`` relative disparity (larger = nearer)."""
+    def __call__(self, frames: torch.Tensor, fov_x: torch.Tensor | None = None) -> torch.Tensor:
+        """uint8 ``[B, H, W, 3]`` -> float32 ``[B, H, W]`` relative disparity (larger = nearer); ``fov_x`` unused."""
         b, h, w, _ = frames.shape
         s = self.long_side / max(h, w)
         th, tw = max(14, round(h * s / 14) * 14), max(14, round(w * s / 14) * 14)
@@ -73,7 +123,7 @@ def calibrate_fill(disparity: np.ndarray, tri_depth: np.ndarray, *, far_factor: 
     """
     from drone3d.depth.align import MonotoneMap, fit_log_affine
 
-    sky = disparity <= sky_rel * max(float(disparity.max()), 1e-6)
+    sky = disparity <= sky_rel * max(float(disparity.max()), 1e-6) if sky_rel > 0 else disparity <= 0
     tri_depth = np.where(sky, 0.0, tri_depth).astype(np.float32)
     p = -np.log(np.maximum(disparity, 1e-6))  # increases with distance
     have = tri_depth > 0

@@ -38,6 +38,11 @@ def _patch_raft(net: torch.nn.Module) -> None:
     12 refinement iterations (a synchronous copy every time), divides by a CPU
     tensor, and upsamples the flow after every iteration although inference
     keeps only the last. Same arithmetic, minus those.
+
+    The correlation pyramid is a local of each call: torchvision keeps it on the
+    shared ``corr_block`` module, so two engine slots running the one network
+    at once read each other's pyramid (a grid_sample batch mismatch, 13 of 15
+    videos failed on a two-slot engine).
     """
     import types
 
@@ -46,7 +51,21 @@ def _patch_raft(net: torch.nn.Module) -> None:
     corr = net.corr_block
     side = 2 * corr.radius + 1
 
-    def index_pyramid(self, centroids_coords):  # type: ignore[no-untyped-def]
+    def build_pyramid(self, fmap1, fmap2):  # type: ignore[no-untyped-def]  # returned, never stored on the module
+        min_fmap_size = 2 * (2 ** (self.num_levels - 1))
+        if any(d < min_fmap_size for d in fmap1.shape[-2:]):  # as torchvision: smaller maps pool to nothing
+            raise ValueError(f"feature maps of {tuple(fmap1.shape[-2:])} are too small for the correlation pyramid "
+                             f"(at least {min_fmap_size}; images of at least {8 * min_fmap_size} px)")
+        volume = self._compute_corr_volume(fmap1, fmap2)
+        b, h, w, c, _, _ = volume.shape
+        volume = volume.reshape(b * h * w, c, h, w)
+        pyramid = [volume]
+        for _ in range(self.num_levels - 1):
+            volume = F.avg_pool2d(volume, kernel_size=2, stride=2)
+            pyramid.append(volume)
+        return pyramid
+
+    def index_pyramid(self, centroids_coords, pyramid):  # type: ignore[no-untyped-def]
         delta = getattr(self, "_ss_delta", None)
         if (
             delta is None
@@ -65,7 +84,7 @@ def _patch_raft(net: torch.nn.Module) -> None:
         b, _, h, w = centroids_coords.shape
         coords = centroids_coords.permute(0, 2, 3, 1).reshape(b * h * w, 1, 1, 2)
         levels = []
-        for volume in self.corr_pyramid:
+        for volume in pyramid:
             levels.append(
                 raft_mod.grid_sample(
                     volume, coords + delta, align_corners=True, mode="bilinear"
@@ -84,7 +103,7 @@ def _patch_raft(net: torch.nn.Module) -> None:
         fmap1, fmap2 = torch.chunk(
             self.feature_encoder(torch.cat([image1, image2], dim=0)), 2, dim=0
         )
-        self.corr_block.build_pyramid(fmap1, fmap2)
+        pyramid = self.corr_block.build_pyramid(fmap1, fmap2)
         context_out = self.context_encoder(image1)
         hs = self.update_block.hidden_state_size
         hidden, context = torch.split(context_out, [hs, context_out.shape[1] - hs], dim=1)
@@ -94,12 +113,13 @@ def _patch_raft(net: torch.nn.Module) -> None:
         )  # fp32, as stock
         coords1 = coords0.clone()
         for _ in range(num_flow_updates):
-            feats = self.corr_block.index_pyramid(centroids_coords=coords1)
+            feats = self.corr_block.index_pyramid(coords1, pyramid)
             hidden, delta_flow = self.update_block(hidden, context, feats, coords1 - coords0)
             coords1 = coords1 + delta_flow
         up_mask = None if self.mask_predictor is None else self.mask_predictor(hidden)
         return [raft_mod.upsample_flow(flow=coords1 - coords0, up_mask=up_mask)]
 
+    corr.build_pyramid = types.MethodType(build_pyramid, corr)
     corr.index_pyramid = types.MethodType(index_pyramid, corr)
     corr._compute_corr_volume = types.MethodType(compute_corr_volume, corr)
     net.forward = types.MethodType(forward, net)
@@ -191,7 +211,7 @@ class RaftFlow:
                     self._eager(sa, sb)
             torch.cuda.current_stream(self.device).wait_stream(side)
             graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph):
+            with torch.cuda.graph(graph, capture_error_mode="thread_local"):  # another slot may be running kernels
                 out = self._eager(sa, sb)
             self._graphs[key] = (graph, sa, sb, out)
         return self._graphs[key]

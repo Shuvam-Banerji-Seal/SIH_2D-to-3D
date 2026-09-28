@@ -9,17 +9,13 @@ Prints the Markdown; ``--write`` replaces the README between ``<!-- measured:sta
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
+from names import video_name as title
+
 ROOT = Path(__file__).resolve().parents[1]
 FIG = ROOT / "paper" / "figures"
-
-
-def title(video: str) -> str:
-    name = re.split(r"[｜|：:,]| - |\[|\(", video)[0].strip()
-    return re.sub(r"\b(4K|4k|HD|Drone|Video|Cinematic)\b.*$", "", name).strip() or name
 
 
 def section() -> str:

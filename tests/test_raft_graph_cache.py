@@ -25,3 +25,34 @@ def test_least_recently_used_graph_is_dropped() -> None:
     assert list(f._graphs) == [(8, 16), (8, 8)]
     ref = (frames[(8, 8)].permute(0, 3, 1, 2).float() / 127.5 - 1.0 + 1.0)[:, :2] * 0.5
     assert torch.allclose(out, ref, atol=1e-2)
+
+
+def test_two_threads_share_one_raft_network_without_mixing_their_calls() -> None:
+    import threading
+
+    from drone3d.keyframes.flow import load_raft
+
+    try:
+        net = load_raft("raft_small", "cuda")
+    except Exception as exc:  # no cached weights and no network
+        pytest.skip(f"RAFT weights unavailable: {exc}")
+    shapes = [(128, 192), (160, 256)]  # RAFT needs 128 px at least
+    frames = {hw: (torch.randint(0, 255, (4, *hw, 3), dtype=torch.uint8, device="cuda"),) * 1 for hw in shapes}
+    pairs = {hw: (f[0], torch.roll(f[0], 2, dims=2)) for hw, f in frames.items()}
+    alone = {hw: RaftFlow("raft_small", batch=4, iters=4, net=net, cuda_graph=False)(*pairs[hw]) for hw in shapes}
+    out, errors = {}, []
+
+    def work(hw):  # type: ignore[no-untyped-def]
+        try:
+            f = RaftFlow("raft_small", batch=4, iters=4, net=net, cuda_graph=False)
+            for _ in range(5):  # interleave many calls
+                out[hw] = f(*pairs[hw])
+        except Exception as exc:
+            errors.append(exc)
+
+    ts = [threading.Thread(target=work, args=(hw,)) for hw in shapes]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert not errors, errors
+    for hw in shapes:
+        torch.testing.assert_close(out[hw], alone[hw], atol=1e-3, rtol=1e-3)

@@ -176,7 +176,8 @@ TIE_MIN_POINTS = 60  # ... if it has at least this many
 
 
 def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int, gaps: tuple[int, ...],
-                   keyframe_stride: int, min_angle_deg: float, rel_tol: float, refine: str = "none") -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+                   keyframe_stride: int, min_angle_deg: float, rel_tol: float, refine: str = "none",
+                   far_factor: float = 3.0) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Per-reference depth maps of one model: flow triangulation, then the monocular fill.
 
     Returns a dict with ``ims, cams, frames`` (uint8 on the GPU), ``depths``, ``sky``,
@@ -233,7 +234,8 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
         sky = disp <= 0.005 * np.maximum(disp.reshape(len(disp), -1).max(1), 1e-6)[:, None, None]
         infos = []
         for i in range(n):
-            depths[i], inf = calibrate_fill(disp[i], depths[i], min_samples=TIE_MIN_POINTS if i in tie_views else 400)
+            depths[i], inf = calibrate_fill(disp[i], depths[i], far_factor=far_factor,
+                                            min_samples=TIE_MIN_POINTS if i in tie_views else 400)
             infos.append(inf)
         filled = [x for x in infos if x["status"] == "filled"]
         fill_info = {"model": mono.name, "filled_images": len(filled),
@@ -282,12 +284,12 @@ def extraction_weight(min_views: str | int, depth_maps: int) -> float:
 def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, long_side: int,
                  gaps: tuple[int, ...], keyframe_stride: int, min_angle_deg: float, rel_tol: float,
                  voxel_px: float, trunc_voxels: float = 12.0, tsdf_memory_gb: float = 8.0, fusion=None,
-                 refine: str = "none", min_views: str | int = "auto") -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
+                 refine: str = "none", min_views: str | int = "auto", far_factor: float = 3.0) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
     """Depth, fusion and mesh for one SfM model -> its result record."""
     import open3d as o3d
 
     r = compute_depths(model_dir, images, raft, mono, long_side=long_side, gaps=gaps, keyframe_stride=keyframe_stride,
-                       min_angle_deg=min_angle_deg, rel_tol=rel_tol, refine=refine)  # fmt: skip
+                       min_angle_deg=min_angle_deg, rel_tol=rel_tol, refine=refine, far_factor=far_factor)  # fmt: skip
     cams, frames, depths, sky, timing = r["cams"], r["frames"], r["depths"], r["sky"], r["timing"]
     used_stride, tri_cov, fill_info = r["used_stride"], r["tri_cov"], r["fill_info"]
     n, h, w, _ = frames.shape
@@ -366,6 +368,7 @@ def run_dense(
     isolate_fusion: str = "auto",
     refine: str = "none",
     min_views: str | int = "auto",
+    far_factor: float = 3.0,
 ) -> dict:
     import torch
 
@@ -389,7 +392,7 @@ def run_dense(
                                         keyframe_stride=keyframe_stride, min_angle_deg=min_angle_deg, rel_tol=rel_tol,
                                         voxel_px=voxel_px, trunc_voxels=trunc_voxels,
                                         tsdf_memory_gb=tsdf_memory_gb, fusion=fusion, refine=refine,
-                                        min_views=min_views))  # fmt: skip
+                                        min_views=min_views, far_factor=far_factor))  # fmt: skip
         except RuntimeError as exc:  # a CUDA / Open3D failure on one model must not lose the others (FusionError too)
             log.warning("dense %s failed: %s", model_dir.name, str(exc)[:300])
             results.append({"model": str(model_dir), "status": "failed", "error": str(exc)[:300]})

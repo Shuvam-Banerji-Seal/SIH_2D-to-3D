@@ -431,6 +431,30 @@ def system_section(macros: dict[str, str]) -> list[str]:
         ok = max(r["active"] for r in tl["active_block_probe"] if r["ok"])
         bad = min(r["active"] for r in tl["active_block_probe"] if not r["ok"])
         macros.update(TsdfOkBlocks=f"{ok:,}".replace(",", "{,}"), TsdfBadBlocks=f"{bad:,}".replace(",", "{,}"))
+    rb, spp, thr = load(FIG / "raft_batch.json"), load(FIG / "splat_parallel.json"), load(FIG / "engine_throughput.json")
+    if rb and spp:
+        ok = [r for r in rb if "flows_per_s" in r]
+        one = next(r for r in spp if r["parallel"] == 1)
+        more = [r for r in spp if r["parallel"] > 1]
+        text = ("\\paragraph{Using the whole GPU.} On an idle A100 RAFT is compute-bound, not launch-bound: "
+                f"{min(r['flows_per_s'] for r in ok):.0f}--{max(r['flows_per_s'] for r in ok):.0f} flows per second at "
+                f"{ok[0]['size'][0]}$\\times${ok[0]['size'][1]} for batches of "
+                f"{min(r['batch'] for r in ok)} to {max(r['batch'] for r in ok)} pairs (and cuDNN refuses 128), so the "
+                "flow batch is not raised when memory allows. Training several splat models at once is slower than one "
+                f"after another --- Jal Mahal's {one['models']} models took {one['wall_s']:.0f}\\,s in sequence and "
+                + ", ".join(f"{r['wall_s']:.0f}\\,s {r['parallel']} at a time" for r in more)
+                + " --- because Vulkan contexts time-slice the GPU; one trainer already keeps it busy.")
+        if thr:
+            t2 = [r for r in thr if r["slots"] > 1 and r.get("one_slot_sum_s")]
+            if t2:
+                r = max(t2, key=lambda r: r["slots"])
+                macros.update(ThroughputSlots=str(r["slots"]), ThroughputGain=f"{r['one_slot_sum_s'] / r['wall_s']:.2f}")
+                text += (f" What a single video leaves idle --- mapping and export run on the CPU --- another fills: with "
+                         f"{r['slots']} engine slots the {r['videos']} sample videos' fast profile took {r['wall_s']:.0f}\\,s "
+                         f"of wall time against {r['one_slot_sum_s']:.0f}\\,s one at a time ({macros['ThroughputGain']}$\\times$ "
+                         f"the throughput, {r['video_s'] / r['wall_s']:.1f}\\,s of video per second), at the price of each "
+                         "video's own time; the benchmark above therefore runs one job at a time.")
+        parts.append(text + "\n")
     lv = load(FIG / "live_qutub.json")
     if lv:
         done = [g for g in lv["segments"] if g["status"] == "done"]
@@ -463,7 +487,7 @@ def main() -> None:
         "\\paragraph{Setup.} One NVIDIA A100 80\\,GB PCIe and 24 CPU cores; the fast profile's timings are taken on the "
         "warm engine running one job at a time. PyTorch "
         f"{tex(bench.get('torch', '2.14'))} with CUDA {tex(bench.get('cuda', '13.2'))}, Python 3.14, "
-        "ffmpeg 9.0 (NVDEC/NVENC), spirula-studio 2026.9.24 (Vulkan backend). "
+        "ffmpeg 9.0 (NVDEC; the A100 has no video encoder), spirula-studio 2026.9.24 (Vulkan backend). "
         "Data: fifteen public drone videos (Table~\\ref{tab:data}); they carry no flight logs.\n"
     )
     parts.append(

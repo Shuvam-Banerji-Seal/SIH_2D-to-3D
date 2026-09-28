@@ -112,6 +112,7 @@ class ModelCache:
         # kernels fails ("unjoined work", "illegal state") and a failed capture left state behind that a later
         # kernel tripped over (a device-side assert on a two-slot engine). Graphs gain 1-27 % on one slot.
         self.cuda_graphs = not concurrent
+        self.concurrent = concurrent
         self._lock = threading.RLock()
         self._entries = {k: _Entry() for k in SPECS}
         self._wrappers: dict[tuple, Any] = {}
@@ -274,6 +275,27 @@ class ModelCache:
 
 
 _ACTIVE: ModelCache | None = None
+
+
+_GPU = threading.RLock()
+
+
+@contextlib.contextmanager
+def gpu_exclusive() -> Iterator[None]:
+    """On a multi-slot engine, one slot at a time runs GPU work; elsewhere a no-op.
+
+    Two slots on the GPU at once kept meeting state shared inside libraries -- RAFT's
+    correlation pyramid, nvJPEG's global coder, CUDA-graph capture, batched cuSOLVER --
+    and a device-side assert still followed after each was fixed. Serialising the GPU
+    phases keeps what a second slot is for: one run's CPU phases (mapping, writing
+    files, decoding) overlap the other's GPU phases.
+    """
+    cache = _ACTIVE
+    if cache is None or not getattr(cache, "concurrent", False):
+        yield
+        return
+    with _GPU:
+        yield
 
 
 def activate(cache: ModelCache | None) -> None:

@@ -124,14 +124,15 @@ def run_flow_sfm(
         if len(paths) < min_images:
             per_pass.append({"pass": folder.name, "keyframes": len(paths), "status": "too-few-keyframes"})
             continue
-        t0 = time.perf_counter()
-        frames, full = load_frames(paths, long_side)
-        timing["load"] += time.perf_counter() - t0
-        t0 = time.perf_counter()
-        tracks = _to_full(build_tracks(frames, raft, span=span, stride=stride), full)
-        torch.cuda.synchronize()
-        timing["tracks"] += time.perf_counter() - t0
-        del frames
+        with models.gpu_exclusive():  # a multi-slot engine: the tracking holds the GPU, the mapping below does not
+            t0 = time.perf_counter()
+            frames, full = load_frames(paths, long_side)
+            timing["load"] += time.perf_counter() - t0
+            t0 = time.perf_counter()
+            tracks = _to_full(build_tracks(frames, raft, span=span, stride=stride), full)
+            torch.cuda.synchronize()
+            timing["tracks"] += time.perf_counter() - t0
+            del frames
         names = [str(p.relative_to(images)) for p in paths]
         db = work_dir / f"{folder.name}.db"
         t0 = time.perf_counter()

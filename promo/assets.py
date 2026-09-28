@@ -140,6 +140,72 @@ def orbit(export_dir: Path, scene_model: dict, out: Path, *, seconds: float = 10
 
 
 STAGGER = 0.7  # seconds between two passes joining the merge animation (the film's shot times its counter to it)
+def orbit_completed(run: Path, out: Path, *, seconds: float = 4.0, size=(1920, 1080), turns: float = 0.5,
+                    elev_deg: float = 24.0, keep: float = 1.6, dist: float = 2.4, lift: float = 0.45) -> Path:  # fmt: skip
+    """``orbit`` of the measured model with its placed generated object (drone3d.generate): the nearer surface
+    wins, so what was measured shows, and the sides the flight never saw come from the generated object."""
+    import shutil
+
+    import cv2
+    import open3d as o3d
+    import open3d.core as o3c
+    import trimesh
+
+    sm = json.loads((run / "export" / "scene.json").read_text())["models"][0]
+    c, r = np.asarray(sm["focus"]["center"]), float(sm["focus"]["radius"])
+
+    def load(path: Path, yup: bool):  # type: ignore[no-untyped-def]
+        m = trimesh.load(path, force="mesh", process=False)
+        v = np.asarray(m.vertices, np.float64)
+        if yup:
+            v = v @ np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float).T
+        f = np.asarray(m.faces)
+        mat = m.visual.material
+        img = getattr(mat, "baseColorTexture", None) or getattr(mat, "image", None)
+        return v, f, np.asarray(m.visual.uv)[f], np.asarray(img.convert("RGB"))
+
+    meas = load(run / "export" / "model_0" / "mesh_textured.obj", False)
+    gen = load(run / "export" / "generated" / "object_aligned.glb", True)
+    cen = meas[0][meas[1]].mean(1)
+    k = (np.abs(cen[:, 0] - c[0]) < keep * r) & (np.abs(cen[:, 1] - c[1]) < keep * r)
+    meas = (meas[0], meas[1][k], meas[2][k], meas[3])
+    scenes = []
+    for v, f, _, _ in (meas, gen):
+        sc = o3d.t.geometry.RaycastingScene()
+        sc.add_triangles(o3c.Tensor(v.astype(np.float32)), o3c.Tensor(f.astype(np.uint32)))
+        scenes.append(sc)
+    ground = float(np.percentile(meas[0][np.unique(meas[1])][:, 2], 20))
+    target = np.array([c[0], c[1], ground + lift * r])
+    w, h = size
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    tmp = out.parent / (out.stem + "_frames")
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    n = int(seconds * 30)
+    a0 = np.arctan2(*(np.asarray(sm["view"]["eye"])[1::-1] - c[1::-1]))
+    for i in range(n):
+        a = a0 + 2 * np.pi * turns * i / max(n - 1, 1)
+        eye = target + dist * r * np.array([np.cos(a) * np.cos(np.radians(elev_deg)), np.sin(a) * np.cos(np.radians(elev_deg)),
+                                             np.sin(np.radians(elev_deg))])  # fmt: skip
+        d = np.stack([(xs + 0.5 - w / 2) / (0.9 * w), (ys + 0.5 - h / 2) / (0.9 * w), np.ones_like(xs)], -1).reshape(-1, 3) @ _look(eye, target)
+        rays = o3c.Tensor(np.ascontiguousarray(np.concatenate([np.broadcast_to(eye.astype(np.float32), d.shape), d.astype(np.float32)], 1)))
+        ans = [sc.cast_rays(rays) for sc in scenes]
+        ts = np.stack([x["t_hit"].numpy() for x in ans])
+        best = np.argmin(np.where(np.isfinite(ts), ts, np.inf), 0)
+        img = np.tile(np.array([11, 29, 51], np.uint8), (h * w, 1))
+        for j, (x, (_, _, uv, alb)) in enumerate(zip(ans, (meas, gen))):
+            hit = np.isfinite(ts[j]) & (best == j)
+            p = x["primitive_ids"].numpy()[hit]
+            b = x["primitive_uvs"].numpy()[hit]
+            tuv = (1 - b[:, :1] - b[:, 1:]) * uv[p, 0] + b[:, :1] * uv[p, 1] + b[:, 1:] * uv[p, 2]
+            ah, aw = alb.shape[:2]
+            img[hit] = alb[np.clip(((1 - tuv[:, 1]) * ah).astype(int), 0, ah - 1), np.clip((tuv[:, 0] * aw).astype(int), 0, aw - 1)]
+        cv2.imwrite(str(tmp / f"{i:05d}.jpg"), cv2.cvtColor(img.reshape(h, w, 3), cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92])
+    _frames_to_mp4(tmp, out)
+    shutil.rmtree(tmp)
+    return out
+
+
 PASS_COLOURS = [(255, 153, 51), (90, 209, 255), (63, 185, 80), (242, 200, 90), (200, 120, 255), (255, 110, 110),
                 (120, 230, 210), (240, 240, 240)]  # fmt: skip
 

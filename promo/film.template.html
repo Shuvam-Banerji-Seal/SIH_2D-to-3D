@@ -75,8 +75,8 @@ const SLOTS = [
   { id: 'depth', t0: T(9).from + b(3), t1: T(9).to, x: 900, y: 170, w: 900, h: 506 },
   { id: 'splat_inset', t0: T(10).from + b(5), t1: T(10).to, x: 1040, y: 214, w: 760, h: 428 },
   { id: 'console', t0: T(12).from + b(0.5), t1: T(12).to, x: 780, y: 150, w: 1040, h: 584 },   // even: yuv420p
-  { id: 'flythrough', t0: T(14).from, t1: T(14).from + 4.5, x: 0, y: 0, w: 1920, h: 1080 },
-  { id: 'new_video', t0: T(14).from + 4.5, t1: T(14).to, x: 0, y: 0, w: 1920, h: 1080 },   // a video it had never seen
+  { id: 'flythrough', t0: T(14).from, t1: T(14).from + 4.5, x: 0, y: 0, w: 1920, h: 960 },   // the band below: its caption
+  { id: 'new_video', t0: T(14).from + 4.5, t1: T(14).to, x: 0, y: 0, w: 1920, h: 960 },   // a video it had never seen
 ];
 
 // ---------- layout registry (scripts/layout-check.mjs) ----------
@@ -387,9 +387,9 @@ const SCENES = {
     caption('Upload, build, explore every layer, download.', t, T(12).from + .8);
   },
   13() { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); },            // break
-  14(t, lt) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); claim('flythrough', 'keep', 0, 0, W, 980);
-    text(`${F('site', '')} · ${F('merge_largest_shots', '—')} shots, one model`, 120, 110, { size: 30, col: WHITE, alpha: prog(lt, .5, 1) * (1 - prog(lt, 3.8, 4.4)), id: 'fly' });
-    text('A video it had never seen · one orbit, one model', 120, 110, { size: 30, col: WHITE, alpha: prog(lt, 4.8, 5.3) * (1 - prog(lt, 7, 7.5)), id: 'fly2' }); },
+  14(t, lt) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); claim('flythrough', 'keep', 0, 0, W, 960);
+    text(`${F('site', '')} · ${F('merge_largest_shots', '—')} shots, one model`, 120, 1015, { size: 30, col: WHITE, alpha: prog(lt, .5, 1) * (1 - prog(lt, 3.8, 4.4)), id: 'fly' });
+    text('A video it had never seen · one orbit; the unseen back generated (TRELLIS.2)', 120, 1015, { size: 30, col: WHITE, alpha: prog(lt, 4.8, 5.3) * (1 - prog(lt, 7, 7.5)), id: 'fly2' }); },
   15(t, lt) {   // recap
     grid(); text('Video → keyframes → poses → one model → depth → textured mesh → map', W / 2, 420, { size: 42, align: 'center', weight: 700, p: prog(lt, 0, 1.2), id: 'recap' });
     text('One pass. One GPU. One world in 3D.', W / 2, 520, { size: 60, align: 'center', weight: 800, col: SAFFRON, p: prog(lt, .6, 1.6), id: 'tag' });

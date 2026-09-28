@@ -116,7 +116,11 @@ class DenseConfig:
     keyframe_stride: int = 1  # depth maps for every N-th keyframe (the TSDF still fuses them all)
     min_angle_deg: float = 0.5  # smallest triangulation angle kept (single-pass keyframes are 0.1-1 deg apart)
     rel_tol: float = 0.05  # neighbour depths must agree within this fraction to be fused
-    mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf"  # null: triangulated depth only
+    # The fill's prior (null: triangulated depth only). "Ruicheng/moge-3-vitl" (MIT; third_party/MoGe) extrapolates
+    # to held-out far depth with 5.9 % median error against 11.4 % for this one and fits its views 2x better
+    # (Jal Mahal: 3.0 against 6.6 %), but costs ~7x the GPU time (~190 ms a frame against ~27) and leaves the far
+    # field it places beyond the far cut empty (Jal Mahal's models: -5 to +4 points of completeness).
+    mono_model: str | None = "depth-anything/Depth-Anything-V2-Large-hf"
     # TSDF: the truncation band drives completeness. Jal Mahal's two largest models, band 4 -> 12
     # voxels: completeness 0.47 -> 0.80 and 0.75 -> 0.91 (depth maps cover all non-sky pixels, but
     # neighbouring views disagree slightly and a narrow band lets them cancel), median depth error

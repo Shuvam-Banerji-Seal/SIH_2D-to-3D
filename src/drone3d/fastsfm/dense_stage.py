@@ -11,6 +11,7 @@ depth maps are integrated in an Open3D GPU TSDF. Writes ``mesh.ply`` and
 
 from __future__ import annotations
 
+import math
 import time
 from pathlib import Path
 
@@ -230,11 +231,14 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
     fill_info, sky = None, None
     if mono is not None:
         t0 = time.perf_counter()
-        disp = mono(frames).cpu().numpy()
-        sky = disp <= 0.005 * np.maximum(disp.reshape(len(disp), -1).max(1), 1e-6)[:, None, None]
+        fov = torch.tensor([2 * math.degrees(math.atan(w / (2 * c.f))) for c in cams])  # MoGe takes the SfM camera's
+        disp = mono(frames, fov_x=fov).cpu().numpy()
+        sky_rel = getattr(mono, "sky_rel", 0.005)
+        top = np.maximum(disp.reshape(len(disp), -1).max(1), 1e-6)[:, None, None]
+        sky = disp <= sky_rel * top if sky_rel > 0 else disp <= 0
         infos = []
         for i in range(n):
-            depths[i], inf = calibrate_fill(disp[i], depths[i], far_factor=far_factor,
+            depths[i], inf = calibrate_fill(disp[i], depths[i], far_factor=far_factor, sky_rel=sky_rel,
                                             min_samples=TIE_MIN_POINTS if i in tie_views else 400)
             infos.append(inf)
         filled = [x for x in infos if x["status"] == "filled"]

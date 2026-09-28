@@ -1,10 +1,12 @@
 """Which depth prior predicts the geometry a drone pass measures? Held-out error against flow-triangulated depth.
 
-    <priors-venv>/bin/python experiments/prior_bench.py [model ...]   (reads outputs/experiments/prior_ref.npz from
+    third_party/priors/{da3,moge}/.venv/bin/python experiments/prior_bench.py [model ...]   (tools/setup_priors.sh; reads
+                                                                       outputs/experiments/prior_ref.npz from
                                                                        experiments/prior_dump.py; writes paper/figures/prior_bench.json)
 
-Each prior's per-keyframe prediction is calibrated to the triangulated depth exactly as the fill needs it -- a
-robust log-affine fit of log depth -- on one part of the triangulated pixels and scored on the rest:
+Each prior's per-keyframe prediction is calibrated to the triangulated depth on one part of the triangulated pixels
+and scored on the rest, two ways: a robust log-affine fit of log depth, and the fill's own calibration (the
+monotone map of drone3d.depth.align, which bends where an affine-invariant disparity is not affine in log depth):
 
 - ``random``: half of the pixels calibrate, the other half score (how well the prior's shape matches);
 - ``far``: the nearest 80 % calibrate, the farthest 20 % score (how it extrapolates, which is what the fill does).
@@ -24,6 +26,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))  # drone3d.depth.align: numpy (and optional torch) only
 
 
 # ----------------------------------------------------------------------------- priors: image (PIL) -> log depth
@@ -106,14 +109,19 @@ def _fit(f: np.ndarray, lz: np.ndarray, iters: int = 5) -> tuple[float, float]:
 def _score(f: np.ndarray, tri: np.ndarray, sky: np.ndarray, rng: np.random.Generator) -> dict:
     ok = (tri > 0) & ~sky & np.isfinite(f)
     ff, z = f[ok].astype(np.float64), tri[ok].astype(np.float64)
+    from drone3d.depth.align import MonotoneMap
+
     out = {}
     cal = rng.random(len(z)) < 0.5  # random split
-    a, b = _fit(ff[cal], np.log(z[cal]))
-    out["random"] = float(np.median(np.abs(np.exp(a * ff[~cal] + b) - z[~cal]) / z[~cal]))
-    cut = np.quantile(z, 0.8)  # extrapolation split
-    near = z <= cut
-    a, b = _fit(ff[near], np.log(z[near]))
-    out["far"] = float(np.median(np.abs(np.exp(a * ff[~near] + b) - z[~near]) / z[~near]))
+    near = z <= np.quantile(z, 0.8)  # extrapolation split: the nearest 80 % calibrate
+    for split, fit in (("random", cal), ("far", near)):
+        a, b = _fit(ff[fit], np.log(z[fit]))
+        rel = lambda lz: float(np.median(np.abs(np.exp(lz) - z[~fit]) / z[~fit]))  # noqa: E731
+        out[split] = rel(a * ff[~fit] + b)
+        try:  # the fill's calibration, given the prior's robust slope as it is in drone3d.fastsfm.mono
+            out[f"{split}_monotone"] = rel(MonotoneMap(ff[fit], z[fit], slope=a)(ff[~fit])) if a > 0 else float("nan")
+        except ValueError:
+            out[f"{split}_monotone"] = float("nan")
     return out
 
 
@@ -140,6 +148,8 @@ def main() -> None:
             per.append({"key": item["key"], **{k: round(v, 4) for k, v in s.items()}})
         row = {"prior": name, "keyframes": len(per), "random_median": round(float(np.median([p["random"] for p in per])), 4),
                "far_median": round(float(np.median([p["far"] for p in per])), 4),
+               "random_monotone_median": round(float(np.nanmedian([p["random_monotone"] for p in per])), 4),
+               "far_monotone_median": round(float(np.nanmedian([p["far_monotone"] for p in per])), 4),
                "seconds_per_image": round(float(np.median(secs[1:] or secs)), 3), "per_keyframe": per}  # fmt: skip
         rows.append(row)
         print({k: v for k, v in row.items() if k != "per_keyframe"}, flush=True)

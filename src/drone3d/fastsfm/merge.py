@@ -142,7 +142,7 @@ def _calibrated_depth(rec, im, images: Path, mono) -> tuple[np.ndarray, float] |
     rgb = np.asarray(Image.open(images / im.name).convert("RGB").resize((w, round(cam.height * scale))))
     disp = mono(torch.from_numpy(rgb)[None].cuda())[0].cpu().numpy()
     (tie,) = tie_depths(rec, [im], scale, (rgb.shape[1], rgb.shape[0]))
-    depth, info = calibrate_fill(disp, tie, min_samples=60)
+    depth, info = calibrate_fill(disp, tie, min_samples=60, sky_rel=getattr(mono, "sky_rel", 0.005))
     return (depth, scale) if info.get("status") == "filled" else None
 
 

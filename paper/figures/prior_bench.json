@@ -1,0 +1,3662 @@
+[
+ {
+  "prior": "moge-3-vitl",
+  "keyframes": 103,
+  "random_median": 0.0296,
+  "far_median": 0.0589,
+  "random_monotone_median": 0.0244,
+  "far_monotone_median": 0.0681,
+  "seconds_per_image": 0.494,
+  "per_keyframe": [
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000904.jpg",
+    "random": 0.0365,
+    "random_monotone": 0.0278,
+    "far": 0.0619,
+    "far_monotone": 0.0552
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000960.jpg",
+    "random": 0.037,
+    "random_monotone": 0.0299,
+    "far": 0.0828,
+    "far_monotone": 0.0685
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000992.jpg",
+    "random": 0.0334,
+    "random_monotone": 0.025,
+    "far": 0.0832,
+    "far_monotone": 0.0479
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001024.jpg",
+    "random": 0.0353,
+    "random_monotone": 0.0271,
+    "far": 0.0941,
+    "far_monotone": 0.0587
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001056.jpg",
+    "random": 0.0398,
+    "random_monotone": 0.0272,
+    "far": 0.0736,
+    "far_monotone": 0.0553
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001080.jpg",
+    "random": 0.04,
+    "random_monotone": 0.0289,
+    "far": 0.0825,
+    "far_monotone": 0.0641
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001112.jpg",
+    "random": 0.0434,
+    "random_monotone": 0.0285,
+    "far": 0.0792,
+    "far_monotone": 0.0621
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001136.jpg",
+    "random": 0.0352,
+    "random_monotone": 0.0272,
+    "far": 0.0743,
+    "far_monotone": 0.0509
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001184.jpg",
+    "random": 0.0381,
+    "random_monotone": 0.0306,
+    "far": 0.0672,
+    "far_monotone": 0.056
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001240.jpg",
+    "random": 0.0424,
+    "random_monotone": 0.0413,
+    "far": 0.1175,
+    "far_monotone": 0.0723
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001264.jpg",
+    "random": 0.0513,
+    "random_monotone": 0.0431,
+    "far": 0.1432,
+    "far_monotone": 0.1041
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001296.jpg",
+    "random": 0.0512,
+    "random_monotone": 0.0394,
+    "far": 0.0985,
+    "far_monotone": 0.0882
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000536.jpg",
+    "random": 0.2168,
+    "random_monotone": 0.0504,
+    "far": 0.7657,
+    "far_monotone": 0.6149
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000560.jpg",
+    "random": 0.4866,
+    "random_monotone": 0.1304,
+    "far": 0.76,
+    "far_monotone": 0.7158
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000592.jpg",
+    "random": 0.5967,
+    "random_monotone": 0.299,
+    "far": 0.6315,
+    "far_monotone": 0.3818
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000616.jpg",
+    "random": 0.2743,
+    "random_monotone": 0.0523,
+    "far": 0.5685,
+    "far_monotone": 0.4939
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000648.jpg",
+    "random": 0.3824,
+    "random_monotone": 0.135,
+    "far": 0.5403,
+    "far_monotone": 0.3452
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000680.jpg",
+    "random": 0.3071,
+    "random_monotone": 0.0443,
+    "far": 0.5295,
+    "far_monotone": 0.4
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000712.jpg",
+    "random": 0.2828,
+    "random_monotone": 0.0358,
+    "far": 0.584,
+    "far_monotone": 0.5521
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000736.jpg",
+    "random": 0.4264,
+    "random_monotone": 0.1922,
+    "far": 0.6783,
+    "far_monotone": 0.6759
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000768.jpg",
+    "random": 0.2814,
+    "random_monotone": 0.0216,
+    "far": 0.682,
+    "far_monotone": 0.6161
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000792.jpg",
+    "random": 0.305,
+    "random_monotone": 0.0226,
+    "far": 0.666,
+    "far_monotone": 0.6179
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000824.jpg",
+    "random": 0.2937,
+    "random_monotone": 0.0229,
+    "far": 0.6467,
+    "far_monotone": 0.6121
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000848.jpg",
+    "random": 0.2577,
+    "random_monotone": 0.0216,
+    "far": 0.6574,
+    "far_monotone": 0.6388
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004869.jpg",
+    "random": 0.0176,
+    "random_monotone": 0.0165,
+    "far": 0.0363,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004995.jpg",
+    "random": 0.0312,
+    "random_monotone": 0.0277,
+    "far": 0.0606,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005085.jpg",
+    "random": 0.0561,
+    "random_monotone": NaN,
+    "far": 0.0993,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005130.jpg",
+    "random": 0.0515,
+    "random_monotone": 0.0465,
+    "far": 0.0922,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005202.jpg",
+    "random": 0.0339,
+    "random_monotone": 0.0292,
+    "far": 0.0611,
+    "far_monotone": 0.0508
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005256.jpg",
+    "random": 0.0274,
+    "random_monotone": 0.0257,
+    "far": 0.057,
+    "far_monotone": 0.0519
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005292.jpg",
+    "random": 0.0213,
+    "random_monotone": 0.0193,
+    "far": 0.0418,
+    "far_monotone": 0.037
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005391.jpg",
+    "random": 0.0261,
+    "random_monotone": 0.0251,
+    "far": 0.0533,
+    "far_monotone": 0.0525
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005436.jpg",
+    "random": 0.0287,
+    "random_monotone": 0.0243,
+    "far": 0.0518,
+    "far_monotone": 0.0442
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005472.jpg",
+    "random": 0.0399,
+    "random_monotone": 0.0326,
+    "far": 0.0707,
+    "far_monotone": 0.0576
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005535.jpg",
+    "random": 0.0355,
+    "random_monotone": 0.0273,
+    "far": 0.0598,
+    "far_monotone": 0.048
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005616.jpg",
+    "random": 0.0287,
+    "random_monotone": 0.0254,
+    "far": 0.0602,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003105.jpg",
+    "random": 0.0265,
+    "random_monotone": 0.0237,
+    "far": 0.0378,
+    "far_monotone": 0.0845
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003168.jpg",
+    "random": 0.0259,
+    "random_monotone": 0.0248,
+    "far": 0.0368,
+    "far_monotone": 0.0788
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003231.jpg",
+    "random": 0.0278,
+    "random_monotone": 0.0224,
+    "far": 0.0436,
+    "far_monotone": 0.0816
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003294.jpg",
+    "random": 0.0265,
+    "random_monotone": 0.0244,
+    "far": 0.0353,
+    "far_monotone": 0.0652
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003357.jpg",
+    "random": 0.0286,
+    "random_monotone": 0.0245,
+    "far": 0.0356,
+    "far_monotone": 0.053
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003420.jpg",
+    "random": 0.0278,
+    "random_monotone": 0.025,
+    "far": 0.0406,
+    "far_monotone": 0.0422
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003483.jpg",
+    "random": 0.0302,
+    "random_monotone": 0.0262,
+    "far": 0.0415,
+    "far_monotone": 0.0432
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003546.jpg",
+    "random": 0.032,
+    "random_monotone": 0.029,
+    "far": 0.0401,
+    "far_monotone": 0.0452
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003609.jpg",
+    "random": 0.0312,
+    "random_monotone": 0.0267,
+    "far": 0.0326,
+    "far_monotone": 0.0724
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003672.jpg",
+    "random": 0.0309,
+    "random_monotone": 0.0264,
+    "far": 0.0329,
+    "far_monotone": 0.0702
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003735.jpg",
+    "random": 0.0349,
+    "random_monotone": 0.0296,
+    "far": 0.0558,
+    "far_monotone": 0.0836
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003771.jpg",
+    "random": 0.0337,
+    "random_monotone": 0.0295,
+    "far": 0.041,
+    "far_monotone": 0.0687
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_001881.jpg",
+    "random": 0.1744,
+    "random_monotone": 0.0141,
+    "far": 0.6843,
+    "far_monotone": 0.6967
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002052.jpg",
+    "random": 0.1136,
+    "random_monotone": 0.0284,
+    "far": 0.2123,
+    "far_monotone": 0.106
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002106.jpg",
+    "random": 0.1287,
+    "random_monotone": 0.0203,
+    "far": 0.4793,
+    "far_monotone": 0.3246
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002151.jpg",
+    "random": 0.0124,
+    "random_monotone": 0.0077,
+    "far": 0.2971,
+    "far_monotone": 0.3004
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002196.jpg",
+    "random": 0.0166,
+    "random_monotone": 0.0067,
+    "far": 0.3059,
+    "far_monotone": 0.3221
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002232.jpg",
+    "random": 0.0197,
+    "random_monotone": 0.009,
+    "far": 0.0859,
+    "far_monotone": 0.076
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002277.jpg",
+    "random": 0.0152,
+    "random_monotone": 0.0103,
+    "far": 0.0259,
+    "far_monotone": 0.0205
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002313.jpg",
+    "random": 0.0157,
+    "random_monotone": 0.0129,
+    "far": 0.014,
+    "far_monotone": 0.0137
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002358.jpg",
+    "random": 0.0082,
+    "random_monotone": 0.0061,
+    "far": 0.0098,
+    "far_monotone": 0.0146
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002421.jpg",
+    "random": 0.0226,
+    "random_monotone": 0.0107,
+    "far": 0.0525,
+    "far_monotone": 0.053
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002493.jpg",
+    "random": 0.0149,
+    "random_monotone": 0.0061,
+    "far": 0.0827,
+    "far_monotone": 0.0677
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001530.jpg",
+    "random": 0.1127,
+    "random_monotone": 0.0959,
+    "far": 0.2304,
+    "far_monotone": 0.247
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001845.jpg",
+    "random": 0.1077,
+    "random_monotone": 0.0949,
+    "far": 0.1821,
+    "far_monotone": 0.1848
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002097.jpg",
+    "random": 0.0837,
+    "random_monotone": 0.0723,
+    "far": 0.1493,
+    "far_monotone": 0.1606
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002349.jpg",
+    "random": 0.055,
+    "random_monotone": 0.0527,
+    "far": 0.0897,
+    "far_monotone": 0.0147
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002700.jpg",
+    "random": 0.0529,
+    "random_monotone": 0.0081,
+    "far": 0.0299,
+    "far_monotone": 0.031
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002736.jpg",
+    "random": 0.0061,
+    "random_monotone": NaN,
+    "far": 0.0156,
+    "far_monotone": 0.0165
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002772.jpg",
+    "random": 0.0053,
+    "random_monotone": 0.0041,
+    "far": 0.0136,
+    "far_monotone": 0.0143
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002808.jpg",
+    "random": 0.0033,
+    "random_monotone": 0.0023,
+    "far": 0.0148,
+    "far_monotone": 0.015
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002871.jpg",
+    "random": 0.0045,
+    "random_monotone": 0.0032,
+    "far": 0.012,
+    "far_monotone": 0.0106
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002907.jpg",
+    "random": 0.0062,
+    "random_monotone": 0.0048,
+    "far": 0.0145,
+    "far_monotone": 0.0113
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001719.jpg",
+    "random": 0.0214,
+    "random_monotone": 0.0179,
+    "far": 0.0666,
+    "far_monotone": 0.0786
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001845.jpg",
+    "random": 0.0222,
+    "random_monotone": 0.0203,
+    "far": 0.0355,
+    "far_monotone": 0.0325
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002034.jpg",
+    "random": 0.0253,
+    "random_monotone": 0.0216,
+    "far": 0.0311,
+    "far_monotone": 0.0638
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002160.jpg",
+    "random": 0.0258,
+    "random_monotone": 0.0233,
+    "far": 0.0264,
+    "far_monotone": 0.0337
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002286.jpg",
+    "random": 0.0257,
+    "random_monotone": 0.0254,
+    "far": 0.023,
+    "far_monotone": 0.032
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002412.jpg",
+    "random": 0.025,
+    "random_monotone": 0.0221,
+    "far": 0.0322,
+    "far_monotone": 0.0434
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002601.jpg",
+    "random": 0.0301,
+    "random_monotone": 0.0271,
+    "far": 0.0588,
+    "far_monotone": 0.0722
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002727.jpg",
+    "random": 0.0293,
+    "random_monotone": 0.0238,
+    "far": 0.0474,
+    "far_monotone": 0.0615
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002799.jpg",
+    "random": 0.0354,
+    "random_monotone": 0.0256,
+    "far": 0.0452,
+    "far_monotone": 0.0452
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002925.jpg",
+    "random": 0.0389,
+    "random_monotone": 0.0278,
+    "far": 0.0356,
+    "far_monotone": 0.0386
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003114.jpg",
+    "random": 0.0485,
+    "random_monotone": 0.027,
+    "far": 0.0434,
+    "far_monotone": 0.0302
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003195.jpg",
+    "random": 0.0404,
+    "random_monotone": 0.0259,
+    "far": 0.0341,
+    "far_monotone": 0.0738
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000230.jpg",
+    "random": 0.0286,
+    "random_monotone": 0.0202,
+    "far": 0.0537,
+    "far_monotone": 0.0701
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000280.jpg",
+    "random": 0.0226,
+    "random_monotone": 0.0183,
+    "far": 0.1111,
+    "far_monotone": 0.148
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000300.jpg",
+    "random": 0.0296,
+    "random_monotone": 0.0236,
+    "far": 0.0716,
+    "far_monotone": 0.1219
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000320.jpg",
+    "random": 0.0242,
+    "random_monotone": 0.0193,
+    "far": 0.0545,
+    "far_monotone": 0.0873
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000340.jpg",
+    "random": 0.026,
+    "random_monotone": 0.0228,
+    "far": 0.0522,
+    "far_monotone": 0.0602
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000360.jpg",
+    "random": 0.0278,
+    "random_monotone": 0.0251,
+    "far": 0.0489,
+    "far_monotone": 0.082
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000380.jpg",
+    "random": 0.0253,
+    "random_monotone": 0.0206,
+    "far": 0.0448,
+    "far_monotone": 0.0531
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000400.jpg",
+    "random": 0.0373,
+    "random_monotone": 0.0263,
+    "far": 0.0921,
+    "far_monotone": 0.11
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000430.jpg",
+    "random": 0.0345,
+    "random_monotone": 0.0195,
+    "far": 0.1086,
+    "far_monotone": 0.1223
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000460.jpg",
+    "random": 0.0273,
+    "random_monotone": 0.0186,
+    "far": 0.101,
+    "far_monotone": 0.1043
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002080.jpg",
+    "random": 0.0204,
+    "random_monotone": 0.0177,
+    "far": 0.0359,
+    "far_monotone": 0.0517
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002224.jpg",
+    "random": 0.0215,
+    "random_monotone": 0.0197,
+    "far": 0.0234,
+    "far_monotone": 0.0468
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002320.jpg",
+    "random": 0.0217,
+    "random_monotone": 0.02,
+    "far": 0.0345,
+    "far_monotone": 0.0582
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002464.jpg",
+    "random": 0.0192,
+    "random_monotone": 0.0176,
+    "far": 0.0449,
+    "far_monotone": 0.0525
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002608.jpg",
+    "random": 0.0184,
+    "random_monotone": 0.0175,
+    "far": 0.0387,
+    "far_monotone": 0.0497
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002704.jpg",
+    "random": 0.0202,
+    "random_monotone": 0.0198,
+    "far": 0.0481,
+    "far_monotone": 0.06
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002848.jpg",
+    "random": 0.0205,
+    "random_monotone": 0.0197,
+    "far": 0.0546,
+    "far_monotone": 0.0738
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002944.jpg",
+    "random": 0.0233,
+    "random_monotone": 0.0217,
+    "far": 0.0568,
+    "far_monotone": 0.0746
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003088.jpg",
+    "random": 0.0255,
+    "random_monotone": 0.0235,
+    "far": 0.0589,
+    "far_monotone": 0.073
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003232.jpg",
+    "random": 0.0224,
+    "random_monotone": 0.0204,
+    "far": 0.0676,
+    "far_monotone": 0.0801
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003328.jpg",
+    "random": 0.021,
+    "random_monotone": 0.0194,
+    "far": 0.0684,
+    "far_monotone": 0.0824
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003472.jpg",
+    "random": 0.0248,
+    "random_monotone": 0.0219,
+    "far": 0.0864,
+    "far_monotone": 0.1
+   }
+  ]
+ },
+ {
+  "prior": "moge-3-vitg",
+  "keyframes": 103,
+  "random_median": 0.0286,
+  "far_median": 0.057,
+  "random_monotone_median": 0.0238,
+  "far_monotone_median": 0.0591,
+  "seconds_per_image": 0.709,
+  "per_keyframe": [
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000904.jpg",
+    "random": 0.0355,
+    "random_monotone": 0.0292,
+    "far": 0.0697,
+    "far_monotone": 0.0631
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000960.jpg",
+    "random": 0.0286,
+    "random_monotone": 0.0257,
+    "far": 0.0638,
+    "far_monotone": 0.0517
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000992.jpg",
+    "random": 0.0241,
+    "random_monotone": 0.024,
+    "far": 0.0505,
+    "far_monotone": 0.0525
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001024.jpg",
+    "random": 0.0274,
+    "random_monotone": 0.0248,
+    "far": 0.0576,
+    "far_monotone": 0.0537
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001056.jpg",
+    "random": 0.0301,
+    "random_monotone": 0.0273,
+    "far": 0.0799,
+    "far_monotone": 0.0658
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001080.jpg",
+    "random": 0.0299,
+    "random_monotone": 0.0268,
+    "far": 0.0838,
+    "far_monotone": 0.0749
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001112.jpg",
+    "random": 0.0337,
+    "random_monotone": 0.0281,
+    "far": 0.0672,
+    "far_monotone": 0.0687
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001136.jpg",
+    "random": 0.0289,
+    "random_monotone": 0.0238,
+    "far": 0.057,
+    "far_monotone": 0.0616
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001184.jpg",
+    "random": 0.0331,
+    "random_monotone": 0.0271,
+    "far": 0.0835,
+    "far_monotone": 0.0733
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001240.jpg",
+    "random": 0.0413,
+    "random_monotone": 0.0327,
+    "far": 0.0986,
+    "far_monotone": 0.0747
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001264.jpg",
+    "random": 0.0453,
+    "random_monotone": 0.0384,
+    "far": 0.0732,
+    "far_monotone": 0.0742
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001296.jpg",
+    "random": 0.046,
+    "random_monotone": 0.0373,
+    "far": 0.0745,
+    "far_monotone": 0.0943
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000536.jpg",
+    "random": 0.2462,
+    "random_monotone": 0.051,
+    "far": 0.7695,
+    "far_monotone": 0.6164
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000560.jpg",
+    "random": 0.4771,
+    "random_monotone": 0.1333,
+    "far": 0.7521,
+    "far_monotone": 0.7103
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000592.jpg",
+    "random": 0.6173,
+    "random_monotone": 0.2994,
+    "far": 0.6321,
+    "far_monotone": 0.516
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000616.jpg",
+    "random": 0.2553,
+    "random_monotone": 0.0497,
+    "far": 0.5603,
+    "far_monotone": 0.4643
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000648.jpg",
+    "random": 0.3626,
+    "random_monotone": 0.1362,
+    "far": 0.5414,
+    "far_monotone": 0.3348
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000680.jpg",
+    "random": 0.2961,
+    "random_monotone": 0.0419,
+    "far": 0.5328,
+    "far_monotone": 0.3966
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000712.jpg",
+    "random": 0.2889,
+    "random_monotone": 0.0349,
+    "far": 0.6012,
+    "far_monotone": 0.568
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000736.jpg",
+    "random": 0.5222,
+    "random_monotone": 0.2036,
+    "far": 0.7251,
+    "far_monotone": 0.7287
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000768.jpg",
+    "random": 0.2956,
+    "random_monotone": 0.0224,
+    "far": 0.6827,
+    "far_monotone": 0.622
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000792.jpg",
+    "random": 0.3201,
+    "random_monotone": 0.0238,
+    "far": 0.6666,
+    "far_monotone": 0.619
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000824.jpg",
+    "random": 0.2819,
+    "random_monotone": 0.0215,
+    "far": 0.6457,
+    "far_monotone": 0.6379
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000848.jpg",
+    "random": 0.2454,
+    "random_monotone": 0.0222,
+    "far": 0.6781,
+    "far_monotone": 0.6581
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004869.jpg",
+    "random": 0.0175,
+    "random_monotone": 0.0164,
+    "far": 0.0362,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004995.jpg",
+    "random": 0.0309,
+    "random_monotone": 0.0273,
+    "far": 0.0604,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005085.jpg",
+    "random": 0.0562,
+    "random_monotone": NaN,
+    "far": 0.0992,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005130.jpg",
+    "random": 0.0516,
+    "random_monotone": 0.0446,
+    "far": 0.0923,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005202.jpg",
+    "random": 0.0335,
+    "random_monotone": 0.0283,
+    "far": 0.0605,
+    "far_monotone": 0.0513
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005256.jpg",
+    "random": 0.0271,
+    "random_monotone": 0.0261,
+    "far": 0.0566,
+    "far_monotone": 0.0518
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005292.jpg",
+    "random": 0.0209,
+    "random_monotone": 0.0197,
+    "far": 0.041,
+    "far_monotone": 0.0372
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005391.jpg",
+    "random": 0.0265,
+    "random_monotone": 0.0256,
+    "far": 0.0536,
+    "far_monotone": 0.0527
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005436.jpg",
+    "random": 0.0276,
+    "random_monotone": 0.0244,
+    "far": 0.0502,
+    "far_monotone": 0.0446
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005472.jpg",
+    "random": 0.0387,
+    "random_monotone": 0.0329,
+    "far": 0.0695,
+    "far_monotone": 0.0579
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005535.jpg",
+    "random": 0.0358,
+    "random_monotone": 0.0275,
+    "far": 0.0599,
+    "far_monotone": 0.0472
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005616.jpg",
+    "random": 0.0285,
+    "random_monotone": 0.0261,
+    "far": 0.06,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003105.jpg",
+    "random": 0.028,
+    "random_monotone": 0.0253,
+    "far": 0.0361,
+    "far_monotone": 0.0572
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003168.jpg",
+    "random": 0.0272,
+    "random_monotone": 0.0259,
+    "far": 0.0382,
+    "far_monotone": 0.0473
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003231.jpg",
+    "random": 0.0266,
+    "random_monotone": 0.0239,
+    "far": 0.0386,
+    "far_monotone": 0.0472
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003294.jpg",
+    "random": 0.0262,
+    "random_monotone": 0.026,
+    "far": 0.0398,
+    "far_monotone": 0.0448
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003357.jpg",
+    "random": 0.0285,
+    "random_monotone": 0.0244,
+    "far": 0.0574,
+    "far_monotone": 0.0432
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003420.jpg",
+    "random": 0.0287,
+    "random_monotone": 0.0266,
+    "far": 0.0608,
+    "far_monotone": 0.0398
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003483.jpg",
+    "random": 0.0287,
+    "random_monotone": 0.0276,
+    "far": 0.0457,
+    "far_monotone": 0.0386
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003546.jpg",
+    "random": 0.0319,
+    "random_monotone": 0.0307,
+    "far": 0.0587,
+    "far_monotone": 0.0435
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003609.jpg",
+    "random": 0.0297,
+    "random_monotone": 0.0267,
+    "far": 0.0342,
+    "far_monotone": 0.0501
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003672.jpg",
+    "random": 0.0325,
+    "random_monotone": 0.0284,
+    "far": 0.0348,
+    "far_monotone": 0.0399
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003735.jpg",
+    "random": 0.0334,
+    "random_monotone": 0.03,
+    "far": 0.0331,
+    "far_monotone": 0.0457
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003771.jpg",
+    "random": 0.0316,
+    "random_monotone": 0.03,
+    "far": 0.0369,
+    "far_monotone": 0.0368
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_001881.jpg",
+    "random": 0.1925,
+    "random_monotone": 0.0104,
+    "far": 0.7033,
+    "far_monotone": 0.7148
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002052.jpg",
+    "random": 0.1275,
+    "random_monotone": 0.0259,
+    "far": 0.1778,
+    "far_monotone": 0.0641
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002106.jpg",
+    "random": 0.1257,
+    "random_monotone": 0.0214,
+    "far": 0.5166,
+    "far_monotone": 0.2986
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002151.jpg",
+    "random": 0.0157,
+    "random_monotone": 0.0129,
+    "far": 0.3841,
+    "far_monotone": 0.3854
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002196.jpg",
+    "random": 0.0199,
+    "random_monotone": 0.009,
+    "far": 0.3294,
+    "far_monotone": 0.3457
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002232.jpg",
+    "random": 0.0283,
+    "random_monotone": 0.0117,
+    "far": 0.0703,
+    "far_monotone": 0.0658
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002277.jpg",
+    "random": 0.0208,
+    "random_monotone": 0.0131,
+    "far": 0.1624,
+    "far_monotone": 0.1801
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002313.jpg",
+    "random": 0.0124,
+    "random_monotone": 0.0074,
+    "far": 0.0172,
+    "far_monotone": 0.0169
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002358.jpg",
+    "random": 0.007,
+    "random_monotone": 0.0049,
+    "far": 0.0124,
+    "far_monotone": 0.0101
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002421.jpg",
+    "random": 0.0168,
+    "random_monotone": 0.0073,
+    "far": 0.02,
+    "far_monotone": 0.0247
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002493.jpg",
+    "random": 0.0109,
+    "random_monotone": 0.0058,
+    "far": 0.0681,
+    "far_monotone": 0.063
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001530.jpg",
+    "random": 0.0984,
+    "random_monotone": 0.087,
+    "far": 0.2088,
+    "far_monotone": 0.2355
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001845.jpg",
+    "random": 0.1064,
+    "random_monotone": 0.095,
+    "far": 0.1722,
+    "far_monotone": 0.1843
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002097.jpg",
+    "random": 0.1008,
+    "random_monotone": 0.0965,
+    "far": 0.1672,
+    "far_monotone": 0.1696
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002349.jpg",
+    "random": 0.0882,
+    "random_monotone": 0.0877,
+    "far": 0.1589,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002700.jpg",
+    "random": 0.0594,
+    "random_monotone": 0.0087,
+    "far": 0.0252,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002736.jpg",
+    "random": 0.0055,
+    "random_monotone": NaN,
+    "far": 0.0138,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002772.jpg",
+    "random": 0.0054,
+    "random_monotone": 0.0038,
+    "far": 0.0137,
+    "far_monotone": 0.0138
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002808.jpg",
+    "random": 0.0041,
+    "random_monotone": 0.0024,
+    "far": 0.0162,
+    "far_monotone": 0.014
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002871.jpg",
+    "random": 0.0043,
+    "random_monotone": 0.0035,
+    "far": 0.0103,
+    "far_monotone": 0.0093
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002907.jpg",
+    "random": 0.0053,
+    "random_monotone": 0.0041,
+    "far": 0.0145,
+    "far_monotone": 0.0125
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001719.jpg",
+    "random": 0.0222,
+    "random_monotone": 0.019,
+    "far": 0.0312,
+    "far_monotone": 0.0411
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001845.jpg",
+    "random": 0.0213,
+    "random_monotone": 0.019,
+    "far": 0.0361,
+    "far_monotone": 0.0254
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002034.jpg",
+    "random": 0.023,
+    "random_monotone": 0.0189,
+    "far": 0.0314,
+    "far_monotone": 0.0518
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002160.jpg",
+    "random": 0.0231,
+    "random_monotone": 0.0206,
+    "far": 0.0256,
+    "far_monotone": 0.0313
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002286.jpg",
+    "random": 0.0237,
+    "random_monotone": 0.0226,
+    "far": 0.0279,
+    "far_monotone": 0.0355
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002412.jpg",
+    "random": 0.0268,
+    "random_monotone": 0.0258,
+    "far": 0.0364,
+    "far_monotone": 0.0615
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002601.jpg",
+    "random": 0.0269,
+    "random_monotone": 0.0238,
+    "far": 0.0547,
+    "far_monotone": 0.051
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002727.jpg",
+    "random": 0.0292,
+    "random_monotone": 0.0229,
+    "far": 0.0575,
+    "far_monotone": 0.0684
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002799.jpg",
+    "random": 0.0309,
+    "random_monotone": 0.0218,
+    "far": 0.041,
+    "far_monotone": 0.0419
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002925.jpg",
+    "random": 0.0362,
+    "random_monotone": 0.0244,
+    "far": 0.0368,
+    "far_monotone": 0.0411
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003114.jpg",
+    "random": 0.046,
+    "random_monotone": 0.0251,
+    "far": 0.0268,
+    "far_monotone": 0.0267
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003195.jpg",
+    "random": 0.0337,
+    "random_monotone": 0.0189,
+    "far": 0.0239,
+    "far_monotone": 0.0579
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000230.jpg",
+    "random": 0.0306,
+    "random_monotone": 0.0191,
+    "far": 0.0525,
+    "far_monotone": 0.0745
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000280.jpg",
+    "random": 0.024,
+    "random_monotone": 0.0136,
+    "far": 0.051,
+    "far_monotone": 0.0727
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000300.jpg",
+    "random": 0.0207,
+    "random_monotone": 0.0169,
+    "far": 0.0388,
+    "far_monotone": 0.0626
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000320.jpg",
+    "random": 0.0199,
+    "random_monotone": 0.0165,
+    "far": 0.0354,
+    "far_monotone": 0.0575
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000340.jpg",
+    "random": 0.0229,
+    "random_monotone": 0.0179,
+    "far": 0.057,
+    "far_monotone": 0.0473
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000360.jpg",
+    "random": 0.0246,
+    "random_monotone": 0.0181,
+    "far": 0.0338,
+    "far_monotone": 0.072
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000380.jpg",
+    "random": 0.0225,
+    "random_monotone": 0.0154,
+    "far": 0.0356,
+    "far_monotone": 0.0575
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000400.jpg",
+    "random": 0.0354,
+    "random_monotone": 0.026,
+    "far": 0.0795,
+    "far_monotone": 0.124
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000430.jpg",
+    "random": 0.032,
+    "random_monotone": 0.0205,
+    "far": 0.1167,
+    "far_monotone": 0.154
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000460.jpg",
+    "random": 0.0379,
+    "random_monotone": 0.0253,
+    "far": 0.1239,
+    "far_monotone": 0.1353
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002080.jpg",
+    "random": 0.0218,
+    "random_monotone": 0.0194,
+    "far": 0.0351,
+    "far_monotone": 0.0503
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002224.jpg",
+    "random": 0.0232,
+    "random_monotone": 0.0222,
+    "far": 0.0284,
+    "far_monotone": 0.0469
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002320.jpg",
+    "random": 0.0223,
+    "random_monotone": 0.0209,
+    "far": 0.0316,
+    "far_monotone": 0.0572
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002464.jpg",
+    "random": 0.0198,
+    "random_monotone": 0.0181,
+    "far": 0.0434,
+    "far_monotone": 0.051
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002608.jpg",
+    "random": 0.0169,
+    "random_monotone": 0.0163,
+    "far": 0.0386,
+    "far_monotone": 0.0489
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002704.jpg",
+    "random": 0.0173,
+    "random_monotone": 0.0157,
+    "far": 0.0415,
+    "far_monotone": 0.0591
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002848.jpg",
+    "random": 0.0178,
+    "random_monotone": 0.0165,
+    "far": 0.0397,
+    "far_monotone": 0.0687
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002944.jpg",
+    "random": 0.0196,
+    "random_monotone": 0.0179,
+    "far": 0.0424,
+    "far_monotone": 0.0677
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003088.jpg",
+    "random": 0.0198,
+    "random_monotone": 0.018,
+    "far": 0.0405,
+    "far_monotone": 0.065
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003232.jpg",
+    "random": 0.0179,
+    "random_monotone": 0.0174,
+    "far": 0.0551,
+    "far_monotone": 0.0672
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003328.jpg",
+    "random": 0.019,
+    "random_monotone": 0.0175,
+    "far": 0.0644,
+    "far_monotone": 0.0754
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003472.jpg",
+    "random": 0.0187,
+    "random_monotone": 0.0172,
+    "far": 0.0687,
+    "far_monotone": 0.088
+   }
+  ]
+ },
+ {
+  "prior": "depth-anything-v2-large",
+  "keyframes": 103,
+  "random_median": 0.0552,
+  "far_median": 0.1257,
+  "random_monotone_median": 0.0268,
+  "far_monotone_median": 0.1137,
+  "seconds_per_image": 0.14,
+  "per_keyframe": [
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000904.jpg",
+    "random": 0.0783,
+    "random_monotone": 0.0461,
+    "far": 0.202,
+    "far_monotone": 0.1426
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000960.jpg",
+    "random": 0.0803,
+    "random_monotone": 0.0494,
+    "far": 0.1401,
+    "far_monotone": 0.1398
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000992.jpg",
+    "random": 0.0655,
+    "random_monotone": 0.047,
+    "far": 0.1183,
+    "far_monotone": 0.1191
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001024.jpg",
+    "random": 0.11,
+    "random_monotone": 0.0757,
+    "far": 0.2073,
+    "far_monotone": 0.1019
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001056.jpg",
+    "random": 0.104,
+    "random_monotone": 0.0818,
+    "far": 0.1058,
+    "far_monotone": 0.1173
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001080.jpg",
+    "random": 0.1149,
+    "random_monotone": 0.088,
+    "far": 0.1516,
+    "far_monotone": 0.0976
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001112.jpg",
+    "random": 0.1217,
+    "random_monotone": 0.0945,
+    "far": 0.1575,
+    "far_monotone": 0.1105
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001136.jpg",
+    "random": 0.1362,
+    "random_monotone": 0.0957,
+    "far": 0.3071,
+    "far_monotone": 0.2072
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001184.jpg",
+    "random": 0.1132,
+    "random_monotone": 0.0862,
+    "far": 0.1285,
+    "far_monotone": 0.0953
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001240.jpg",
+    "random": 0.1395,
+    "random_monotone": 0.0821,
+    "far": 0.3605,
+    "far_monotone": 0.2666
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001264.jpg",
+    "random": 0.1147,
+    "random_monotone": 0.0944,
+    "far": 0.1701,
+    "far_monotone": 0.1303
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001296.jpg",
+    "random": 0.0766,
+    "random_monotone": 0.0374,
+    "far": 0.2104,
+    "far_monotone": 0.1505
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000536.jpg",
+    "random": 0.1871,
+    "random_monotone": 0.0439,
+    "far": 0.7113,
+    "far_monotone": 0.5815
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000560.jpg",
+    "random": 0.392,
+    "random_monotone": 0.199,
+    "far": 0.6842,
+    "far_monotone": 0.6806
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000592.jpg",
+    "random": 0.5807,
+    "random_monotone": 0.3032,
+    "far": 0.5826,
+    "far_monotone": 0.5273
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000616.jpg",
+    "random": 0.1937,
+    "random_monotone": 0.0415,
+    "far": 0.4711,
+    "far_monotone": 0.4893
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000648.jpg",
+    "random": 0.3203,
+    "random_monotone": 0.1303,
+    "far": 0.4374,
+    "far_monotone": 0.2787
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000680.jpg",
+    "random": 0.217,
+    "random_monotone": 0.0436,
+    "far": 0.4545,
+    "far_monotone": 0.3892
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000712.jpg",
+    "random": 0.2083,
+    "random_monotone": 0.0328,
+    "far": 0.5243,
+    "far_monotone": 0.4758
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000736.jpg",
+    "random": 0.4239,
+    "random_monotone": 0.1956,
+    "far": 0.7032,
+    "far_monotone": 0.7245
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000768.jpg",
+    "random": 0.2158,
+    "random_monotone": 0.0219,
+    "far": 0.6802,
+    "far_monotone": 0.5839
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000792.jpg",
+    "random": 0.2419,
+    "random_monotone": 0.0253,
+    "far": 0.6554,
+    "far_monotone": 0.587
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000824.jpg",
+    "random": 0.2137,
+    "random_monotone": 0.0208,
+    "far": 0.6459,
+    "far_monotone": 0.6058
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000848.jpg",
+    "random": 0.1807,
+    "random_monotone": 0.0211,
+    "far": 0.6823,
+    "far_monotone": 0.6669
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004869.jpg",
+    "random": 0.0175,
+    "random_monotone": 0.0168,
+    "far": 0.0359,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004995.jpg",
+    "random": 0.0306,
+    "random_monotone": 0.0269,
+    "far": 0.0599,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005085.jpg",
+    "random": 0.0552,
+    "random_monotone": NaN,
+    "far": 0.0987,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005130.jpg",
+    "random": 0.0514,
+    "random_monotone": 0.0442,
+    "far": 0.0912,
+    "far_monotone": 0.0803
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005202.jpg",
+    "random": 0.0329,
+    "random_monotone": 0.0283,
+    "far": 0.0596,
+    "far_monotone": 0.0511
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005256.jpg",
+    "random": 0.0277,
+    "random_monotone": 0.026,
+    "far": 0.0564,
+    "far_monotone": 0.0515
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005292.jpg",
+    "random": 0.0223,
+    "random_monotone": 0.0203,
+    "far": 0.0439,
+    "far_monotone": 0.04
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005391.jpg",
+    "random": 0.0277,
+    "random_monotone": 0.0269,
+    "far": 0.0547,
+    "far_monotone": 0.0538
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005436.jpg",
+    "random": 0.0265,
+    "random_monotone": 0.023,
+    "far": 0.0496,
+    "far_monotone": 0.0433
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005472.jpg",
+    "random": 0.038,
+    "random_monotone": 0.0327,
+    "far": 0.0698,
+    "far_monotone": 0.0575
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005535.jpg",
+    "random": 0.0352,
+    "random_monotone": 0.0267,
+    "far": 0.0596,
+    "far_monotone": 0.0484
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005616.jpg",
+    "random": 0.0288,
+    "random_monotone": 0.0262,
+    "far": 0.0594,
+    "far_monotone": 0.0521
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003105.jpg",
+    "random": 0.0752,
+    "random_monotone": 0.0314,
+    "far": 0.4127,
+    "far_monotone": 0.2008
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003168.jpg",
+    "random": 0.0721,
+    "random_monotone": 0.0336,
+    "far": 0.3654,
+    "far_monotone": 0.177
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003231.jpg",
+    "random": 0.0788,
+    "random_monotone": 0.0326,
+    "far": 0.4301,
+    "far_monotone": 0.2294
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003294.jpg",
+    "random": 0.0864,
+    "random_monotone": 0.0376,
+    "far": 0.4917,
+    "far_monotone": 0.2402
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003357.jpg",
+    "random": 0.078,
+    "random_monotone": 0.0333,
+    "far": 0.4214,
+    "far_monotone": 0.2451
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003420.jpg",
+    "random": 0.0823,
+    "random_monotone": 0.0371,
+    "far": 0.4619,
+    "far_monotone": 0.2782
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003483.jpg",
+    "random": 0.08,
+    "random_monotone": 0.0348,
+    "far": 0.4378,
+    "far_monotone": 0.2615
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003546.jpg",
+    "random": 0.0924,
+    "random_monotone": 0.0405,
+    "far": 0.4607,
+    "far_monotone": 0.2832
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003609.jpg",
+    "random": 0.0806,
+    "random_monotone": 0.0376,
+    "far": 0.3805,
+    "far_monotone": 0.1674
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003672.jpg",
+    "random": 0.0895,
+    "random_monotone": 0.0366,
+    "far": 0.4594,
+    "far_monotone": 0.2934
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003735.jpg",
+    "random": 0.0869,
+    "random_monotone": 0.0359,
+    "far": 0.3895,
+    "far_monotone": 0.2144
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003771.jpg",
+    "random": 0.0841,
+    "random_monotone": 0.0348,
+    "far": 0.3884,
+    "far_monotone": 0.2233
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_001881.jpg",
+    "random": 0.1298,
+    "random_monotone": 0.0141,
+    "far": 0.6094,
+    "far_monotone": 0.6228
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002052.jpg",
+    "random": 0.0801,
+    "random_monotone": 0.0293,
+    "far": 0.1505,
+    "far_monotone": 0.1621
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002106.jpg",
+    "random": 0.1072,
+    "random_monotone": 0.0314,
+    "far": 0.4073,
+    "far_monotone": 0.2974
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002151.jpg",
+    "random": 0.0157,
+    "random_monotone": 0.0107,
+    "far": 0.1524,
+    "far_monotone": 0.1456
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002196.jpg",
+    "random": 0.0245,
+    "random_monotone": 0.0144,
+    "far": 0.1891,
+    "far_monotone": 0.2217
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002232.jpg",
+    "random": 0.031,
+    "random_monotone": 0.0151,
+    "far": 0.103,
+    "far_monotone": 0.1365
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002277.jpg",
+    "random": 0.0165,
+    "random_monotone": 0.0127,
+    "far": 0.0851,
+    "far_monotone": 0.0877
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002313.jpg",
+    "random": 0.0131,
+    "random_monotone": 0.0121,
+    "far": 0.0085,
+    "far_monotone": 0.0059
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002358.jpg",
+    "random": 0.01,
+    "random_monotone": 0.0057,
+    "far": 0.0146,
+    "far_monotone": 0.0105
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002421.jpg",
+    "random": 0.0232,
+    "random_monotone": 0.0093,
+    "far": 0.0241,
+    "far_monotone": 0.033
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002493.jpg",
+    "random": 0.0119,
+    "random_monotone": 0.0057,
+    "far": 0.0182,
+    "far_monotone": 0.0195
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001530.jpg",
+    "random": 0.1482,
+    "random_monotone": 0.122,
+    "far": 0.2829,
+    "far_monotone": 0.2628
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001845.jpg",
+    "random": 0.1236,
+    "random_monotone": 0.1008,
+    "far": 0.2548,
+    "far_monotone": 0.2217
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002097.jpg",
+    "random": 0.1008,
+    "random_monotone": 0.0991,
+    "far": 0.1847,
+    "far_monotone": 0.175
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002349.jpg",
+    "random": 0.0884,
+    "random_monotone": 0.0878,
+    "far": 0.1565,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002700.jpg",
+    "random": 0.0911,
+    "random_monotone": 0.0084,
+    "far": 0.0285,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002736.jpg",
+    "random": 0.0066,
+    "random_monotone": 0.0059,
+    "far": 0.0153,
+    "far_monotone": 0.0167
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002772.jpg",
+    "random": 0.0052,
+    "random_monotone": 0.0038,
+    "far": 0.0139,
+    "far_monotone": 0.0136
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002808.jpg",
+    "random": 0.0057,
+    "random_monotone": 0.0033,
+    "far": 0.0217,
+    "far_monotone": 0.0164
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002871.jpg",
+    "random": 0.0108,
+    "random_monotone": 0.0036,
+    "far": 0.0153,
+    "far_monotone": 0.0134
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002907.jpg",
+    "random": 0.015,
+    "random_monotone": 0.0047,
+    "far": 0.045,
+    "far_monotone": 0.0288
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001719.jpg",
+    "random": 0.0441,
+    "random_monotone": 0.0307,
+    "far": 0.104,
+    "far_monotone": 0.1302
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001845.jpg",
+    "random": 0.0592,
+    "random_monotone": 0.0386,
+    "far": 0.131,
+    "far_monotone": 0.1249
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002034.jpg",
+    "random": 0.0579,
+    "random_monotone": 0.0365,
+    "far": 0.1135,
+    "far_monotone": 0.1079
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002160.jpg",
+    "random": 0.0472,
+    "random_monotone": 0.027,
+    "far": 0.1617,
+    "far_monotone": 0.1168
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002286.jpg",
+    "random": 0.0383,
+    "random_monotone": 0.0311,
+    "far": 0.1257,
+    "far_monotone": 0.0984
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002412.jpg",
+    "random": 0.0373,
+    "random_monotone": 0.0291,
+    "far": 0.1401,
+    "far_monotone": 0.0993
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002601.jpg",
+    "random": 0.0448,
+    "random_monotone": 0.0331,
+    "far": 0.1489,
+    "far_monotone": 0.1352
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002727.jpg",
+    "random": 0.0788,
+    "random_monotone": 0.0338,
+    "far": 0.1152,
+    "far_monotone": 0.0973
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002799.jpg",
+    "random": 0.0697,
+    "random_monotone": 0.0246,
+    "far": 0.1283,
+    "far_monotone": 0.0797
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002925.jpg",
+    "random": 0.0706,
+    "random_monotone": 0.0256,
+    "far": 0.1507,
+    "far_monotone": 0.0763
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003114.jpg",
+    "random": 0.06,
+    "random_monotone": 0.0195,
+    "far": 0.2813,
+    "far_monotone": 0.1675
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003195.jpg",
+    "random": 0.101,
+    "random_monotone": 0.0204,
+    "far": 0.2479,
+    "far_monotone": 0.0982
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000230.jpg",
+    "random": 0.0377,
+    "random_monotone": 0.0232,
+    "far": 0.0812,
+    "far_monotone": 0.091
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000280.jpg",
+    "random": 0.0294,
+    "random_monotone": 0.0207,
+    "far": 0.0648,
+    "far_monotone": 0.0907
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000300.jpg",
+    "random": 0.0264,
+    "random_monotone": 0.0241,
+    "far": 0.0646,
+    "far_monotone": 0.088
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000320.jpg",
+    "random": 0.0274,
+    "random_monotone": 0.0239,
+    "far": 0.0553,
+    "far_monotone": 0.063
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000340.jpg",
+    "random": 0.0262,
+    "random_monotone": 0.0227,
+    "far": 0.056,
+    "far_monotone": 0.0547
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000360.jpg",
+    "random": 0.0292,
+    "random_monotone": 0.0207,
+    "far": 0.0633,
+    "far_monotone": 0.0699
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000380.jpg",
+    "random": 0.0336,
+    "random_monotone": 0.0235,
+    "far": 0.0577,
+    "far_monotone": 0.0826
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000400.jpg",
+    "random": 0.0339,
+    "random_monotone": 0.0207,
+    "far": 0.1148,
+    "far_monotone": 0.1454
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000430.jpg",
+    "random": 0.0303,
+    "random_monotone": 0.0158,
+    "far": 0.1244,
+    "far_monotone": 0.141
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000460.jpg",
+    "random": 0.0244,
+    "random_monotone": 0.0179,
+    "far": 0.1114,
+    "far_monotone": 0.1311
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002080.jpg",
+    "random": 0.0261,
+    "random_monotone": 0.0207,
+    "far": 0.0152,
+    "far_monotone": 0.0319
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002224.jpg",
+    "random": 0.0238,
+    "random_monotone": 0.0223,
+    "far": 0.0119,
+    "far_monotone": 0.0301
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002320.jpg",
+    "random": 0.0226,
+    "random_monotone": 0.018,
+    "far": 0.018,
+    "far_monotone": 0.0454
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002464.jpg",
+    "random": 0.0192,
+    "random_monotone": 0.0166,
+    "far": 0.0253,
+    "far_monotone": 0.0414
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002608.jpg",
+    "random": 0.0201,
+    "random_monotone": 0.0188,
+    "far": 0.0265,
+    "far_monotone": 0.04
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002704.jpg",
+    "random": 0.0199,
+    "random_monotone": 0.0183,
+    "far": 0.0289,
+    "far_monotone": 0.0521
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002848.jpg",
+    "random": 0.0213,
+    "random_monotone": 0.0171,
+    "far": 0.0376,
+    "far_monotone": 0.0497
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002944.jpg",
+    "random": 0.0189,
+    "random_monotone": 0.0172,
+    "far": 0.0431,
+    "far_monotone": 0.0449
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003088.jpg",
+    "random": 0.019,
+    "random_monotone": 0.0165,
+    "far": 0.0365,
+    "far_monotone": 0.0388
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003232.jpg",
+    "random": 0.0166,
+    "random_monotone": 0.0165,
+    "far": 0.0325,
+    "far_monotone": 0.0476
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003328.jpg",
+    "random": 0.0203,
+    "random_monotone": 0.0184,
+    "far": 0.0498,
+    "far_monotone": 0.052
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003472.jpg",
+    "random": 0.022,
+    "random_monotone": 0.0201,
+    "far": 0.0546,
+    "far_monotone": 0.0684
+   }
+  ]
+ },
+ {
+  "prior": "da3-large-1.1",
+  "keyframes": 103,
+  "random_median": 0.0363,
+  "far_median": 0.075,
+  "random_monotone_median": 0.0282,
+  "far_monotone_median": 0.0684,
+  "seconds_per_image": 0.43,
+  "per_keyframe": [
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000904.jpg",
+    "random": 0.0717,
+    "random_monotone": 0.0532,
+    "far": 0.1391,
+    "far_monotone": 0.0947
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000960.jpg",
+    "random": 0.0924,
+    "random_monotone": 0.0596,
+    "far": 0.1925,
+    "far_monotone": 0.1583
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000992.jpg",
+    "random": 0.096,
+    "random_monotone": 0.0528,
+    "far": 0.2353,
+    "far_monotone": 0.1879
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001024.jpg",
+    "random": 0.1685,
+    "random_monotone": 0.0727,
+    "far": 0.3909,
+    "far_monotone": 0.2571
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001056.jpg",
+    "random": 0.1217,
+    "random_monotone": 0.0661,
+    "far": 0.2938,
+    "far_monotone": 0.2002
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001080.jpg",
+    "random": 0.1709,
+    "random_monotone": 0.0682,
+    "far": 0.3475,
+    "far_monotone": 0.2375
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001112.jpg",
+    "random": 0.1639,
+    "random_monotone": 0.0611,
+    "far": 0.3224,
+    "far_monotone": 0.2247
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001136.jpg",
+    "random": 0.209,
+    "random_monotone": 0.0829,
+    "far": 0.4288,
+    "far_monotone": 0.3019
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001184.jpg",
+    "random": 0.1721,
+    "random_monotone": 0.0541,
+    "far": 0.3554,
+    "far_monotone": 0.2354
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001240.jpg",
+    "random": 0.1983,
+    "random_monotone": 0.0763,
+    "far": 0.4405,
+    "far_monotone": 0.3152
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001264.jpg",
+    "random": 0.1685,
+    "random_monotone": 0.0676,
+    "far": 0.3486,
+    "far_monotone": 0.2418
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001296.jpg",
+    "random": 0.0436,
+    "random_monotone": 0.0309,
+    "far": 0.1751,
+    "far_monotone": 0.1867
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000536.jpg",
+    "random": 0.0338,
+    "random_monotone": 0.0296,
+    "far": 0.4086,
+    "far_monotone": 0.5675
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000560.jpg",
+    "random": 0.1132,
+    "random_monotone": 0.2131,
+    "far": 0.5128,
+    "far_monotone": 0.6586
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000592.jpg",
+    "random": 0.2366,
+    "random_monotone": 0.4079,
+    "far": 0.3882,
+    "far_monotone": 0.2605
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000616.jpg",
+    "random": 0.0492,
+    "random_monotone": 0.0293,
+    "far": 0.3897,
+    "far_monotone": 0.4644
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000648.jpg",
+    "random": 0.0538,
+    "random_monotone": 0.1351,
+    "far": 0.3177,
+    "far_monotone": 0.2146
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000680.jpg",
+    "random": 0.0317,
+    "random_monotone": 0.0268,
+    "far": 0.3493,
+    "far_monotone": 0.3269
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000712.jpg",
+    "random": 0.0283,
+    "random_monotone": 0.0223,
+    "far": 0.443,
+    "far_monotone": 0.4774
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000736.jpg",
+    "random": 0.095,
+    "random_monotone": 0.3038,
+    "far": 0.6714,
+    "far_monotone": 0.6552
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000768.jpg",
+    "random": 0.0519,
+    "random_monotone": 0.0892,
+    "far": 0.6844,
+    "far_monotone": 0.6192
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000792.jpg",
+    "random": 0.0363,
+    "random_monotone": 0.0771,
+    "far": 0.6542,
+    "far_monotone": 0.6451
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000824.jpg",
+    "random": 0.0407,
+    "random_monotone": 0.0239,
+    "far": 0.6363,
+    "far_monotone": 0.6336
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000848.jpg",
+    "random": 0.0334,
+    "random_monotone": 0.022,
+    "far": 0.6625,
+    "far_monotone": 0.6638
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004869.jpg",
+    "random": 0.0173,
+    "random_monotone": 0.0163,
+    "far": 0.0352,
+    "far_monotone": 0.0321
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004995.jpg",
+    "random": 0.0303,
+    "random_monotone": 0.0263,
+    "far": 0.059,
+    "far_monotone": 0.05
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005085.jpg",
+    "random": 0.0547,
+    "random_monotone": 0.0489,
+    "far": 0.0999,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005130.jpg",
+    "random": 0.0514,
+    "random_monotone": 0.045,
+    "far": 0.0925,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005202.jpg",
+    "random": 0.0331,
+    "random_monotone": 0.0284,
+    "far": 0.0593,
+    "far_monotone": 0.0506
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005256.jpg",
+    "random": 0.0276,
+    "random_monotone": 0.0258,
+    "far": 0.0569,
+    "far_monotone": 0.0513
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005292.jpg",
+    "random": 0.0226,
+    "random_monotone": 0.0204,
+    "far": 0.0441,
+    "far_monotone": 0.0384
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005391.jpg",
+    "random": 0.0264,
+    "random_monotone": 0.0253,
+    "far": 0.0538,
+    "far_monotone": 0.0523
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005436.jpg",
+    "random": 0.0277,
+    "random_monotone": 0.0236,
+    "far": 0.0498,
+    "far_monotone": 0.0436
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005472.jpg",
+    "random": 0.0385,
+    "random_monotone": 0.0313,
+    "far": 0.0686,
+    "far_monotone": 0.0571
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005535.jpg",
+    "random": 0.0342,
+    "random_monotone": 0.0268,
+    "far": 0.0579,
+    "far_monotone": 0.0475
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005616.jpg",
+    "random": 0.0291,
+    "random_monotone": 0.0245,
+    "far": 0.058,
+    "far_monotone": 0.0499
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003105.jpg",
+    "random": 0.0283,
+    "random_monotone": 0.0239,
+    "far": 0.0328,
+    "far_monotone": 0.0451
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003168.jpg",
+    "random": 0.0295,
+    "random_monotone": 0.0277,
+    "far": 0.0414,
+    "far_monotone": 0.0384
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003231.jpg",
+    "random": 0.0318,
+    "random_monotone": 0.0259,
+    "far": 0.0455,
+    "far_monotone": 0.0346
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003294.jpg",
+    "random": 0.0318,
+    "random_monotone": 0.0282,
+    "far": 0.0456,
+    "far_monotone": 0.0377
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003357.jpg",
+    "random": 0.0331,
+    "random_monotone": 0.029,
+    "far": 0.0551,
+    "far_monotone": 0.0375
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003420.jpg",
+    "random": 0.0345,
+    "random_monotone": 0.0289,
+    "far": 0.0444,
+    "far_monotone": 0.0391
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003483.jpg",
+    "random": 0.0359,
+    "random_monotone": 0.0269,
+    "far": 0.0695,
+    "far_monotone": 0.0399
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003546.jpg",
+    "random": 0.0381,
+    "random_monotone": 0.0282,
+    "far": 0.0865,
+    "far_monotone": 0.052
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003609.jpg",
+    "random": 0.0348,
+    "random_monotone": 0.0284,
+    "far": 0.075,
+    "far_monotone": 0.0288
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003672.jpg",
+    "random": 0.0347,
+    "random_monotone": 0.0253,
+    "far": 0.0739,
+    "far_monotone": 0.0314
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003735.jpg",
+    "random": 0.0367,
+    "random_monotone": 0.0264,
+    "far": 0.0349,
+    "far_monotone": 0.0408
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003771.jpg",
+    "random": 0.0394,
+    "random_monotone": 0.029,
+    "far": 0.0396,
+    "far_monotone": 0.0401
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_001881.jpg",
+    "random": 0.2757,
+    "random_monotone": 0.0158,
+    "far": 0.7522,
+    "far_monotone": 0.7529
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002052.jpg",
+    "random": 0.1577,
+    "random_monotone": 0.0411,
+    "far": 0.3835,
+    "far_monotone": 0.1461
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002106.jpg",
+    "random": 0.3118,
+    "random_monotone": 0.029,
+    "far": 0.6386,
+    "far_monotone": 0.5376
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002151.jpg",
+    "random": 0.0712,
+    "random_monotone": 0.013,
+    "far": 0.6275,
+    "far_monotone": 0.3586
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002196.jpg",
+    "random": 0.0488,
+    "random_monotone": 0.0216,
+    "far": 0.257,
+    "far_monotone": 0.2801
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002232.jpg",
+    "random": 0.0294,
+    "random_monotone": 0.014,
+    "far": 0.0617,
+    "far_monotone": 0.0599
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002277.jpg",
+    "random": 0.0211,
+    "random_monotone": 0.0105,
+    "far": 0.6191,
+    "far_monotone": 0.5858
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002313.jpg",
+    "random": 0.0533,
+    "random_monotone": 0.034,
+    "far": 0.0507,
+    "far_monotone": 0.0764
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002358.jpg",
+    "random": 0.0228,
+    "random_monotone": 0.0131,
+    "far": 0.0113,
+    "far_monotone": 0.0133
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002421.jpg",
+    "random": 0.0231,
+    "random_monotone": 0.0143,
+    "far": 0.0712,
+    "far_monotone": 0.0899
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002493.jpg",
+    "random": 0.0106,
+    "random_monotone": 0.0079,
+    "far": 0.105,
+    "far_monotone": 0.0871
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001530.jpg",
+    "random": 0.0567,
+    "random_monotone": 0.0492,
+    "far": 0.2049,
+    "far_monotone": 0.1879
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001845.jpg",
+    "random": 0.0818,
+    "random_monotone": 0.0602,
+    "far": 0.1416,
+    "far_monotone": 0.0847
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002097.jpg",
+    "random": 0.0897,
+    "random_monotone": 0.0787,
+    "far": 0.146,
+    "far_monotone": 0.1499
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002349.jpg",
+    "random": 0.0889,
+    "random_monotone": 0.0871,
+    "far": 0.1562,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002700.jpg",
+    "random": 0.0494,
+    "random_monotone": 0.0078,
+    "far": 0.0297,
+    "far_monotone": 0.0337
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002736.jpg",
+    "random": 0.0062,
+    "random_monotone": NaN,
+    "far": 0.0156,
+    "far_monotone": 0.0155
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002772.jpg",
+    "random": 0.0052,
+    "random_monotone": 0.004,
+    "far": 0.0136,
+    "far_monotone": 0.0136
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002808.jpg",
+    "random": 0.0033,
+    "random_monotone": 0.0031,
+    "far": 0.0131,
+    "far_monotone": 0.0132
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002871.jpg",
+    "random": 0.0088,
+    "random_monotone": 0.008,
+    "far": 0.03,
+    "far_monotone": 0.0297
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002907.jpg",
+    "random": 0.011,
+    "random_monotone": 0.0094,
+    "far": 0.042,
+    "far_monotone": 0.0408
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001719.jpg",
+    "random": 0.0346,
+    "random_monotone": 0.0288,
+    "far": 0.1685,
+    "far_monotone": 0.2182
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001845.jpg",
+    "random": 0.0389,
+    "random_monotone": 0.0324,
+    "far": 0.0461,
+    "far_monotone": 0.1526
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002034.jpg",
+    "random": 0.0336,
+    "random_monotone": 0.0303,
+    "far": 0.0422,
+    "far_monotone": 0.042
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002160.jpg",
+    "random": 0.0279,
+    "random_monotone": 0.0262,
+    "far": 0.0497,
+    "far_monotone": 0.05
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002286.jpg",
+    "random": 0.0453,
+    "random_monotone": 0.0361,
+    "far": 0.0752,
+    "far_monotone": 0.0598
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002412.jpg",
+    "random": 0.0329,
+    "random_monotone": 0.0326,
+    "far": 0.0556,
+    "far_monotone": 0.0419
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002601.jpg",
+    "random": 0.0372,
+    "random_monotone": 0.0291,
+    "far": 0.0463,
+    "far_monotone": 0.0398
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002727.jpg",
+    "random": 0.0397,
+    "random_monotone": 0.034,
+    "far": 0.0361,
+    "far_monotone": 0.0371
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002799.jpg",
+    "random": 0.0605,
+    "random_monotone": 0.0346,
+    "far": 0.0619,
+    "far_monotone": 0.0364
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002925.jpg",
+    "random": 0.0507,
+    "random_monotone": 0.0319,
+    "far": 0.0904,
+    "far_monotone": 0.0378
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003114.jpg",
+    "random": 0.0435,
+    "random_monotone": 0.0227,
+    "far": 0.0205,
+    "far_monotone": 0.0195
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003195.jpg",
+    "random": 0.0883,
+    "random_monotone": 0.0435,
+    "far": 0.12,
+    "far_monotone": 0.0707
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000230.jpg",
+    "random": 0.042,
+    "random_monotone": 0.0301,
+    "far": 0.1958,
+    "far_monotone": 0.2058
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000280.jpg",
+    "random": 0.0365,
+    "random_monotone": 0.0288,
+    "far": 0.1054,
+    "far_monotone": 0.1276
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000300.jpg",
+    "random": 0.0372,
+    "random_monotone": 0.0197,
+    "far": 0.1142,
+    "far_monotone": 0.0729
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000320.jpg",
+    "random": 0.0575,
+    "random_monotone": 0.0345,
+    "far": 0.1206,
+    "far_monotone": 0.0917
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000340.jpg",
+    "random": 0.0379,
+    "random_monotone": 0.024,
+    "far": 0.104,
+    "far_monotone": 0.0837
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000360.jpg",
+    "random": 0.0377,
+    "random_monotone": 0.0236,
+    "far": 0.0938,
+    "far_monotone": 0.0748
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000380.jpg",
+    "random": 0.0336,
+    "random_monotone": 0.0222,
+    "far": 0.1278,
+    "far_monotone": 0.0665
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000400.jpg",
+    "random": 0.027,
+    "random_monotone": 0.0229,
+    "far": 0.0617,
+    "far_monotone": 0.0527
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000430.jpg",
+    "random": 0.0295,
+    "random_monotone": 0.0239,
+    "far": 0.0364,
+    "far_monotone": 0.0464
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000460.jpg",
+    "random": 0.0657,
+    "random_monotone": 0.0513,
+    "far": 0.0658,
+    "far_monotone": 0.0959
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002080.jpg",
+    "random": 0.0282,
+    "random_monotone": 0.0254,
+    "far": 0.0414,
+    "far_monotone": 0.0489
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002224.jpg",
+    "random": 0.0308,
+    "random_monotone": 0.027,
+    "far": 0.0348,
+    "far_monotone": 0.0467
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002320.jpg",
+    "random": 0.0328,
+    "random_monotone": 0.0304,
+    "far": 0.0527,
+    "far_monotone": 0.0541
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002464.jpg",
+    "random": 0.0243,
+    "random_monotone": 0.0215,
+    "far": 0.0563,
+    "far_monotone": 0.0506
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002608.jpg",
+    "random": 0.0213,
+    "random_monotone": 0.0202,
+    "far": 0.045,
+    "far_monotone": 0.0496
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002704.jpg",
+    "random": 0.0205,
+    "random_monotone": 0.0184,
+    "far": 0.0382,
+    "far_monotone": 0.0563
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002848.jpg",
+    "random": 0.0267,
+    "random_monotone": 0.0244,
+    "far": 0.058,
+    "far_monotone": 0.0696
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002944.jpg",
+    "random": 0.0217,
+    "random_monotone": 0.0197,
+    "far": 0.04,
+    "far_monotone": 0.063
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003088.jpg",
+    "random": 0.0246,
+    "random_monotone": 0.0223,
+    "far": 0.0547,
+    "far_monotone": 0.0672
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003232.jpg",
+    "random": 0.026,
+    "random_monotone": 0.024,
+    "far": 0.077,
+    "far_monotone": 0.0771
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003328.jpg",
+    "random": 0.0218,
+    "random_monotone": 0.0187,
+    "far": 0.0713,
+    "far_monotone": 0.081
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003472.jpg",
+    "random": 0.0233,
+    "random_monotone": 0.0195,
+    "far": 0.0764,
+    "far_monotone": 0.0934
+   }
+  ]
+ },
+ {
+  "prior": "da3-metric-large",
+  "keyframes": 103,
+  "random_median": 0.0502,
+  "far_median": 0.0925,
+  "random_monotone_median": 0.03,
+  "far_monotone_median": 0.1164,
+  "seconds_per_image": 0.23,
+  "per_keyframe": [
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000904.jpg",
+    "random": 0.0554,
+    "random_monotone": 0.0433,
+    "far": 0.1221,
+    "far_monotone": 0.0904
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000960.jpg",
+    "random": 0.0671,
+    "random_monotone": 0.0403,
+    "far": 0.1661,
+    "far_monotone": 0.1283
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_000992.jpg",
+    "random": 0.0743,
+    "random_monotone": 0.0359,
+    "far": 0.2047,
+    "far_monotone": 0.1664
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001024.jpg",
+    "random": 0.1488,
+    "random_monotone": 0.0631,
+    "far": 0.3288,
+    "far_monotone": 0.2188
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001056.jpg",
+    "random": 0.0895,
+    "random_monotone": 0.0576,
+    "far": 0.2137,
+    "far_monotone": 0.1688
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001080.jpg",
+    "random": 0.1448,
+    "random_monotone": 0.0562,
+    "far": 0.2704,
+    "far_monotone": 0.2049
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001112.jpg",
+    "random": 0.1421,
+    "random_monotone": 0.0623,
+    "far": 0.2798,
+    "far_monotone": 0.21
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001136.jpg",
+    "random": 0.181,
+    "random_monotone": 0.0721,
+    "far": 0.3645,
+    "far_monotone": 0.2606
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001184.jpg",
+    "random": 0.1433,
+    "random_monotone": 0.0628,
+    "far": 0.2978,
+    "far_monotone": 0.2084
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001240.jpg",
+    "random": 0.1867,
+    "random_monotone": 0.0625,
+    "far": 0.4225,
+    "far_monotone": 0.3035
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001264.jpg",
+    "random": 0.1383,
+    "random_monotone": 0.0589,
+    "far": 0.2906,
+    "far_monotone": 0.2098
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:0:pass_05/f_001296.jpg",
+    "random": 0.0541,
+    "random_monotone": 0.03,
+    "far": 0.1491,
+    "far_monotone": 0.1216
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000536.jpg",
+    "random": 0.4359,
+    "random_monotone": 0.0628,
+    "far": 0.7973,
+    "far_monotone": 0.7948
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000560.jpg",
+    "random": 0.5611,
+    "random_monotone": NaN,
+    "far": 0.7847,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000592.jpg",
+    "random": 0.7282,
+    "random_monotone": NaN,
+    "far": 0.7838,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000616.jpg",
+    "random": 0.337,
+    "random_monotone": 0.0601,
+    "far": 0.6717,
+    "far_monotone": 0.5049
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000648.jpg",
+    "random": 0.5644,
+    "random_monotone": 0.1422,
+    "far": 0.7202,
+    "far_monotone": 0.3979
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000680.jpg",
+    "random": 0.2657,
+    "random_monotone": 0.0447,
+    "far": 0.547,
+    "far_monotone": 0.4675
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000712.jpg",
+    "random": 0.2375,
+    "random_monotone": 0.0318,
+    "far": 0.577,
+    "far_monotone": 0.4186
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000736.jpg",
+    "random": 0.2813,
+    "random_monotone": 0.1154,
+    "far": 0.5772,
+    "far_monotone": 0.5625
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000768.jpg",
+    "random": 0.2264,
+    "random_monotone": 0.0187,
+    "far": 0.6489,
+    "far_monotone": 0.4172
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000792.jpg",
+    "random": 0.2781,
+    "random_monotone": 0.0198,
+    "far": 0.6475,
+    "far_monotone": 0.309
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000824.jpg",
+    "random": 0.2928,
+    "random_monotone": 0.0238,
+    "far": 0.6467,
+    "far_monotone": 0.6256
+   },
+   {
+    "key": "map_jal_mahal_jaipur_india_drone_cinematic:1:pass_04/f_000848.jpg",
+    "random": 0.2962,
+    "random_monotone": 0.023,
+    "far": 0.6856,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004869.jpg",
+    "random": 0.0177,
+    "random_monotone": 0.0165,
+    "far": 0.0358,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_004995.jpg",
+    "random": 0.0306,
+    "random_monotone": 0.027,
+    "far": 0.06,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005085.jpg",
+    "random": 0.0562,
+    "random_monotone": NaN,
+    "far": 0.1002,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005130.jpg",
+    "random": 0.0514,
+    "random_monotone": 0.0461,
+    "far": 0.0925,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005202.jpg",
+    "random": 0.0331,
+    "random_monotone": 0.0289,
+    "far": 0.0596,
+    "far_monotone": 0.0517
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005256.jpg",
+    "random": 0.0277,
+    "random_monotone": 0.0264,
+    "far": 0.0564,
+    "far_monotone": 0.0506
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005292.jpg",
+    "random": 0.0218,
+    "random_monotone": 0.0213,
+    "far": 0.0415,
+    "far_monotone": 0.039
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005391.jpg",
+    "random": 0.0273,
+    "random_monotone": 0.0268,
+    "far": 0.0542,
+    "far_monotone": 0.0514
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005436.jpg",
+    "random": 0.0263,
+    "random_monotone": 0.023,
+    "far": 0.0507,
+    "far_monotone": 0.0443
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005472.jpg",
+    "random": 0.0351,
+    "random_monotone": 0.0329,
+    "far": 0.067,
+    "far_monotone": 0.0599
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005535.jpg",
+    "random": 0.0327,
+    "random_monotone": 0.0272,
+    "far": 0.0558,
+    "far_monotone": 0.0466
+   },
+   {
+    "key": "map_qutub_minar_new_delhi_india_4k_drone_vid:1:pass_11/f_005616.jpg",
+    "random": 0.0301,
+    "random_monotone": 0.0262,
+    "far": 0.0583,
+    "far_monotone": 0.0526
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003105.jpg",
+    "random": 0.0475,
+    "random_monotone": 0.0307,
+    "far": 0.0737,
+    "far_monotone": 0.0645
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003168.jpg",
+    "random": 0.0409,
+    "random_monotone": 0.0279,
+    "far": 0.0525,
+    "far_monotone": 0.0545
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003231.jpg",
+    "random": 0.0546,
+    "random_monotone": 0.0346,
+    "far": 0.0839,
+    "far_monotone": 0.1002
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003294.jpg",
+    "random": 0.0506,
+    "random_monotone": 0.0347,
+    "far": 0.0639,
+    "far_monotone": 0.0804
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003357.jpg",
+    "random": 0.0512,
+    "random_monotone": 0.039,
+    "far": 0.0601,
+    "far_monotone": 0.0898
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003420.jpg",
+    "random": 0.0521,
+    "random_monotone": 0.04,
+    "far": 0.0745,
+    "far_monotone": 0.1016
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003483.jpg",
+    "random": 0.049,
+    "random_monotone": 0.042,
+    "far": 0.0921,
+    "far_monotone": 0.1113
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003546.jpg",
+    "random": 0.0502,
+    "random_monotone": 0.0421,
+    "far": 0.1033,
+    "far_monotone": 0.0973
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003609.jpg",
+    "random": 0.0517,
+    "random_monotone": 0.047,
+    "far": 0.0714,
+    "far_monotone": 0.0712
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003672.jpg",
+    "random": 0.0604,
+    "random_monotone": 0.0506,
+    "far": 0.1185,
+    "far_monotone": 0.0923
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003735.jpg",
+    "random": 0.052,
+    "random_monotone": 0.0472,
+    "far": 0.1068,
+    "far_monotone": 0.0991
+   },
+   {
+    "key": "map_colosseum_like_never_before_4k_drone_aer:0:pass_10/f_003771.jpg",
+    "random": 0.0603,
+    "random_monotone": 0.0513,
+    "far": 0.095,
+    "far_monotone": 0.095
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_001881.jpg",
+    "random": 0.2471,
+    "random_monotone": 0.0987,
+    "far": 0.8029,
+    "far_monotone": 0.7732
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002052.jpg",
+    "random": 0.1779,
+    "random_monotone": 0.0435,
+    "far": 0.3627,
+    "far_monotone": 0.1201
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002106.jpg",
+    "random": 0.1869,
+    "random_monotone": 0.0507,
+    "far": 0.5103,
+    "far_monotone": 0.3863
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002151.jpg",
+    "random": 0.0609,
+    "random_monotone": 0.0269,
+    "far": 0.3486,
+    "far_monotone": 0.3141
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002196.jpg",
+    "random": 0.0468,
+    "random_monotone": 0.0257,
+    "far": 0.2773,
+    "far_monotone": 0.3221
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002232.jpg",
+    "random": 0.0613,
+    "random_monotone": 0.037,
+    "far": 0.0592,
+    "far_monotone": 0.0714
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002277.jpg",
+    "random": 0.0225,
+    "random_monotone": 0.0176,
+    "far": 0.39,
+    "far_monotone": 0.357
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002313.jpg",
+    "random": 0.0529,
+    "random_monotone": 0.027,
+    "far": 0.0738,
+    "far_monotone": 0.071
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002358.jpg",
+    "random": 0.0375,
+    "random_monotone": 0.0195,
+    "far": 0.0468,
+    "far_monotone": 0.0677
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002421.jpg",
+    "random": 0.021,
+    "random_monotone": 0.0148,
+    "far": 0.0277,
+    "far_monotone": 0.0359
+   },
+   {
+    "key": "map_the_messiah_cristo_redentor_4k_drone_foo:0:pass_07/f_002493.jpg",
+    "random": 0.0168,
+    "random_monotone": 0.0085,
+    "far": 0.0651,
+    "far_monotone": 0.0413
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001530.jpg",
+    "random": 0.1117,
+    "random_monotone": 0.1099,
+    "far": 0.3173,
+    "far_monotone": 0.3064
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_001845.jpg",
+    "random": 0.122,
+    "random_monotone": 0.1241,
+    "far": 0.2288,
+    "far_monotone": 0.212
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002097.jpg",
+    "random": 0.0912,
+    "random_monotone": NaN,
+    "far": 0.1913,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002349.jpg",
+    "random": 0.0892,
+    "random_monotone": 0.0921,
+    "far": 0.1537,
+    "far_monotone": 0.1729
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002700.jpg",
+    "random": 0.2713,
+    "random_monotone": 0.0079,
+    "far": 0.03,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002736.jpg",
+    "random": 0.0067,
+    "random_monotone": 0.0061,
+    "far": 0.0153,
+    "far_monotone": 0.0155
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002772.jpg",
+    "random": 0.0051,
+    "random_monotone": 0.0044,
+    "far": 0.0137,
+    "far_monotone": 0.0139
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002808.jpg",
+    "random": 0.0059,
+    "random_monotone": 0.0043,
+    "far": 0.0214,
+    "far_monotone": 0.022
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002871.jpg",
+    "random": 0.0101,
+    "random_monotone": NaN,
+    "far": 0.0281,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_eiffel_tower_drone_4k:0:pass_01/f_002907.jpg",
+    "random": 0.0132,
+    "random_monotone": NaN,
+    "far": 0.037,
+    "far_monotone": NaN
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001719.jpg",
+    "random": 0.0393,
+    "random_monotone": 0.0255,
+    "far": 0.2521,
+    "far_monotone": 0.2688
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_001845.jpg",
+    "random": 0.0329,
+    "random_monotone": 0.023,
+    "far": 0.143,
+    "far_monotone": 0.14
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002034.jpg",
+    "random": 0.0502,
+    "random_monotone": 0.0326,
+    "far": 0.1837,
+    "far_monotone": 0.2065
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002160.jpg",
+    "random": 0.0554,
+    "random_monotone": 0.0423,
+    "far": 0.1507,
+    "far_monotone": 0.1554
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002286.jpg",
+    "random": 0.0484,
+    "random_monotone": 0.0452,
+    "far": 0.087,
+    "far_monotone": 0.0894
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002412.jpg",
+    "random": 0.0364,
+    "random_monotone": 0.034,
+    "far": 0.0639,
+    "far_monotone": 0.0624
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002601.jpg",
+    "random": 0.0464,
+    "random_monotone": 0.0365,
+    "far": 0.1241,
+    "far_monotone": 0.1641
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002727.jpg",
+    "random": 0.0595,
+    "random_monotone": 0.0454,
+    "far": 0.1776,
+    "far_monotone": 0.1906
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002799.jpg",
+    "random": 0.1159,
+    "random_monotone": 0.0463,
+    "far": 0.2649,
+    "far_monotone": 0.2795
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_002925.jpg",
+    "random": 0.0666,
+    "random_monotone": 0.0251,
+    "far": 0.1602,
+    "far_monotone": 0.0571
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003114.jpg",
+    "random": 0.0529,
+    "random_monotone": 0.0245,
+    "far": 0.092,
+    "far_monotone": 0.1126
+   },
+   {
+    "key": "map_notre_dame_drone_paris_4k:0:pass_02/f_003195.jpg",
+    "random": 0.0555,
+    "random_monotone": 0.0315,
+    "far": 0.0665,
+    "far_monotone": 0.0911
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000230.jpg",
+    "random": 0.0484,
+    "random_monotone": 0.0201,
+    "far": 0.0886,
+    "far_monotone": 0.1292
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000280.jpg",
+    "random": 0.0316,
+    "random_monotone": 0.017,
+    "far": 0.0988,
+    "far_monotone": 0.1469
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000300.jpg",
+    "random": 0.0246,
+    "random_monotone": 0.0198,
+    "far": 0.0567,
+    "far_monotone": 0.1402
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000320.jpg",
+    "random": 0.0313,
+    "random_monotone": 0.0273,
+    "far": 0.0614,
+    "far_monotone": 0.1587
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000340.jpg",
+    "random": 0.0278,
+    "random_monotone": 0.0253,
+    "far": 0.0649,
+    "far_monotone": 0.1229
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000360.jpg",
+    "random": 0.028,
+    "random_monotone": 0.0221,
+    "far": 0.0801,
+    "far_monotone": 0.1464
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000380.jpg",
+    "random": 0.03,
+    "random_monotone": 0.0193,
+    "far": 0.0914,
+    "far_monotone": 0.1234
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000400.jpg",
+    "random": 0.0391,
+    "random_monotone": 0.0208,
+    "far": 0.1693,
+    "far_monotone": 0.1883
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000430.jpg",
+    "random": 0.0328,
+    "random_monotone": 0.015,
+    "far": 0.1328,
+    "far_monotone": 0.1434
+   },
+   {
+    "key": "ui_test_kinbane:0:pass_01/f_000460.jpg",
+    "random": 0.0343,
+    "random_monotone": 0.0233,
+    "far": 0.1933,
+    "far_monotone": 0.1951
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002080.jpg",
+    "random": 0.0359,
+    "random_monotone": 0.0322,
+    "far": 0.0779,
+    "far_monotone": 0.0782
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002224.jpg",
+    "random": 0.0347,
+    "random_monotone": 0.0335,
+    "far": 0.0716,
+    "far_monotone": 0.0816
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002320.jpg",
+    "random": 0.0373,
+    "random_monotone": 0.0311,
+    "far": 0.0781,
+    "far_monotone": 0.0842
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002464.jpg",
+    "random": 0.0328,
+    "random_monotone": 0.0285,
+    "far": 0.0864,
+    "far_monotone": 0.0894
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002608.jpg",
+    "random": 0.0301,
+    "random_monotone": 0.0268,
+    "far": 0.0649,
+    "far_monotone": 0.0647
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002704.jpg",
+    "random": 0.0245,
+    "random_monotone": 0.0237,
+    "far": 0.0653,
+    "far_monotone": 0.0702
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002848.jpg",
+    "random": 0.0244,
+    "random_monotone": 0.0213,
+    "far": 0.075,
+    "far_monotone": 0.0778
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_002944.jpg",
+    "random": 0.0224,
+    "random_monotone": 0.0203,
+    "far": 0.0652,
+    "far_monotone": 0.0699
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003088.jpg",
+    "random": 0.0226,
+    "random_monotone": 0.0186,
+    "far": 0.0539,
+    "far_monotone": 0.0645
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003232.jpg",
+    "random": 0.0219,
+    "random_monotone": 0.019,
+    "far": 0.0728,
+    "far_monotone": 0.0759
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003328.jpg",
+    "random": 0.0239,
+    "random_monotone": 0.0197,
+    "far": 0.0766,
+    "far_monotone": 0.0776
+   },
+   {
+    "key": "map_angkor_wat_breathtaking_cinematic_aerial:0:pass_05/f_003472.jpg",
+    "random": 0.0267,
+    "random_monotone": 0.0208,
+    "far": 0.0842,
+    "far_monotone": 0.0843
+   }
+  ]
+ }
+]

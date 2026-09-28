@@ -98,3 +98,17 @@ def test_gain_compensation_equalises_a_darker_view() -> None:
     assert (
         1.2 < hi / lo < 1 / 0.7 + 0.02 and lo < 1.0 < hi
     )  # the darker view up, the brighter one down
+
+
+def test_projection_follows_colmaps_radial_distortion() -> None:
+    """A SIMPLE_RADIAL keyframe (k1 = 0.12, Jal Mahal's): texels come from where COLMAP puts the point."""
+    pycolmap = pytest.importorskip("pycolmap")
+    from drone3d.export.texture_gpu import _project
+
+    cam = pycolmap.Camera(model="SIMPLE_RADIAL", width=1920, height=1080, params=[1500.0, 960.0, 540.0, 0.12])
+    pts = np.array([[0.1, 0.05, 1.0], [0.55, 0.3, 1.0], [-0.6, -0.33, 2.0]])
+    want = np.asarray(cam.img_from_cam(pts))
+    view = View(1500.0, 960.0, 540.0, np.eye(3), np.zeros(3), torch.zeros(1, 1, 3, dtype=torch.uint8, device="cuda"), k1=0.12)
+    u, w, _ = _project(torch.as_tensor(pts, dtype=torch.float64, device="cuda"), view)
+    got = np.stack([u.cpu().numpy(), w.cpu().numpy()], 1) + 0.5  # _project returns pixel centres at integers
+    assert np.abs(got - want).max() < 1e-6

@@ -95,6 +95,33 @@ def _axis_depth(points: np.ndarray, eye: np.ndarray, axis: np.ndarray, cone_deg:
     return float(np.median(along[along > 0])) if (along > 0).any() else 1.0
 
 
+def _subject_view(points: np.ndarray, cams: np.ndarray, axes: np.ndarray) -> np.ndarray:
+    """The viewer's first pose ``[eye, target]``: the keyframe that looks most directly at what the drone circled.
+
+    The subject is the point closest, in least squares, to every keyframe's optical axis; the keyframe whose
+    axis passes nearest it (in angle) is the eye, looking at its own axis depth. The middle keyframe, the
+    previous choice, looked at Rome's skyline in the Colosseum model merged from seven shots. When the axes
+    hardly converge (a nadir survey, a straight fly-by), the middle keyframe stays.
+    """
+    mid = len(cams) // 2
+    pick = mid
+    a = np.zeros((3, 3))
+    b = np.zeros(3)
+    for c, d in zip(cams, axes):
+        proj = np.eye(3) - np.outer(d, d)
+        a += proj
+        b += proj @ c
+    w = np.linalg.eigvalsh(a)
+    if len(cams) >= 3 and w[0] > 0.02 * w[-1]:
+        subject = np.linalg.solve(a, b)
+        rel = subject - cams
+        dist = np.linalg.norm(rel, axis=1)
+        cos = np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12)
+        if cos.max() > np.cos(np.radians(20)):
+            pick = int(np.argmax(cos))
+    return np.array([cams[pick], cams[pick] + _axis_depth(points, cams[pick], axes[pick]) * axes[pick]])
+
+
 def _level(points: np.ndarray, cams: np.ndarray, rotations: np.ndarray | None = None) -> np.ndarray:
     """Rotation taking the model's ground normal to +z (identity if it cannot be estimated)."""
     from drone3d.geo.georef import _rotation_between, estimate_up
@@ -128,7 +155,8 @@ def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec
         s = img.shape[1] / cam.width  # keyframes may be stored smaller than the camera
         pose = im.cam_from_world()
         vs.append(View(cam.params[0] * s, cam.params[1] * s, cam.params[2] * s,
-                       np.asarray(pose.rotation.matrix()), np.asarray(pose.translation), img))  # fmt: skip
+                       np.asarray(pose.rotation.matrix()), np.asarray(pose.translation), img,
+                       float(cam.params[3]) if cam.model.name in ("SIMPLE_RADIAL", "RADIAL") else 0.0))  # fmt: skip
     if not vs:
         return None
     uv, albedo, info = bake_soup_texture(v, f, vs, size=size, fallback_rgb=vc, gain=gain)
@@ -298,11 +326,8 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         cam_rots = np.array([im.cam_from_world().rotation.matrix().T for im in posed])
         cam0 = rec.cameras[posed[0].camera_id]
         intr = {"f": float(cam0.focal_length_x), "width": int(cam0.width), "height": int(cam0.height)}
-        # initial viewer pose: the middle keyframe's camera, looking at the model's median depth
-        mid = posed[len(posed) // 2]
-        axis = mid.cam_from_world().rotation.matrix()[2]  # optical axis in world coordinates
-        depth_med = _axis_depth(p, cams[len(posed) // 2], axis)
-        view = np.array([cams[len(posed) // 2], cams[len(posed) // 2] + depth_med * axis])
+        # initial viewer pose: the keyframe looking most directly at the subject (optical axes: third rows)
+        view = _subject_view(p, cams, np.array([im.cam_from_world().rotation.matrix()[2] for im in posed]))
         # The full-density mesh is the measurement deliverable (PLY); the viewable copies
         # (GLB, textured OBJ/GLB, FBX) are capped: a 1.5M-triangle model made a 120 MB
         # GLB that browsers load slowly and a 4096^2 soup atlas cannot texture finely.

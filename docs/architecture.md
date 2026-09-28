@@ -42,6 +42,7 @@ whether other processes shared the GPU.
 | Flow batch not raised on a free GPU | idle A100, 480×272: 206, 205, 207 flows/s at 16, 32, 64 pairs per replay; cuDNN refuses 128 (`experiments/bench_raft_batch.py`) |
 | Every SfM component of a pass is a model (fast) | Hanoi's one pass mapped as 43 + 25 + 6 keyframes; keeping the largest dropped 31 registered views and triggered a 128 s second mapper |
 | Three views per surface voxel, two on small models (fast) | Open3D's default asks for four: +3–12 points of completeness on large models, +8–65 on small ones (a 5-view shot: 0 → 0.65), ≤ 0.1 % more depth error (`experiments/tsdf_weight.py`) |
+| SfM tie points calibrate views flow cannot triangulate (fast) | short montage shots: Kinbane's 3–5-view models from no depth (or 0.65) to 0.81–0.93 completeness, mesh within 1–2 % of the tie points |
 | Fill stops at 3× the triangulated range (fast) | held-out: the prior is 3–15 % off just past the calibrated range (42 % on the lake model) and 47–87 % beyond 3× (`experiments/far_field.py`) |
 | One splat trainer at a time | Jal Mahal's 5 models: 178 s in sequence, 249 s two and 264 s three at once (`experiments/splat_parallel.py`) |
 

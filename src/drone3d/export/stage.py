@@ -134,7 +134,7 @@ def _level(points: np.ndarray, cams: np.ndarray, rotations: np.ndarray | None = 
 
 
 def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec, images: Path, *,
-                 views: int = 16, size: int = 4096, gain: bool = True):  # type: ignore[no-untyped-def]  # fmt: skip
+                 views: int = 48, size: int = 4096, gain: bool = True):  # type: ignore[no-untyped-def]  # fmt: skip
     """Keyframe texture for the mesh (model frame) -> ``(corner_uv, albedo, info)`` or ``None``."""
     import torch
     from torchvision.io import read_file
@@ -282,7 +282,7 @@ def _write_rows(fh, fmt: str, rows: np.ndarray, chunk: int = 200_000) -> None:  
 
 def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, mesh_formats: list[str],
                las: bool = True, geotiff: bool = True, raster_cell: float | None = None, viewer: bool = True,
-               images: Path | None = None, texture: bool = True, texture_views: int = 16,
+               images: Path | None = None, texture: bool = True, texture_views: int = 48,
                texture_size: int = 4096, max_triangles: int = 600_000, splats: dict | None = None,
                max_splats: int = 1_500_000, texture_gain: bool = True) -> dict:  # fmt: skip
     import open3d as o3d

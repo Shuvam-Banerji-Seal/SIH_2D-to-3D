@@ -171,12 +171,24 @@ def estimate_up(
     inlier_fraction_of_extent: float = 0.01,
     seed: int = 0,
     max_points: int = 50_000,
+    rotations: np.ndarray | None = None,
+    max_roll_deg: float = 20.0,
 ) -> tuple[np.ndarray, float]:
     """Ground-plane normal of a model, pointing towards its cameras.
 
     RANSAC plane on the sparse points (threshold 1 % of the scene extent);
     returns ``(unit_normal, inlier_fraction)``. Aerial scenes are dominated by
     ground, so the largest plane is the ground; the cameras decide its sign.
+
+    With the cameras' ``rotations`` (world-to-camera, ``[N, 3, 3]``), only planes a
+    gimbal camera can stand on compete: a drone's gimbal keeps the horizon level,
+    so the ground normal is perpendicular to every image x-axis (within
+    ``max_roll_deg`` for most views) and never points against the image's up. A
+    large facade facing a pitched camera fails the second test: without it, the
+    largest plane of Eiffel Tower, Notre Dame, Reichstag and Colosseum models was a
+    wall or a dome, and the model was levelled onto it, turned by up to 90 degrees.
+    The sign then follows the image's up (reliable for oblique views, and inside
+    buildings, where the scene is not below the cameras) unless the views are nadir.
     """
     pts = np.asarray(points, dtype=np.float64)
     cams = np.asarray(cameras, dtype=np.float64)
@@ -197,6 +209,15 @@ def estimate_up(
     if not ok.any():
         raise ReconstructionError("degenerate points: no plane hypothesis")
     a, normals = a[ok], normals[ok] / norms[ok, None]
+    if rotations is not None and len(rotations):
+        rot = np.asarray(rotations, dtype=np.float64)
+        right, img_up = rot[:, 0, :], -rot[:, 1, :]  # image x-axis and image up, in the world
+        level = np.median(np.abs(normals @ right.T), axis=1) < np.sin(np.radians(max_roll_deg))
+        flip = np.where((normals @ img_up.mean(0)) < 0, -1.0, 1.0)  # each hypothesis as the image's up would have it
+        upright = np.median((normals * flip[:, None]) @ img_up.T, axis=1) > -0.2  # a wall facing a pitched camera: < 0
+        keep = level & upright
+        if keep.sum() >= 10:
+            a, normals = a[keep], normals[keep]
     offsets = np.einsum("kj,kj->k", a, normals)  # plane k: x . n_k = offset_k
     counts = np.zeros(len(normals), dtype=np.int64)
     for s in range(0, len(normals), 64):
@@ -208,7 +229,13 @@ def estimate_up(
     inliers = pts[np.abs((pts - anchor) @ best_normal) < threshold]
     centered = inliers - inliers.mean(axis=0)
     normal = np.linalg.svd(centered, full_matrices=False)[2][-1]
-    if np.mean((cams - inliers.mean(axis=0)) @ normal) < 0:
+    toward_cameras = np.mean((cams - inliers.mean(axis=0)) @ normal)
+    if rotations is not None and len(rotations):
+        img_up = -np.asarray(rotations, dtype=np.float64)[:, 1, :].mean(0)
+        along = float(img_up @ normal)
+        if abs(along) > 0.2:  # oblique or level views: the image's up is the world's up
+            return (normal if along > 0 else -normal), float(len(inliers) / len(pts))
+    if toward_cameras < 0:  # nadir views (or no rotations): the scene is below the cameras
         normal = -normal
     return normal, float(len(inliers) / len(pts))
 

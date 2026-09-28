@@ -76,12 +76,31 @@ class _Clock:
         return {k: round(v, 2) for k, v in self.seconds.items()}
 
 
-def _level(points: np.ndarray, cams: np.ndarray) -> np.ndarray:
+def _axis_depth(points: np.ndarray, eye: np.ndarray, axis: np.ndarray, cone_deg: float = 3.0) -> float:
+    """How far along ``axis`` from ``eye`` the surface is: the viewer's orbit pivot.
+
+    The median depth of the points inside a narrow cone around the axis, where the
+    drone actually looked; the median over the whole cloud put Colosseum's pivot 19
+    model units below its ground (the far field pulls it out), so orbiting swung
+    the model around a point hidden beneath it.
+    """
+    if not len(points):
+        return 1.0
+    rel = np.asarray(points, dtype=np.float64) - eye
+    along = rel @ axis
+    perp = np.linalg.norm(rel - along[:, None] * axis, axis=1)
+    for widen in (1, 3, 10):  # a sparse cloud: widen the cone before falling back to every point
+        if (cone := (along > 0) & (perp < np.tan(np.radians(cone_deg * widen)) * along)).sum() >= 50:
+            return float(np.median(along[cone]))
+    return float(np.median(along[along > 0])) if (along > 0).any() else 1.0
+
+
+def _level(points: np.ndarray, cams: np.ndarray, rotations: np.ndarray | None = None) -> np.ndarray:
     """Rotation taking the model's ground normal to +z (identity if it cannot be estimated)."""
     from drone3d.geo.georef import _rotation_between, estimate_up
 
     try:
-        up, _ = estimate_up(points, cams)
+        up, _ = estimate_up(points, cams, rotations=rotations)
     except Exception:  # too few points for a plane
         return np.eye(3)
     return _rotation_between(np.asarray(up, dtype=np.float64), np.array([0.0, 0.0, 1.0]))
@@ -281,7 +300,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         # initial viewer pose: the middle keyframe's camera, looking at the model's median depth
         mid = posed[len(posed) // 2]
         axis = mid.cam_from_world().rotation.matrix()[2]  # optical axis in world coordinates
-        depth_med = float(np.median((p - cams[len(posed) // 2]) @ axis)) if len(p) else 1.0
+        depth_med = _axis_depth(p, cams[len(posed) // 2], axis)
         view = np.array([cams[len(posed) // 2], cams[len(posed) // 2] + depth_med * axis])
         # The full-density mesh is the measurement deliverable (PLY); the viewable copies
         # (GLB, textured OBJ/GLB, FBX) are capped: a 1.5M-triangle model made a 120 MB
@@ -313,7 +332,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             to_export = {"scale": float(t.scale), "rotation": np.asarray(t.rotation).tolist(), "translation": np.asarray(t.translation).tolist()}
         else:
             with clock("level"):
-                rot = _level(p, cams)
+                rot = _level(p, cams, np.transpose(cam_rots, (0, 2, 1)))  # world-to-camera, as estimate_up takes them
             v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
             cam_rots = rot @ cam_rots
             dv = dv @ rot.T

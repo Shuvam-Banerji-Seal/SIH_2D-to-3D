@@ -19,6 +19,7 @@ from __future__ import annotations
 import collections
 import copy
 import json
+import logging
 import os
 import re
 import shutil
@@ -40,6 +41,8 @@ from drone3d.app.jobs import JobManager, run_status
 from drone3d.app.schema import config_schema, profiles
 
 __all__ = ["create_app"]
+
+log = logging.getLogger(__name__)
 
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".ts"}
 LOG_EXT = {".srt", ".csv", ".gpx", ".json", ".tsv", ".txt"}
@@ -78,7 +81,34 @@ def model_catalog(run: Path) -> dict:
         e["role"] = "main" if i == 0 or e["share"] >= 0.15 else "fragment"
     merge = sfm.get("merge") or {}
     return {"models": out, "registered": total, "merged": merge.get("status") == "ok",
-            "models_before_merge": merge.get("models_before"), "models_after_merge": merge.get("models_after")}
+            "models_before_merge": merge.get("models_before"), "models_after_merge": merge.get("models_after"),
+            "generated": generated_object(run)}
+
+
+def generated_object(run: Path) -> dict:
+    """The run's generated object (drone3d.generate): its state, files and what it was made from."""
+    from drone3d import generate
+
+    rec = generate.status(run) or {}
+    state = rec.get("status") or "none"
+    if state == "running" and not _alive(rec.get("pid")):
+        state = "interrupted"  # the process that ran it is gone (console restarted)
+    base = f"/runs/{run.name}/export/generated"
+    return {"available": generate.available(), "status": state, "keyframe": rec.get("keyframe"),
+            "seconds": rec.get("seconds"), "resolution": rec.get("resolution"), "note": generate.NOTE,
+            "glb": "generated/object.glb" if state == "ok" and rec.get("glb") else None,
+            "input": f"{base}/{rec['input']}" if rec.get("input") else None, "started": rec.get("started"),
+            "error": (rec.get("log") or [""])[-1][:300] if state == "failed" else None}  # fmt: skip
+
+
+def _alive(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(int(pid), 0)
+    except (OSError, ValueError):
+        return False
+    return True
 
 
 def _group(name: str, kind: str) -> str:
@@ -201,7 +231,7 @@ def create_app(
     probe_cache: dict[str, dict] = {}
 
     def own_pids() -> set[int]:
-        pids = {os.getpid()}
+        pids = {os.getpid()} | _descendants(os.getpid())  # with a TRELLIS.2 generation it runs
         info = _read(outputs / ".engine.json") or {}
         for pid in [info.get("pid"), jobs.current[1].pid if jobs.current else None]:
             if pid:
@@ -414,6 +444,32 @@ def create_app(
         if not _NAME.match(name) or not (outputs / name).is_dir():
             raise HTTPException(404, "no such run")
         return model_catalog(outputs / name)
+
+    generating: dict[str, threading.Thread] = {}
+
+    @app.post("/api/runs/{name}/generate")
+    def generate_run(name: str) -> dict:
+        """Generate the run's object with TRELLIS.2 in the background (one at a time; ~5 min)."""
+        from drone3d import generate
+
+        run = outputs / name
+        if not _NAME.match(name) or not (run / "sfm" / "result.json").is_file():
+            raise HTTPException(404, "no finished run of that name")
+        if not generate.available():
+            raise HTTPException(409, "TRELLIS.2 is not installed on this machine (tools/setup_trellis2.sh)")
+        busy = [k for k, t in generating.items() if t.is_alive()]
+        if busy:
+            raise HTTPException(409, f"already generating {busy[0]}; one object at a time")
+
+        def work() -> None:
+            try:
+                generate.generate_object(run)
+            except Exception as exc:  # recorded in result.json by generate_object where it can be
+                log.warning("generate %s: %s", name, exc)
+
+        generating[name] = threading.Thread(target=work, name=f"generate-{name}", daemon=True)
+        generating[name].start()
+        return {"name": name, "status": "running"}
 
     @app.get("/api/runs/{name}/frames")
     def frames(name: str, limit: int = Query(400, le=2000)) -> dict:

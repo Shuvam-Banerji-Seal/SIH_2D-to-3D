@@ -105,6 +105,15 @@ def build_parser() -> argparse.ArgumentParser:
                                help="runs at once: 1 times one video; 2 overlaps CPU and GPU phases of a batch")
     engine_parser.set_defaults(func=cmd_engine)
 
+    gen_parser = subparsers.add_parser(
+        "generate", help="Generated object (TRELLIS.2) from a finished run's subject keyframe -- not a measurement"
+    )
+    gen_parser.add_argument("run_dir", type=Path)
+    gen_parser.add_argument("--image", type=Path, default=None, help="keyframe to generate from (default: the subject's)")
+    gen_parser.add_argument("--res", default="1024", choices=["512", "1024"])
+    gen_parser.add_argument("--seed", type=int, default=0)
+    gen_parser.set_defaults(func=cmd_generate)
+
     subparsers.add_parser("version", help="Print the version").set_defaults(func=cmd_version)
     return parser
 
@@ -268,6 +277,18 @@ def cmd_engine(args: argparse.Namespace) -> int:
     serve(Path.cwd(), args.outputs.resolve(), host=args.host, port=args.port, warm=warm, reserve_gb=args.reserve_gb,
           slots=args.slots)
     return 0
+
+
+def cmd_generate(args: argparse.Namespace) -> int:
+    import json
+
+    from drone3d.generate import generate_object
+
+    rec = generate_object(args.run_dir, image=args.image, resolution=args.res, seed=args.seed)
+    print(json.dumps({k: v for k, v in rec.items() if k != "log"}, indent=1))
+    if rec["status"] != "ok":
+        print("\n".join(rec.get("log") or []))
+    return 0 if rec["status"] == "ok" else 1
 
 
 def cmd_version(args: argparse.Namespace) -> int:

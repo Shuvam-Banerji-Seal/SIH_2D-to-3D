@@ -117,7 +117,22 @@ export async function viewRun(main, name) {
   }
 
   // The run's models, main pieces first: a model is the part of the scene one set of camera passes saw.
-  let showFragments = false, cat = null;
+  let showFragments = false, cat = null, genPoll = null;
+  // TRELLIS.2's object from the subject keyframe: complete from every side, but generated, not measured
+  function genCard(g) {
+    if (!g || (!g.available && g.status === 'none')) return '';
+    const glb = `${enc}/generated/object.glb`;
+    const act = g.status === 'ok'
+      ? `<a class="btn tiny" href="#/model/${glb}">${icon.eye}view GLB</a><a class="btn tiny" href="/runs/${glb.replace('/generated', '/export/generated')}" download>${icon.down}object.glb</a>`
+      : g.status === 'running' ? `<span class="note mono">generating… ${g.started ? fmtS(Date.now() / 1000 - g.started) : ''} · about 5 min</span>`
+        : `<button class="btn tiny" id="genBtn" ${g.available ? '' : 'disabled title="TRELLIS.2 is not installed"'}>${g.status === 'none' ? 'Generate object' : 'Generate again'}</button>`;
+    return `<div class="mcard generated">
+        <div class="mthumb gen" style="${g.input ? `background-image:url('${encodeURI(g.input)}')` : ''}"><span class="pill">generated</span></div>
+        <div style="padding:9px 11px"><b>Generated object</b> <span class="muted" style="font-size:12px">TRELLIS.2${g.keyframe ? ` · from ${esc(g.keyframe)}` : ' · from the keyframe that shows the subject whole'}</span>
+          <div class="note" style="margin-top:6px">${esc(g.note)}. Not part of the deliverables.</div>
+          ${g.status === 'failed' || g.status === 'interrupted' ? `<div class="note bad" style="margin-top:4px">${g.status}${g.error ? `: ${esc(g.error)}` : ''}</div>` : ''}
+          <div class="row" style="gap:6px;margin-top:8px">${act}</div></div></div>`;
+  }
   async function catalog() {
     try { cat = await api(`/api/runs/${enc}/models`); } catch { return; }
     if (!cat.models.length) return;
@@ -135,8 +150,16 @@ export async function viewRun(main, name) {
     el.innerHTML = `<h2>Models <span class="tag">${esc(merged)}</span><span class="grow"></span>
         ${frag.length ? `<button class="linkbtn" id="fragBtn">${showFragments ? 'hide' : 'show'} ${frag.length} fragment${frag.length > 1 ? 's' : ''}</button>` : ''}</h2>
       <div class="note" style="margin:-4px 0 10px">A model is the part of the scene one set of camera passes saw. Main models hold the bulk of the video; fragments are short shots nothing else overlaps.</div>
-      <div class="mgrid">${main.map(cardOf).join('')}${showFragments ? frag.map(cardOf).join('') : ''}</div>`;
+      <div class="mgrid">${main.map(cardOf).join('')}${genCard(cat.generated)}${showFragments ? frag.map(cardOf).join('') : ''}</div>`;
     const fb = $('#fragBtn'); if (fb) fb.onclick = () => { showFragments = !showFragments; catalog(); };
+    const gb = $('#genBtn');
+    if (gb) gb.onclick = async () => {
+      gb.disabled = true;
+      try { await post(`/api/runs/${enc}/generate`, {}); toast('Generating the object with TRELLIS.2 — about 5 minutes', 'ok'); } catch (e) { toast(e.message, 'bad'); }
+      catalog();
+    };
+    if (cat.generated?.status === 'running' && !genPoll) genPoll = every(10000, () => catalog());
+    if (cat.generated?.status !== 'running' && genPoll) { clearInterval(genPoll); genPoll = null; if (cat.generated?.status === 'ok') toast('Generated object ready', 'ok'); }
     $$('#catalog [data-solo]').forEach((b) => b.addEventListener('click', () => {
       const i = xp.x.models.findIndex((m) => m.spec.dir === `model_${b.dataset.solo}` || m.spec.name === `model ${b.dataset.solo}`);
       if (i >= 0) { xp.x.solo(i); document.querySelector('#xp').scrollIntoView({ behavior: 'smooth' }); }

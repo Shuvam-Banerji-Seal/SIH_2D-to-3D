@@ -309,3 +309,6 @@ h2.sect small { text-transform: none; letter-spacing: 0; font-weight: 400; color
 .mcard.main { border-color: #ff9f1c55; }
 .mthumb { position: relative; height: 110px; background: var(--ink3) center / cover no-repeat; }
 .mthumb .pill { position: absolute; left: 8px; top: 8px; background: #0b1118d9; color: var(--text); }
+.mcard.generated { border-color: #7c9cff55; border-style: dashed; }
+.mthumb.gen { background-size: contain; background-color: #0b1118; }
+.note.bad { color: var(--red); }

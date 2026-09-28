@@ -169,6 +169,7 @@ outputs/<run>/
 │       ├── points.{ply,las}              dense point cloud (LAS in UTM + EPSG when georeferenced)
 │       ├── splats.splat                  Gaussian splats for the web (with the splat stage)
 │       └── dsm.tif, ortho.tif            GeoTIFF surface model and orthophoto
+│   └── generated/object.glb              generated object (TRELLIS.2, on request; not a measurement)
 ├── dense/model_N/depth/*.jpg             fused depth per keyframe (turbo; black = no depth / sky)
 ├── dataset/images/pass_NN/*.jpg          keyframes (1920 px)
 ├── dataset/sparse/N/                     COLMAP models, one per pass
@@ -177,6 +178,22 @@ outputs/<run>/
 ├── */result.json, */gpu_timeline.json    per-stage results and GPU telemetry
 └── metrics/metrics.json                  incl. "processing": seconds per stage vs the budget
 ```
+
+## Generated object (TRELLIS.2)
+
+The measured model is only as complete as the flight. For a finished run, **Generate object** in
+the run page's model catalog (or `drone3d generate outputs/<run>`) runs
+[TRELLIS.2](https://huggingface.co/microsoft/TRELLIS.2-4B) on the keyframe that shows the subject
+whole: the one looking at the point where the optical axes converge, from farthest away. The
+result, `export/generated/object.glb`, is complete from every side, but it is **generated, not
+measured**: unseen sides are invented and the scale is arbitrary, so it is listed apart and never
+enters the deliverables or the metrics. Before generating, the RMBG-2.0 cut-out keeps only its
+largest part (an opening at 3.5 % of the diagonal cut the block of houses Colosseum's cut-out
+dragged along). Conditioning on several keyframes from different sides, averaged per flow step,
+stacked several rings on each other -- TRELLIS.2 generates in a frame tied to the input view -- so
+it uses one. It runs in its own environment (`tools/setup_trellis2.sh`; torch 2.7 and its CUDA
+extensions): about 2.5 min to load, 80 s to generate at 1024^3 and 80 s to bake the GLB on the
+A100, 8 GB of GPU memory at most.
 
 ## The accurate profile (3D Gaussian Splatting)
 
@@ -201,6 +218,7 @@ src/drone3d/
 ├── app/                the console: FastAPI server, engine supervisor, static front end (js/, fonts/)
 ├── viewer/static/      explorer.js + standalone viewer; three.js and Spark (vendored, MIT)
 ├── depth/, splat/      Marigold v2 and spirula-studio wrappers (accurate profile)
+├── generate.py         TRELLIS.2 generated object from a run's subject keyframe (subprocess)
 ├── geo/                WGS84/ENU, Umeyama, ground-levelled 4-DoF georeferencing
 ├── gpu/               NVML sampler per stage (records GPU sharing) and snapshots for the console
 ├── pipeline.py, config.py, cli.py
@@ -230,5 +248,7 @@ program through its command line; three.js is MIT. **Depth Anything V2 Large,
 the fast profile's default depth prior, is CC-BY-NC-4.0 (non-commercial)**; the
 Small model is Apache-2.0 (`--set dense.mono_model=depth-anything/Depth-Anything-V2-Small-hf`).
 Marigold v2 weights are Apache-2.0 on top of Qwen-Image-Edit-2509 (its own
-licence). The sample videos are third-party YouTube content used for research
+licence). The optional generated object uses TRELLIS.2 (MIT), RMBG-2.0 (Bria's
+licence, non-commercial) and DINOv3 (Meta's DINOv3 licence); RoMa v2, which merges
+the passes, is MIT. The sample videos are third-party YouTube content used for research
 only and are not redistributed.

@@ -198,16 +198,42 @@ def _link_scene(run_dir: Path, model: int) -> None:
     path.write_text(json.dumps(scene, indent=1))
 
 
+def _rz(a: float) -> np.ndarray:
+    return np.array([[np.cos(a), -np.sin(a), 0.0], [np.sin(a), np.cos(a), 0.0], [0.0, 0.0, 1.0]])
+
+
+def _upright_icp(gp: np.ndarray, bp: np.ndarray, yaw: float, scale: float, t: np.ndarray, thr: float,
+                 iters: int = 40) -> tuple[float, float, np.ndarray]:  # fmt: skip
+    """ICP for heading, scale and translation only: the object stays upright, as generated and as the levelled
+    model is. Each measured point pairs with its nearest generated point within ``thr`` (the measurement is the
+    partial side); the 4-DoF similarity then has a closed form -- the heading from the horizontal covariance."""
+    from scipy.spatial import cKDTree
+
+    for _ in range(iters):
+        moved = scale * gp @ _rz(yaw).T + t
+        d, j = cKDTree(moved).query(bp)
+        ok = d < thr
+        if ok.sum() < 20:
+            break
+        g, b = gp[j[ok]], bp[ok]
+        gm, bm = g.mean(0), b.mean(0)
+        gc, bc = g - gm, b - bm
+        yaw = float(np.arctan2((gc[:, 0] * bc[:, 1] - gc[:, 1] * bc[:, 0]).sum(), (gc[:, 0] * bc[:, 0] + gc[:, 1] * bc[:, 1]).sum()))
+        rg = gc @ _rz(yaw).T
+        scale = float((rg * bc).sum() / max((gc**2).sum(), 1e-12))
+        t = bm - scale * _rz(yaw) @ gm
+    return yaw, scale, t
+
+
 def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws: int = 24) -> dict:
     """Place the generated object in the measured model's frame -> record (also ``export/generated/aligned.json``).
 
     The generated object has its own frame and scale. It is matched to the measured surface near the subject
     (above the ground, within half a subject radius of it): the scale from the two heights, the yaw by trying
-    ``yaws`` headings, each refined by ICP with scale; the best inlier share wins. The result,
+    ``yaws`` headings, each refined by an upright ICP (heading, scale and position only); the best cover wins. The result,
     ``object_aligned.glb``, sits where the building stands, so the parts the flight never saw (a half orbit
     leaves the back empty) come from the generated object -- shown as generated, never measured.
     """
-    import open3d as o3d
     import trimesh
     from scipy.spatial import cKDTree
 
@@ -227,55 +253,79 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     gen = trimesh.load(out / "object.glb", force="mesh", process=False)
     gv = np.asarray(gen.vertices) @ np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float).T  # glTF y-up -> z-up
     gen.vertices = gv
-    gp = np.asarray(gen.sample(samples))
+    gp = np.asarray(trimesh.sample.sample_surface(gen, samples, seed=0)[0])  # seeded: the same fit every time
     rng = np.random.default_rng(0)
     bp = body[rng.choice(len(body), min(samples, len(body)), replace=False)]
     s0 = (np.percentile(bp[:, 2], 98) - ground) / max(np.percentile(gp[:, 2], 98) - gp[:, 2].min(), 1e-9)
-    src = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gp))
-    dst = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(bp))
     thr = 0.04 * r
+    base = np.array([np.median(gp[:, 0]), np.median(gp[:, 1]), gp[:, 2].min()])
+
+    def cover(yaw: float, scale: float, t: np.ndarray) -> tuple[float, float]:
+        d, _ = cKDTree(scale * gp @ _rz(yaw).T + t).query(bp)
+        return float((d < thr).mean()), float(np.median(d))
+
     best = None
     for k in range(yaws):
-        a = 2 * np.pi * k / yaws
-        rz = np.array([[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1]])
-        init = np.eye(4)
-        init[:3, :3] = s0 * rz
-        base = np.array([np.median(gp[:, 0]), np.median(gp[:, 1]), gp[:, 2].min()])
-        init[:3, 3] = np.array([c[0], c[1], ground]) - s0 * rz @ base
-        reg = o3d.pipelines.registration.registration_icp(
-            src, dst, thr, init, o3d.pipelines.registration.TransformationEstimationPointToPoint(with_scaling=True),
-            o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=60))
-        # the measured half of the building must be covered by the generated one: inliers of the *measured* points
-        moved = gp @ reg.transformation[:3, :3].T + reg.transformation[:3, 3]
-        d, _ = cKDTree(moved).query(bp)
-        score = float((d < thr).mean())
+        a0 = 2 * np.pi * k / yaws
+        t0 = np.array([c[0], c[1], ground]) - s0 * _rz(a0) @ base
+        yaw, sc, t = _upright_icp(gp, bp, a0, s0, t0, thr)
+        score, med = cover(yaw, sc, t)
         if best is None or score > best[0]:
-            best = (score, reg.transformation.copy(), float(np.median(d)))
+            best = (score, yaw, sc, t, med)
     # ICP with scale on a half-seen subject shrinks towards the measured side (-5 % on a synthetic tower); the ground-
-    # to-roof height is steadier where the roof was seen: refit rigidly at that scale and keep the better cover
-    t_icp = best[1]
-    s_icp = float(np.cbrt(abs(np.linalg.det(t_icp[:3, :3]))))
-    rot = t_icp[:3, :3] / s_icp
-    gz = gp @ rot.T  # the generated points turned as the best fit turned them
+    # to-roof height is steadier where the roof was seen: refit the position at that scale and keep the better cover
+    _, yaw, sc, t, _ = best
+    gz = gp @ _rz(yaw).T
     s_h = (np.percentile(bp[:, 2], 98) - ground) / max(np.percentile(gz[:, 2], 98) - gz[:, 2].min(), 1e-9)
-    init = np.eye(4)
-    init[:3, :3] = s_h * rot
-    init[:3, 3] = t_icp[:3, 3] + (s_icp - s_h) * rot @ np.array([np.median(gp[:, 0]), np.median(gp[:, 1]), gp[:, 2].min()])
-    scaled = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gp))
-    reg = o3d.pipelines.registration.registration_icp(
-        scaled, dst, thr, init, o3d.pipelines.registration.TransformationEstimationPointToPoint(with_scaling=False),
-        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=60))
-    d, _ = cKDTree(gp @ reg.transformation[:3, :3].T + reg.transformation[:3, 3]).query(bp)
-    if float((d < thr).mean()) >= best[0] - 0.02:  # as good a cover: the height's scale
-        best = (float((d < thr).mean()), reg.transformation.copy(), float(np.median(d)))
+    y2, _, t2 = _upright_icp(gp, bp, yaw, s_h, t + (sc - s_h) * _rz(yaw) @ base, thr, iters=1)  # one step: t at s_h
+    for _ in range(20):  # translation and heading only, at the height's scale
+        moved = s_h * gp @ _rz(y2).T + t2
+        d, j = cKDTree(moved).query(bp)
+        ok = d < thr
+        if ok.sum() < 20:
+            break
+        t2 = t2 + (bp[ok] - moved[j[ok]]).mean(0)
+    score_h, med_h = cover(y2, s_h, t2)
+    if score_h >= best[0] - 0.02:  # as good a cover: the height's scale
+        best = (score_h, y2, s_h, t2, med_h)
+    score, yaw, sc, tt, med = best
+    t = np.eye(4)
+    t[:3, :3] = sc * _rz(yaw)
+    t[:3, 3] = tt
+    best = (score, t, med)
     score, t, med = best
     t = t.copy()
     t[2, 3] += ground - float((gp @ t[:3, :3].T + t[:3, 3])[:, 2].min())  # it stands on the measured ground
-    placed = trimesh.Trimesh(vertices=gv @ t[:3, :3].T + t[:3, 3], faces=gen.faces, visual=gen.visual, process=False)
+    pv = gv @ t[:3, :3].T + t[:3, 3]
+    faces = np.asarray(gen.faces)
+    # trimmed to the subject's measured footprint: what stands above its surroundings near the subject, its box
+    # grown by 10 % -- the generator adds a base of its own (Jal Mahal: a disc of lake over the measured water;
+    # the highrise: a block beside it); two facades of a half orbit already span the whole footprint
+    top = float(np.percentile(body[:, 2], 99))
+    tall = body[body[:, 2] > ground + 0.5 * (top - ground)]
+    trimmed = 0
+    if len(tall) >= 200:
+        lo, hi = tall[:, :2].min(0), tall[:, :2].max(0)
+        grow = 0.1 * (hi - lo) + 0.01 * r
+        fc = pv[faces].mean(1)
+        inside = np.all((fc[:, :2] >= lo - grow) & (fc[:, :2] <= hi + grow), axis=1)
+        trimmed = int((~inside).sum())
+        faces = faces[inside]
+    # and without the flat slab it stands on (Jal Mahal's: water): near-horizontal faces in its lowest 3 %
+    tri = pv[faces]
+    n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    flat = np.abs(n[:, 2]) > 0.8 * np.linalg.norm(n, axis=1).clip(1e-12)
+    z0, z1 = float(pv[:, 2].min()), float(pv[:, 2].max())
+    slab = flat & (tri[:, :, 2].mean(1) < z0 + 0.03 * (z1 - z0))
+    trimmed += int(slab.sum())
+    faces = faces[~slab]
+    placed = trimesh.Trimesh(vertices=pv, faces=faces, visual=gen.visual, process=False)
+    placed.remove_unreferenced_vertices()
     placed.vertices = np.asarray(placed.vertices) @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], float).T  # back to y-up
     placed.export(out / "object_aligned.glb")
     rec = {"model": model, "transform_zup": t.round(6).tolist(), "measured_covered": round(score, 3),
            "median_gap_rel": round(med / r, 4), "scale": round(float(np.cbrt(abs(np.linalg.det(t[:3, :3])))), 5),
+           "trimmed_faces": trimmed,
            "glb": "object_aligned.glb"}  # fmt: skip
     (out / "aligned.json").write_text(json.dumps(rec, indent=1))
     return rec

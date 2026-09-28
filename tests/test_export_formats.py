@@ -132,3 +132,21 @@ def test_decimation_keeps_shape_and_colour(monkeypatch) -> None:  # type: ignore
         assert 1800 <= len(df) <= 2000
         np.testing.assert_allclose(np.linalg.norm(dv, axis=1), 2.0, atol=0.08)  # still the sphere
         assert (dvc[dv[:, 2] > 0.5, 0] > 150).all() and (dvc[dv[:, 2] < -0.5, 2] > 150).all()
+
+
+def test_decimation_keeps_colours_where_they_were() -> None:
+    import pytest
+
+    pytest.importorskip("fast_simplification")
+    from drone3d.export.stage import _decimate
+
+    n = 80  # a gently curved sheet, red growing along x
+    xs, ys = np.meshgrid(np.linspace(0, 1, n), np.linspace(0, 1, n))
+    v = np.stack([xs.ravel(), ys.ravel(), 0.05 * np.sin(3 * xs.ravel())], 1)
+    q = np.arange(n * n).reshape(n, n)
+    f = np.concatenate([np.stack([q[:-1, :-1].ravel(), q[1:, :-1].ravel(), q[:-1, 1:].ravel()], 1),
+                        np.stack([q[1:, :-1].ravel(), q[1:, 1:].ravel(), q[:-1, 1:].ravel()], 1)])  # fmt: skip
+    vc = np.stack([np.round(255 * v[:, 0]), np.full(len(v), 90), np.full(len(v), 160)], 1).astype(np.uint8)
+    dv, df, dc = _decimate(None, v, f, vc, len(f) // 4)
+    assert abs(len(df) - len(f) // 4) <= 2 and dc.shape == (len(dv), 3)
+    assert np.abs(dc[:, 0].astype(float) - 255 * dv[:, 0]).max() < 12  # the colour of the place it moved to

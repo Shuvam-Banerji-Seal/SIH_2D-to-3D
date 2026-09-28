@@ -3,10 +3,12 @@
 * ``depth_tiles.mp4`` -- 2 x 2 tiles per keyframe: the keyframe, the depth
   triangulated from flow, the depth completed by the calibrated prior, and the
   textured mesh rendered from the same pose;
-* ``model_inset.mp4`` and ``flythrough.mp4`` -- the textured mesh flown along
-  the drone's own path (ray-cast, ``drone3d.export.render_mesh``).
+* ``model_inset.mp4`` and ``flythrough.mp4`` -- the textured mesh circled around
+  its subject (or, without one, flown along the drone's own path), ray-cast with
+  ``drone3d.export.render_mesh``;
+* ``merge.mp4`` -- the video's passes, one colour each, meeting in one model.
 
-    uv run python promo/assets.py outputs/<run> [model index]
+    uv run python promo/assets.py outputs/<run> [model index] [--merge-from outputs/<same video, unmerged>]
 """
 
 from __future__ import annotations
@@ -83,18 +85,186 @@ def depth_tiles(run: Path, model: Path, export_dir: Path, out: Path, *, tile=(45
     return out
 
 
+def _look(eye: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """cam_from_world rotation (COLMAP axes: x right, y down, z forward) looking from ``eye`` at ``target``, z up."""
+    fwd = (target - eye) / np.linalg.norm(target - eye)
+    right = np.cross(fwd, [0.0, 0.0, 1.0])
+    right /= np.linalg.norm(right)
+    return np.stack([right, np.cross(fwd, right), fwd])
+
+
+def _frames_to_mp4(frames_dir: Path, out: Path, fps: int = 30) -> Path:
+    from drone3d.export.render_mesh import _encode
+
+    _encode(frames_dir, fps, out)
+    return out
+
+
+def orbit(export_dir: Path, scene_model: dict, out: Path, *, seconds: float = 10.0, size=(1920, 1080), turns: float = 0.6,
+          elev_deg: float = 32.0, keep: float = 1.3) -> Path:  # fmt: skip
+    """The textured model circled around its subject (scene.json's focus), everything beyond ``keep`` x the
+    focus radius left out as the explorer's focus does -- the merge shows as a model complete on every side."""
+    import shutil
+
+    import cv2
+    import trimesh
+
+    from drone3d.export.render_mesh import MeshRenderer
+
+    tm = trimesh.load(export_dir / "mesh_textured.obj", force="mesh", process=False)
+    v, faces = np.asarray(tm.vertices), np.asarray(tm.faces)
+    c, r = np.asarray(scene_model["focus"]["center"]), float(scene_model["focus"]["radius"])
+    cen = v[faces].mean(1)
+    near = (np.abs(cen[:, 0] - c[0]) < keep * r) & (np.abs(cen[:, 1] - c[1]) < keep * r)
+    faces = faces[near]
+    rend = MeshRenderer(v, faces, np.asarray(tm.visual.uv)[faces], np.asarray(tm.visual.material.image.convert("RGB")))
+    ground = float(np.percentile(v[np.unique(faces)][:, 2], 20))
+    target = np.array([c[0], c[1], ground + 0.15 * r])
+    w, h = size
+    f = 0.9 * w
+    tmp = out.parent / (out.stem + "_frames")
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    n = int(seconds * 30)
+    a0 = np.arctan2(*(np.asarray(scene_model["view"]["eye"])[1::-1] - c[1::-1]))  # start where the drone's view starts
+    for i in range(n):
+        a = a0 + 2 * np.pi * turns * i / max(n - 1, 1)
+        d = 1.9 * r
+        eye = target + d * np.array([np.cos(a) * np.cos(np.radians(elev_deg)), np.sin(a) * np.cos(np.radians(elev_deg)),
+                                     np.sin(np.radians(elev_deg))])  # fmt: skip
+        img = rend.render(f, w / 2, h / 2, _look(eye, target), eye, size)
+        cv2.imwrite(str(tmp / f"{i:05d}.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92])
+    _frames_to_mp4(tmp, out)
+    shutil.rmtree(tmp)
+    return out
+
+
+STAGGER = 0.7  # seconds between two passes joining the merge animation (the film's shot times its counter to it)
+PASS_COLOURS = [(255, 153, 51), (90, 209, 255), (63, 185, 80), (242, 200, 90), (200, 120, 255), (255, 110, 110),
+                (120, 230, 210), (240, 240, 240)]  # fmt: skip
+
+
+def merge_assembly(single_run: Path, out: Path, *, seconds: float = 6.5, size=(900, 506), keep: float = 1.4) -> Path:
+    """The passes of a video meeting: each pass's own fused mesh, one colour per pass, flying from apart into
+    the place RoMa v2 + Sim(3) put it (``single_run``: a run mapped before merging, its per-pass models)."""
+    import shutil
+
+    import cv2
+    import open3d as o3d
+    import pycolmap
+
+    from drone3d.export.stage import _level, _subject
+    from drone3d.fastsfm.merge import find_links, groups_from_links
+
+    sparse = single_run / "dataset" / "sparse"
+    recs = {p.name: pycolmap.Reconstruction(str(p)) for p in sorted(sparse.iterdir(), key=lambda p: int(p.name))}
+    recs = {k: r for k, r in recs.items() if r.num_reg_images() >= 3}
+    names = sorted(recs, key=lambda k: -recs[k].num_reg_images())
+    edges, _ = find_links(recs, single_run / "dataset" / "images")
+    group = max(groups_from_links(names, edges), key=lambda g: sum(recs[m].num_reg_images() for m in g["members"]))
+    parts, cams, axes, rots = [], [], [], []
+    for k, (sim_s, sim_r, sim_t) in group["members"].items():
+        mesh = o3d.io.read_triangle_mesh(str(single_run / "dense" / f"model_{k}" / "mesh.ply"))
+        parts.append((k, sim_s * np.asarray(mesh.vertices) @ sim_r.T + sim_t, np.asarray(mesh.triangles)))
+        for im in recs[k].images.values():
+            if im.has_pose:
+                cams.append(sim_s * sim_r @ im.projection_center() + sim_t)
+                rw = np.asarray(im.cam_from_world().rotation.matrix()) @ sim_r.T
+                rots.append(rw)
+                axes.append(rw[2])
+    cams, axes, rots = np.array(cams), np.array(axes), np.array(rots)
+    allv = np.concatenate([p[1] for p in parts])
+    lev = _level(allv[:: max(1, len(allv) // 200000)], cams, rots)
+    sub = _subject(cams @ lev.T, axes @ lev.T)
+    parts = [(k, v @ lev.T, f) for k, v, f in parts]
+    if sub is not None:
+        c, r = sub
+    else:
+        allv = np.concatenate([p[1] for p in parts])
+        c, r = np.median(allv, 0), float(np.linalg.norm(np.percentile(allv, 90, 0) - np.percentile(allv, 10, 0))) / 3
+    kept = []
+    for i, (k, v, f) in enumerate(parts):
+        cen = v[f].mean(1)
+        sel = (np.abs(cen[:, 0] - c[0]) < keep * r) & (np.abs(cen[:, 1] - c[1]) < keep * r)
+        if sel.sum() > 500:
+            kept.append((i, v, f[sel]))
+    import open3d.core as o3c
+
+    ground = float(np.percentile(np.concatenate([v[np.unique(f)] for _, v, f in kept])[:, 2], 20))
+    target = np.array([c[0], c[1], ground + 0.1 * r])
+    w, h = size
+    tmp = out.parent / (out.stem + "_frames")
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    n = int(seconds * 30)
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    f_px = 0.95 * w
+    light = np.array([0.35, 0.25, 0.9]) / np.linalg.norm([0.35, 0.25, 0.9])
+    bg = np.array([11, 29, 51], np.float32)
+    cols = np.array(PASS_COLOURS, np.float32)
+    for fr in range(n):
+        t = fr / 30.0
+        scene = o3d.t.geometry.RaycastingScene()
+        owner = []
+        for j, (i, v, f) in enumerate(kept):  # the model builds up pass by pass: each drops into its place in turn
+            arrive = (t - 0.3 - STAGGER * j) / 0.9
+            if arrive <= 0:
+                continue
+            e = 1 - (1 - min(arrive, 1.0)) ** 3
+            off = (1 - e) * r * np.array([0.0, 0.0, 0.9])
+            scene.add_triangles(o3c.Tensor((v + off).astype(np.float32)), o3c.Tensor(f.astype(np.uint32)))
+            owner.append(i)
+        if not owner:
+            cv2.imwrite(str(tmp / f"{fr:05d}.jpg"), np.full((h, w, 3), bg[::-1], np.uint8))
+            continue
+        a = 0.9 + 0.5 * t / seconds
+        eye = target + 3.1 * r * np.array([np.cos(a) * 0.8, np.sin(a) * 0.8, 0.6])
+        rot = _look(eye, target)
+        d = np.stack([(xs + 0.5 - w / 2) / f_px, (ys + 0.5 - h / 2) / f_px, np.ones_like(xs)], -1).reshape(-1, 3) @ rot
+        rays = np.concatenate([np.broadcast_to(eye.astype(np.float32), d.shape), d.astype(np.float32)], 1)
+        ans = scene.cast_rays(o3c.Tensor(np.ascontiguousarray(rays)))
+        hit = np.isfinite(ans["t_hit"].numpy())
+        gid = ans["geometry_ids"].numpy()[hit]
+        nrm = ans["primitive_normals"].numpy()[hit]
+        shade = 0.35 + 0.65 * np.abs(nrm @ light)
+        img = np.tile(bg, (h * w, 1))
+        img[hit] = cols[np.array(owner)[gid] % len(cols)] * shade[:, None]
+        cv2.imwrite(str(tmp / f"{fr:05d}.jpg"), cv2.cvtColor(img.reshape(h, w, 3).clip(0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR),
+                    [cv2.IMWRITE_JPEG_QUALITY, 92])  # fmt: skip
+    _frames_to_mp4(tmp, out)
+    shutil.rmtree(tmp)
+    (out.with_suffix(".json")).write_text(json.dumps({"members": sorted(group["members"]), "shown": len(kept),
+                                                      "passes_in_video": len(names), "stagger_s": STAGGER, "first_s": 0.3}))  # fmt: skip
+    return out
+
+
 def main() -> None:
+    import argparse
+
     from drone3d.export.render_mesh import render_mesh_flythrough
 
-    run = Path(sys.argv[1])
-    k = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+    ap = argparse.ArgumentParser()
+    ap.add_argument("run", type=Path)
+    ap.add_argument("model", type=int, nargs="?", default=0)
+    ap.add_argument("--merge-from", type=Path, default=None, help="the same video mapped before merging (per-pass models)")
+    ap.add_argument("--only", default="depth,orbit,merge", help="which assets to (re)make")
+    args = ap.parse_args()
+    run, k, only = args.run, args.model, set(args.only.split(","))
     BUILD.mkdir(parents=True, exist_ok=True)
     sfm = json.loads((run / "sfm" / "result.json").read_text())
     model = Path(sfm["models"][k]["path"])
     export_dir = run / "export" / f"model_{model.name}"
-    print("depth tiles ->", depth_tiles(run, model, export_dir, BUILD / "depth_tiles.mp4"), flush=True)
-    print("inset ->", render_mesh_flythrough(export_dir, model, BUILD / "model_inset.mp4", seconds=6, size=(760, 428)), flush=True)
-    print("fly-through ->", render_mesh_flythrough(export_dir, model, BUILD / "flythrough.mp4", seconds=10, size=(1920, 1080)), flush=True)
+    scene = json.loads((run / "export" / "scene.json").read_text())["models"][k]
+    if "depth" in only:
+        print("depth tiles ->", depth_tiles(run, model, export_dir, BUILD / "depth_tiles.mp4"), flush=True)
+    if "orbit" in only and scene.get("focus"):
+        print("inset ->", orbit(export_dir, scene, BUILD / "model_inset.mp4", seconds=6, size=(760, 428), turns=0.35), flush=True)
+        print("orbit ->", orbit(export_dir, scene, BUILD / "flythrough.mp4", seconds=10, size=(1920, 1080)), flush=True)
+    elif "orbit" in only:
+        print("inset ->", render_mesh_flythrough(export_dir, model, BUILD / "model_inset.mp4", seconds=6, size=(760, 428)), flush=True)
+        print("fly-through ->", render_mesh_flythrough(export_dir, model, BUILD / "flythrough.mp4", seconds=10, size=(1920, 1080)), flush=True)
+    if "merge" in only and args.merge_from:
+        print("merge ->", merge_assembly(args.merge_from, BUILD / "merge.mp4"), flush=True)
 
 
 if __name__ == "__main__":

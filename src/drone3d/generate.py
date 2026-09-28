@@ -147,7 +147,7 @@ def status(run_dir: Path) -> dict | None:
 
 
 def generate_object(run_dir: Path, *, image: Path | None = None, resolution: str = "1024", seed: int = 0,
-                    timeout_s: float = 1800.0) -> dict:  # fmt: skip
+                    timeout_s: float = 3600.0) -> dict:  # fmt: skip  (a shared GPU: 30 min was not enough for Kinbane)
     """Generate ``export/generated/object.glb`` for a finished run -> the result record (also result.json)."""
     if not available():
         raise RuntimeError(f"TRELLIS.2 is not installed ({PYTHON}); run tools/setup_trellis2.sh")

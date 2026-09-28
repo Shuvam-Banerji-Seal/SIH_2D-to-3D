@@ -154,7 +154,9 @@ class ExportConfig:
     raster_cell: float | None = None  # metres (or model units); default: 2 x median point spacing
     viewer: bool = True  # write the three.js web viewer
     texture: bool = True  # bake an atlas from the keyframes (sharper than TSDF vertex colours)
-    texture_views: int = 16  # candidate keyframes; each triangle takes its best view
+    # candidate keyframes, spread over the model; each triangle takes its best view. Colosseum's merged model (47
+    # keyframes, 600k triangles): 16 -> 47 views, untextured 6.8 -> 3.7 % of the triangles, bake 1.5 -> 4.6 s
+    texture_views: int = 48
     texture_size: int = 4096  # texture atlas size (px)
     texture_gain: bool = True  # equalise the keyframes' exposure before baking (OpenCV stitching's gain compensation)
     max_triangles: int = 600_000  # viewable copies (GLB, textured, FBX); mesh.ply keeps full density

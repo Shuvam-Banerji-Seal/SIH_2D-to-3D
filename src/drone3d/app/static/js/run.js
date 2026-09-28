@@ -129,7 +129,7 @@ export async function viewRun(main, name) {
     return `<div class="mcard generated">
         <div class="mthumb gen" style="${g.input ? `background-image:url('${encodeURI(g.input)}')` : ''}"><span class="pill">generated</span></div>
         <div style="padding:9px 11px"><b>Generated object</b> <span class="muted" style="font-size:12px">TRELLIS.2${g.keyframe ? ` · from ${esc(g.keyframe)}` : ' · from the keyframe that shows the subject whole'}</span>
-          <div class="note" style="margin-top:6px">${esc(g.note)}. Not part of the deliverables.</div>
+          <div class="note" style="margin-top:6px">${esc(g.note)}. Not part of the deliverables.${g.placed != null ? ` Placed in the model: ${Math.round(100 * g.placed)} % of the measured subject lies on it — the explorer's <b>Generated completion</b> layer fills the sides the flight never saw.` : ''}</div>
           ${g.status === 'failed' || g.status === 'interrupted' ? `<div class="note bad" style="margin-top:4px">${g.status}${g.error ? `: ${esc(g.error)}` : ''}</div>` : ''}
           <div class="row" style="gap:6px;margin-top:8px">${act}</div></div></div>`;
   }

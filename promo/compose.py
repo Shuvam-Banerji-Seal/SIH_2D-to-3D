@@ -162,6 +162,8 @@ def main() -> None:
             sources[s["id"]] = fit_image(BUILD / "console.png", out, w, h, dur)
         elif s["id"] == "splat_inset" and (BUILD / "model_inset.mp4").is_file():
             sources[s["id"]] = fit_video(BUILD / "model_inset.mp4", out, w, h, 0.0, dur)
+        elif s["id"] == "new_video" and (BUILD / "highrise_orbit.mp4").is_file():  # a clip never tuned for
+            sources[s["id"]] = fit_video(BUILD / "highrise_orbit.mp4", out, w, h, 0.0, dur)
         elif s["id"] == "flythrough" and (BUILD / "flythrough.mp4").is_file():
             sources[s["id"]] = fit_video(BUILD / "flythrough.mp4", out, w, h, 0.0, dur)
         elif s["id"] in ("splat_inset", "flythrough") and fly:

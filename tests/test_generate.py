@@ -147,3 +147,35 @@ def test_a_point_no_keyframe_looks_at_is_not_a_subject() -> None:
     cams = _orbit(9, 10.0, 4.0)[:5]
     axes = np.array([-_look_at(c, np.zeros(3)) for c in cams])  # every camera looks away from the centre
     assert _subject(cams, axes) is None
+
+
+def test_the_generated_object_is_placed_on_the_measured_subject(tmp_path: Path) -> None:
+    """A tower measured on two sides; the generated one, whole, at a tenth of the size and turned 70 degrees."""
+    trimesh = pytest.importorskip("trimesh")
+    pytest.importorskip("open3d")
+    run = tmp_path / "run"
+    (run / "export" / "model_0").mkdir(parents=True)
+    (run / "export" / "generated").mkdir(parents=True)
+    tower = trimesh.creation.box(extents=(2.0, 3.0, 8.0))
+    tower.apply_translation((5.0, 3.0, 4.0))  # standing on z = 0 at (5, 3)
+    ground = trimesh.creation.box(extents=(20.0, 20.0, 0.1))
+    ground.apply_translation((5.0, 3.0, -0.05))
+    for _ in range(5):  # a mesh as dense as a fused one, near the subject
+        tower = tower.subdivide()
+    seen = tower.triangles_center
+    keep = (seen[:, 0] > 5.9) | (seen[:, 1] > 4.4) | (seen[:, 2] > 7.9)  # two facades and the roof: a half orbit
+    measured = trimesh.util.concatenate([trimesh.Trimesh(tower.vertices, tower.faces[keep]), ground.subdivide().subdivide()])
+    measured.export(run / "export" / "model_0" / "mesh.ply")
+    (run / "export" / "scene.json").write_text(json.dumps({"models": [{"dir": "model_0", "focus": {"center": [5.0, 3.0, 2.0], "radius": 7.0}}]}))
+    gen = trimesh.creation.box(extents=(0.2, 0.3, 0.8)).subdivide().subdivide()
+    a = np.radians(70)
+    gen.apply_transform(trimesh.transformations.rotation_matrix(a, (0, 0, 1)))
+    gen.apply_translation((0.3, -0.2, 0.4))
+    gen.vertices = np.asarray(gen.vertices) @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], float).T  # to glTF y-up
+    gen.export(run / "export" / "generated" / "object.glb")
+    rec = generate.align_to_model(run)
+    assert rec["measured_covered"] > 0.9
+    assert abs(rec["scale"] - 10.0) < 0.5
+    placed = trimesh.load(run / "export" / "generated" / "object_aligned.glb", force="mesh")
+    v = np.asarray(placed.vertices) @ np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float).T  # back to z-up
+    assert np.allclose(v.min(0), (4.0, 1.5, 0.0), atol=0.3) and np.allclose(v.max(0), (6.0, 4.5, 8.0), atol=0.3)

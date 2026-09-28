@@ -101,7 +101,7 @@ def _frames_to_mp4(frames_dir: Path, out: Path, fps: int = 30) -> Path:
 
 
 def orbit(export_dir: Path, scene_model: dict, out: Path, *, seconds: float = 10.0, size=(1920, 1080), turns: float = 0.6,
-          elev_deg: float = 32.0, keep: float = 1.3) -> Path:  # fmt: skip
+          elev_deg: float = 32.0, keep: float = 1.3, dist: float = 1.9, lift: float = 0.15) -> Path:  # fmt: skip
     """The textured model circled around its subject (scene.json's focus), everything beyond ``keep`` x the
     focus radius left out as the explorer's focus does -- the merge shows as a model complete on every side."""
     import shutil
@@ -119,7 +119,7 @@ def orbit(export_dir: Path, scene_model: dict, out: Path, *, seconds: float = 10
     faces = faces[near]
     rend = MeshRenderer(v, faces, np.asarray(tm.visual.uv)[faces], np.asarray(tm.visual.material.image.convert("RGB")))
     ground = float(np.percentile(v[np.unique(faces)][:, 2], 20))
-    target = np.array([c[0], c[1], ground + 0.15 * r])
+    target = np.array([c[0], c[1], ground + lift * r])  # lift: a tall building is framed at its middle
     w, h = size
     f = 0.9 * w
     tmp = out.parent / (out.stem + "_frames")
@@ -129,7 +129,7 @@ def orbit(export_dir: Path, scene_model: dict, out: Path, *, seconds: float = 10
     a0 = np.arctan2(*(np.asarray(scene_model["view"]["eye"])[1::-1] - c[1::-1]))  # start where the drone's view starts
     for i in range(n):
         a = a0 + 2 * np.pi * turns * i / max(n - 1, 1)
-        d = 1.9 * r
+        d = dist * r
         eye = target + d * np.array([np.cos(a) * np.cos(np.radians(elev_deg)), np.sin(a) * np.cos(np.radians(elev_deg)),
                                      np.sin(np.radians(elev_deg))])  # fmt: skip
         img = rend.render(f, w / 2, h / 2, _look(eye, target), eye, size)

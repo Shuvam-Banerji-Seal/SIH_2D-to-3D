@@ -3,7 +3,7 @@ import { Explorer } from '/viewer/explorer.js';
 import { $, $$, esc, fmtN, icon, toast } from './util.js';
 
 const LAYERS = [['mesh', 'Mesh'], ['texture', 'Texture'], ['shaded', 'Shaded'], ['wireframe', 'Wireframe'], ['points', 'Points'], ['splats', 'Gaussian splats'],
-  ['cameras', 'Flight path'], ['photos', 'Keyframe photos'], ['depth', 'Depth maps'], ['video', 'Source video'], ['grid', 'Grid'], ['focus', 'Focus subject']];
+  ['cameras', 'Flight path'], ['photos', 'Keyframe photos'], ['depth', 'Depth maps'], ['video', 'Source video'], ['grid', 'Grid'], ['focus', 'Focus subject'], ['generated', 'Generated completion']];
 const BACKGROUNDS = { dark: 0x0b1118, grey: 0x2a3038, sky: 0x9fb8cf };
 
 export function mountExplorer(el, { imageBase = null, height = null } = {}) {

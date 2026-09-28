@@ -46,7 +46,7 @@ export class Explorer extends EventTarget {
     this.marks = new THREE.Group();
     this.scene.add(this.root, this.marks);
     this.models = [];
-    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false, focus: false };
+    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false, focus: false, generated: true };
     this.pointSize = 1.5;
     this.imageScale = 2.5; // keyframe photo / depth planes: big enough to read at the model's framing
     this.nav = 'orbit';
@@ -97,6 +97,7 @@ export class Explorer extends EventTarget {
     this.models.push(entry);
     this._cameraTrack(entry);
     if (m.mesh) await this._loadMesh(entry).catch((e) => this.status(`mesh failed: ${e.message || e}`));
+    if (m.generated && this.layers.generated) await this._loadGenerated(entry).catch((e) => this.status(`generated object failed: ${e.message || e}`));
     else if (m.points) { this.layers.points = true; await this._loadPoints(entry); }
     if (this.layers.points && m.points && !entry.pointsObj) await this._loadPoints(entry);
     if (this.layers.splats && m.splat && !entry.splatObj) await this._loadSplat(entry);
@@ -105,6 +106,16 @@ export class Explorer extends EventTarget {
     this.dispatchEvent(new CustomEvent('models'));
     this.wake(2500);
     return entry;
+  }
+
+  // The generated object placed in this model's frame (drone3d.generate: TRELLIS.2, registered to the measured
+  // subject): it fills what the flight never saw. Drawn behind nothing -- where both exist the depth test keeps the
+  // nearer, so the measured surface shows wherever it was measured.
+  async _loadGenerated(entry) {
+    const gltf = await new GLTFLoader().loadAsync(entry.spec.generated.mesh);
+    gltf.scene.rotation.x = Math.PI / 2; gltf.scene.updateMatrixWorld(true);   // glTF y-up -> survey z-up
+    gltf.scene.traverse((o) => { if (o.isMesh) { o.material.side = THREE.DoubleSide; o.userData.generated = true; } });
+    entry.genObj = gltf.scene; entry.group.add(gltf.scene); this._apply(entry);
   }
 
   async _loadMesh(entry) {
@@ -229,6 +240,7 @@ export class Explorer extends EventTarget {
     if (name === 'splats' && on) for (const m of this.models) if (m.visible) await this._loadSplat(m).catch((e) => this.status(`splats failed: ${e.message || e}`));
     if (name === 'photos' && on) for (const m of this.models) if (!m.photoObj) m.photoObj = this._imagePlanes(m, 'photo');
     if (name === 'depth' && on) for (const m of this.models) if (!m.depthObj) m.depthObj = this._imagePlanes(m, 'depth');
+    if (name === 'generated' && on) for (const m of this.models) if (m.spec.generated && !m.genObj) await this._loadGenerated(m);
     this.models.forEach((m) => this._apply(m));
     if (name === 'grid') this._grid(on);
     this.dispatchEvent(new CustomEvent('layers'));
@@ -269,13 +281,15 @@ export class Explorer extends EventTarget {
     if (entry.camObj) entry.camObj.visible = L.cameras;
     if (entry.photoObj) entry.photoObj.visible = L.photos;
     if (entry.depthObj) entry.depthObj.visible = L.depth;
+    if (entry.genObj) entry.genObj.visible = L.generated && L.mesh;
   }
 
   layerAvailable(name) {
     const v = this.models.map((m) => m.spec);
     return { mesh: v.some((m) => m.mesh), texture: v.some((m) => m.mesh), points: v.some((m) => m.points), splats: v.some((m) => m.splat),
       cameras: v.some((m) => (m.cameras || []).length > 1), photos: v.some((m) => m.images && m.camera_rotations && (m.frames?.photo || m.thumb)),
-      depth: v.some((m) => m.images && m.camera_rotations && (m.frames?.depth || m.base)), focus: v.some((m) => m.focus) }[name] ?? true;
+      depth: v.some((m) => m.images && m.camera_rotations && (m.frames?.depth || m.base)), focus: v.some((m) => m.focus),
+      generated: v.some((m) => m.generated) }[name] ?? true;
   }
 
   setPointSize(s) { this.wake(); this.pointSize = s; this.models.forEach((m) => this._apply(m)); }

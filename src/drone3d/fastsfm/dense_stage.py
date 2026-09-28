@@ -176,6 +176,12 @@ TIE_FALLBACK_PX = 400  # a view with fewer flow-triangulated pixels uses its SfM
 TIE_MIN_POINTS = 60  # ... if it has at least this many
 
 
+def ndimage_dilate(mask: np.ndarray, px: int) -> np.ndarray:
+    from scipy import ndimage
+
+    return ndimage.binary_dilation(mask, iterations=px)
+
+
 def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int, gaps: tuple[int, ...],
                    keyframe_stride: int, min_angle_deg: float, rel_tol: float, refine: str = "none",
                    far_factor: float = 3.0) -> dict:  # type: ignore[no-untyped-def]  # fmt: skip
@@ -221,6 +227,12 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
         depths.append(fuse_depths(d, wts, rel_tol=rel_tol).cpu().numpy())
     torch.cuda.synchronize()
     timing["triangulate"] = time.perf_counter() - t0
+    from drone3d.io.overlay import load_mask
+
+    overlay = load_mask(images.parent, (w, h))  # a burnt-in logo: no depth there, from flow or from the prior
+    if overlay is not None:
+        overlay = np.asarray(ndimage_dilate(overlay, 2))
+        depths = [np.where(overlay, 0.0, d).astype(np.float32) for d in depths]
     tri_cov = float(np.mean([(d > 0).mean() for d in depths]))
     # A view flow could not triangulate (a short shot: its neighbours are too close for min_angle_deg) takes
     # its SfM tie points instead -- sparse, but enough to calibrate the monocular fill to the model's scale.
@@ -241,6 +253,8 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
             depths[i], inf = calibrate_fill(disp[i], depths[i], far_factor=far_factor, sky_rel=sky_rel,
                                             min_samples=TIE_MIN_POINTS if i in tie_views else 400)
             infos.append(inf)
+        if overlay is not None:
+            depths = [np.where(overlay, 0.0, d).astype(np.float32) for d in depths]
         filled = [x for x in infos if x["status"] == "filled"]
         fill_info = {"model": mono.name, "filled_images": len(filled),
                      "in_sample_abs_rel_median": round(float(np.median([x["in_sample_abs_rel"] for x in filled])), 4) if filled else None}  # fmt: skip

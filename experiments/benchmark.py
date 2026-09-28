@@ -64,9 +64,14 @@ def foreign_gb(engine_pid: int) -> float:
     return max(used, default=0.0)
 
 
-def wait_quiet(engine_pid: int) -> None:
+def wait_quiet() -> None:
     quiet_since = None
     while True:
+        try:
+            engine_pid = call("/status")["pid"]  # read each time: the engine may have been restarted meanwhile
+        except OSError:
+            time.sleep(15)
+            continue
         busy = foreign_gb(engine_pid)
         now = time.time()
         if busy > FOREIGN_GB:
@@ -94,7 +99,7 @@ def main() -> None:
     if args.only:
         videos = [v for v in videos if any(k.lower() in v.name.lower() for k in args.only)]
     if not args.no_wait:
-        wait_quiet(status["pid"])
+        wait_quiet()
     base = yaml.safe_load((ROOT / "configs" / "fast.yaml").read_text())
     names = []
     for v in videos:

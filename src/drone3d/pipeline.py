@@ -17,6 +17,7 @@ be re-run on its own (``drone3d run --run-dir R --stages splat,mesh``)::
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
 import threading
@@ -104,7 +105,11 @@ class Pipeline:
 
             monitor = GpuMonitor(interval=0.5).__enter__()
         try:
-            report: StageReport = handler()
+            from drone3d.engine.models import gpu_exclusive
+
+            # GPU-bound stages hold the GPU on a multi-slot engine (sfm and export lock their GPU parts themselves)
+            with gpu_exclusive() if name in GPU_STAGES else contextlib.nullcontext():
+                report: StageReport = handler()
         except BackendUnavailable as exc:
             report = StageReport(name, "skipped", str(exc))
         except Drone3DError as exc:
@@ -996,7 +1001,8 @@ def _mean_metric(metrics: dict, key: str) -> float:
     return float("nan") if value is None else float(value)
 
 
-SPLAT_STAGES = ("splat", "depth", "mesh", "render")  # the 3DGS stages, timed apart from the budget
+SPLAT_STAGES = ("splat", "depth", "mesh", "render")
+GPU_STAGES = ("keyframes", "dense", "splat", "depth", "mesh", "render")  # the 3DGS stages, timed apart from the budget
 
 
 def _summary_metrics(run_dir: Path) -> dict[str, Any]:

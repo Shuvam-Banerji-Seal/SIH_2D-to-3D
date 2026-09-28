@@ -373,3 +373,32 @@ def test_raft_runs_eagerly_on_a_multi_slot_engine(tmp_path: Path) -> None:
         engine._stop.set()
         engine._wake.set()
         assert engine.cache.cuda_graphs is graphs  # capturing while another slot runs kernels is unsafe
+
+
+def test_gpu_work_is_serialised_only_on_a_multi_slot_engine() -> None:
+    import threading
+
+    from drone3d.engine import models
+
+    def overlap(cache) -> bool:  # type: ignore[no-untyped-def]
+        models.activate(cache)
+        inside, most = [0], [0]
+        lock = threading.Lock()
+
+        def work() -> None:
+            with models.gpu_exclusive():
+                with lock:
+                    inside[0] += 1
+                    most[0] = max(most[0], inside[0])
+                time.sleep(0.2)
+                with lock:
+                    inside[0] -= 1
+
+        ts = [threading.Thread(target=work) for _ in range(2)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        models.activate(None)
+        return most[0] > 1
+
+    assert overlap(models.ModelCache(device="cpu", concurrent=False))  # one slot: nothing to serialise
+    assert not overlap(models.ModelCache(device="cpu", concurrent=True))

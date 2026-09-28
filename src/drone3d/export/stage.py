@@ -314,7 +314,10 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         if texture and images is not None:
             try:
                 with clock("texture"):
-                    res = bake_texture(dv, df, dvc, posed, rec, images, views=texture_views, size=texture_size,
+                    from drone3d.engine.models import gpu_exclusive
+
+                    with gpu_exclusive():
+                        res = bake_texture(dv, df, dvc, posed, rec, images, views=texture_views, size=texture_size,
                                        gain=texture_gain)  # fmt: skip
                 if res is not None:
                     baked, tex_info = (dv, df, res[0], res[1]), res[2]

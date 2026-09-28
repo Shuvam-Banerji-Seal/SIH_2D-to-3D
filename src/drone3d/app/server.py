@@ -98,7 +98,8 @@ def generated_object(run: Path) -> dict:
             "seconds": rec.get("seconds"), "resolution": rec.get("resolution"), "note": generate.NOTE,
             "glb": "generated/object.glb" if state == "ok" and rec.get("glb") else None,
             "input": f"{base}/{rec['input']}" if rec.get("input") else None, "started": rec.get("started"),
-            "error": (rec.get("log") or [""])[-1][:300] if state == "failed" else None}  # fmt: skip
+            "error": (rec.get("log") or [""])[-1][:300] if state == "failed" else None,
+            "placed": (rec.get("aligned") or {}).get("measured_covered")}  # fmt: skip
 
 
 def _alive(pid: int | None) -> bool:
@@ -403,6 +404,8 @@ def create_app(
             for key in ("mesh", "points", "splat"):
                 if m.get(key):
                     m[key] = f"{url}/export/{m[key]}"
+            if (m.get("generated") or {}).get("mesh"):  # drone3d.generate's object, placed in this model's frame
+                m["generated"] = {**m["generated"], "mesh": f"{url}/export/{m['generated']['mesh']}"}
             m["files"] = [{**f, "path": f"{url}/export/{f['path']}"} for f in m.get("files", [])]
             frame = (
                 _read(run_dir / "export" / (m.get("dir") or "") / "frame.json")

@@ -186,19 +186,28 @@ outputs/<run>/
 
 ## Generated object (TRELLIS.2)
 
-The measured model is only as complete as the flight. For a finished run, **Generate object** in
-the run page's model catalog (or `drone3d generate outputs/<run>`) runs
-[TRELLIS.2](https://huggingface.co/microsoft/TRELLIS.2-4B) on the keyframe that shows the subject
-whole: the one looking at the point where the optical axes converge, from farthest away. The
-result, `export/generated/object.glb`, is complete from every side, but it is **generated, not
-measured**: unseen sides are invented and the scale is arbitrary, so it is listed apart and never
-enters the deliverables or the metrics. Before generating, the RMBG-2.0 cut-out keeps only its
-largest part (an opening at 3.5 % of the diagonal cut the block of houses Colosseum's cut-out
-dragged along). Conditioning on several keyframes from different sides, averaged per flow step,
-stacked several rings on each other -- TRELLIS.2 generates in a frame tied to the input view -- so
-it uses one. It runs in its own environment (`tools/setup_trellis2.sh`; torch 2.7 and its CUDA
-extensions): about 2.5 min to load, 80 s to generate at 1024^3 and 80 s to bake the GLB on the
-A100, 8 GB of GPU memory at most.
+The measured model is only as complete as the flight: an orbit that covers half a building leaves the
+other half empty. For a finished run, **Generate object** in the run page's model catalog (or
+`drone3d generate outputs/<run>`) runs [TRELLIS.2](https://huggingface.co/microsoft/TRELLIS.2-4B) on
+the keyframe that shows the subject whole -- the one aimed at the point where the optical axes
+converge, from farthest away -- **cut to the subject by the measured model itself** (the subject's
+surface projected into that keyframe: on a highrise orbit the background remover alone kept half the
+city, and the generator made a city block). The generated object is then **placed in the model**:
+scaled from the ground-to-roof height, turned by trying 24 headings each refined by ICP, and stood
+on the measured ground (the highrise: 87 % of the measured tower within 4 % of the subject radius of
+it, median gap 0.9 %). The explorer's **Generated completion** layer shows it in place, so the sides
+the flight never saw are filled; where both exist the measured surface is nearer and shows. It is
+**generated, not measured**: listed apart with that caveat, never in the deliverables or the metrics.
+Conditioning TRELLIS.2 on several keyframes from different sides (averaged per flow step) stacked
+several rings on each other -- it generates in a frame tied to the input view -- so it uses one. It runs
+in its own environment (`tools/setup_trellis2.sh`): about 2.5 min to load, 80 s to generate at 1024^3
+and 80 s to bake the GLB on the A100, 8 GB of GPU memory at most.
+
+[Fire3D](https://github.com/xiahongchi/Fire3D) (MIT) completes every object of a posed RGB-D video
+from all its frames at once; `tools/fire3d_export.py` writes a run's model in its input format
+(keyframes, depth ray-cast from the fused mesh, levelled poses at room scale) and
+`tools/fire3d_outdoor_protocol.json` is its ScanNet++ protocol without the indoor wall fitting. Its
+weights are 62 GB; it has not been run here yet.
 
 ## The accurate profile (3D Gaussian Splatting)
 

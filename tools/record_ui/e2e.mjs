@@ -88,9 +88,9 @@ if (run) {
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const step = 16, s = []; for (let i = 0; i < px.length; i += 4 * step) s.push(px[i] + px[i + 1] * 256 + px[i + 2] * 65536); return s; });
   const changed = (a, b) => a.filter((v, i) => Math.abs(v - b[i]) > 0).length / a.length;
-  const avail = await page.evaluate(() => Object.fromEntries(['mesh', 'texture', 'shaded', 'wireframe', 'points', 'splats', 'cameras', 'photos', 'depth', 'grid', 'focus'].map((k) => [k, window.__explorer.x.layerAvailable(k)])));
+  const avail = await page.evaluate(() => Object.fromEntries(['mesh', 'texture', 'shaded', 'wireframe', 'points', 'splats', 'cameras', 'photos', 'depth', 'grid', 'focus', 'generated'].map((k) => [k, window.__explorer.x.layerAvailable(k)])));
   const base = await grab();
-  for (const layer of ['texture', 'shaded', 'wireframe', 'points', 'splats', 'cameras', 'photos', 'depth', 'grid', 'focus']) {
+  for (const layer of ['texture', 'shaded', 'wireframe', 'points', 'splats', 'cameras', 'photos', 'depth', 'grid', 'focus', 'generated']) {
     if (!avail[layer]) { report.layers[layer] = 'not in this run'; continue; }
     const before = await grab();
     await page.locator(`.lay[data-l="${layer}"]`).click();
@@ -98,7 +98,7 @@ if (run) {
     const after = await grab();
     const d = changed(before, after);
     report.layers[layer] = +d.toFixed(4);
-    const least = layer === 'cameras' ? 0.0002 : ['photos', 'depth', 'grid', 'focus'].includes(layer) ? 0.001 : 0.005; // thin overlays cover little
+    const least = layer === 'cameras' ? 0.0002 : ['photos', 'depth', 'grid', 'focus', 'generated'].includes(layer) ? 0.001 : 0.005; // thin overlays cover little
     if (d < least) fail(`layer ${layer}: the canvas did not change (${(100 * d).toFixed(2)} %)`);
     await page.locator(`.lay[data-l="${layer}"]`).click(); await sleep(600); // back to the default
   }

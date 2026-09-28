@@ -114,6 +114,8 @@ def bake_soup_texture(
     blend: int = 3,
     device: str = "cuda",
     gain: bool = True,
+    occluders: str = "centroids",
+    slope: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """-> ``(corner_uv [F, 3, 2] in OBJ convention (v up), albedo uint8 [size, size, 3], info)``.
 
@@ -132,6 +134,8 @@ def bake_soup_texture(
     nrm = nrm / nrm.norm(dim=-1, keepdim=True).clamp_min(1e-12)
 
     # ---- view scores per triangle: frontal, close, inside the frame, not occluded
+    mid = (tri + tri.roll(-1, dims=1)) / 2  # edge midpoints
+    samples = torch.cat([tri.reshape(-1, 3), mid.reshape(-1, 3), cen])  # [3F corners (per triangle), 3F midpoints, F]
     scores = torch.full((len(views), n_f), -1.0, device=dev)
     for k, v in enumerate(views):
         h, w = v.image.shape[:2]
@@ -146,9 +150,24 @@ def bake_soup_texture(
         cx = (u * s).long().clamp(0, zw - 1)
         cy = (y * s).long().clamp(0, zh - 1)
         cell = cy * zw + cx
+        # The occluders: the triangles' centroids ("samples": seven points of each, so that a large near triangle
+        # covers every cell it spans -- measured, not better: experiments/texture_holdout.py).
+        su, sy, sz = _project(samples if occluders == "samples" else torch.cat([tri.reshape(-1, 3), cen]), v)
+        sin = (sz > 0) & (su >= 0) & (su <= w - 1) & (sy >= 0) & (sy <= h - 1)
+        if occluders != "samples":  # the centroids alone occlude (the corners are projected for the slope only)
+            sin[: 3 * n_f] = False
+        scell = (sy * s).long().clamp(0, zh - 1) * zw + (su * s).long().clamp(0, zw - 1)
         zmin = torch.full((zh * zw,), float("inf"), device=dev)
-        zmin.scatter_reduce_(0, cell[inside], z[inside], reduce="amin")
-        visible = inside & (z <= zmin[cell] * 1.03)
+        zmin.scatter_reduce_(0, scell[sin], sz[sin], reduce="amin")
+        # A surface seen at a grazing angle rises across one z-buffer cell by more than a fixed 3 %: its farther
+        # triangles then counted as hidden behind its nearer ones. The tolerance adds each triangle's own
+        # depth slope times the cell's width. Held out on the largest model of every sample video (every 8th
+        # keyframe rendered and compared with its photo), untextured triangles fell from a median 7.7 to 5.7 %
+        # (at most 21 -> 15 %) and the PSNR moved by -0.07 to +0.24 dB.
+        uc, yc, zc = su[: 3 * n_f].view(-1, 3), sy[: 3 * n_f].view(-1, 3), sz[: 3 * n_f].view(-1, 3)
+        extent = torch.maximum(uc.amax(1) - uc.amin(1), yc.amax(1) - yc.amin(1)).clamp_min(0.5)
+        rise = (zc.amax(1) - zc.amin(1)) / extent / s  # depth change across one cell along this surface
+        visible = inside & (z <= zmin[cell] * 1.03 + (1.5 * rise if slope else 0.0))
         scores[k] = torch.where(visible, facing / dist, torch.full_like(dist, -1.0))
     # Blend the best ``blend`` views (weights by score, only views scoring >= half the best):
     # one view per triangle made water and other view-dependent surfaces a patchwork.

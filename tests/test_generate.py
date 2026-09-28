@@ -138,3 +138,12 @@ def test_the_focus_box_is_centred_on_what_the_orbit_circles() -> None:
     assert abs(radius - np.hypot(10.0, 4.0)) < 1e-6
     survey = np.stack([np.linspace(-50, 50, 9), np.zeros(9), np.full(9, 40.0)], 1)
     assert _subject(survey, np.tile([0.0, 0.0, -1.0], (9, 1))) is None
+
+
+def test_a_point_no_keyframe_looks_at_is_not_a_subject() -> None:
+    """A turning fly-by: the axes' least-squares point lies behind the cameras, so there is no focus."""
+    from drone3d.export.stage import _subject
+
+    cams = _orbit(9, 10.0, 4.0)[:5]
+    axes = np.array([-_look_at(c, np.zeros(3)) for c in cams])  # every camera looks away from the centre
+    assert _subject(cams, axes) is None

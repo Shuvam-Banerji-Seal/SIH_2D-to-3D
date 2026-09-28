@@ -167,7 +167,7 @@ MATCH_BATCH = 16  # keyframe pairs per RoMa forward: 283 -> 97 ms per pair on th
 
 
 def _match_batched(roma, pairs: list[tuple[Any, Any]], matches_per_pair: int) -> list[Any]:  # type: ignore[no-untyped-def]
-    """RoMa v2 ("fast": 512^2, one direction) on ``(A, B)`` pairs of [1, 3, 512, 512] tensors -> sampled matches."""
+    """RoMa v2 ("fast": 512^2, one direction) on ``(A, B)`` pairs of uint8 [1, 3, 512, 512] tensors -> sampled matches."""
     import torch
     from romav2.romav2 import _map_confidence
 
@@ -175,7 +175,7 @@ def _match_batched(roma, pairs: list[tuple[Any, Any]], matches_per_pair: int) ->
     with torch.inference_mode():
         for s in range(0, len(pairs), MATCH_BATCH):
             chunk = pairs[s : s + MATCH_BATCH]
-            pred = roma(torch.cat([a for a, _ in chunk]), torch.cat([b for _, b in chunk]))
+            pred = roma(torch.cat([a for a, _ in chunk]).float() / 255, torch.cat([b for _, b in chunk]).float() / 255)
             for i in range(len(chunk)):
                 conf = pred["confidence_AB"][i : i + 1]
                 overlap, precision = _map_confidence(confidence=conf, threshold=roma.threshold)
@@ -185,12 +185,18 @@ def _match_batched(roma, pairs: list[tuple[Any, Any]], matches_per_pair: int) ->
 
 
 def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int = 4, matches_per_pair: int = 3000,
-               setting: str = "fast", mono=None) -> tuple[list[dict], dict]:  # type: ignore[no-untyped-def]  # fmt: skip
-    """Similarities between every pair of models -> (edges, timing). An edge maps ``b``'s frame onto ``a``'s.
+               setting: str = "fast", mono=None, max_partners: int = 6) -> tuple[list[dict], dict]:  # type: ignore[no-untyped-def]  # fmt: skip
+    """Similarities between pairs of models -> (edges, timing). An edge maps ``b``'s frame onto ``a``'s.
 
-    Every keyframe is decoded once (nvJPEG) and kept at RoMa's 512^2 on the GPU (75 keyframes: 1.3 s,
-    300 MB); the per-pair path decoded both JPEGs with PIL for every pair, so a keyframe in eight pairs
-    was decoded eight times. The pairs are matched in batches (``MATCH_BATCH``).
+    Every keyframe is decoded once (nvJPEG) and kept at RoMa's 512^2 on the GPU as uint8 (0.75 MB a keyframe);
+    the per-pair path decoded both JPEGs with PIL for every pair, so a keyframe in eight pairs was decoded
+    eight times. The pairs are matched in batches (``MATCH_BATCH``).
+
+    Every pair of models is matched up to ``max_partners + 1`` models; beyond, a pair is matched when either
+    model is among the other's ``max_partners`` most similar (best keyframe-pair cosine), so the work grows
+    linearly, not quadratically, with the passes of a long edit (60 passes: 1770 pairs of models against at
+    most 360). The global descriptor ranks true links poorly -- as low as the 6th most similar partner on
+    Colosseum -- hence a wide bound; each edge records its ``rank``.
     """
     import torch
     import torch.nn.functional as F
@@ -213,7 +219,8 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
                 if not im.has_pose:
                     continue
                 x = decode_jpeg(read_file(str(images / im.name)), device="cuda").float()[None] / 255
-                lr[im.name] = F.interpolate(x, size=(roma.H_lr, roma.W_lr), mode="bicubic", align_corners=False, antialias=True)
+                lr[im.name] = F.interpolate(x, size=(roma.H_lr, roma.W_lr), mode="bicubic", align_corners=False,
+                                            antialias=True).clamp(0, 1).mul(255).round().to(torch.uint8)  # fmt: skip
                 small.append(F.interpolate(x, size=(256, 448), mode="bicubic", align_corners=False, antialias=True))
                 keys.append((name, im.image_id, im.name))
         # a global descriptor per keyframe: RoMa's DINOv3 features of the deeper layer, mean-pooled
@@ -227,13 +234,22 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
     sim = d @ d.T
     model_of = np.array([k[0] for k in keys])
     names = sorted(recs, key=lambda k: -recs[k].num_reg_images())
-    todo = []  # (a, b, [(key_a, key_b), ...]) for every pair of models: its most similar keyframe pairs
+    idx = {n: np.where(model_of == n)[0] for n in names}
+    best = {(a, b): float(sim[np.ix_(idx[a], idx[b])].max()) for a in names for b in names if a != b}
+    rank = {}  # (a, b) -> b's place among a's partners by similarity (0: the most similar)
+    for a in names:
+        for r_, b in enumerate(sorted((b for b in names if b != a), key=lambda b: -best[(a, b)])):
+            rank[(a, b)] = r_
+    todo = []  # (a, b, [(key_a, key_b), ...]) for every pair of models matched: its most similar keyframe pairs
     for i, a in enumerate(names):
         for b in names[i + 1 :]:
-            ia, ib = np.where(model_of == a)[0], np.where(model_of == b)[0]
-            block = sim[np.ix_(ia, ib)]
+            place = min(rank[(a, b)], rank[(b, a)])
+            if len(names) > max_partners + 1 and place >= max_partners:
+                continue
+            block = sim[np.ix_(idx[a], idx[b])]
             order = np.dstack(np.unravel_index(np.argsort(-block, axis=None), block.shape))[0][:pairs_per_model_pair]
-            todo.append((a, b, [(keys[ia[r_]], keys[ib[c_]]) for r_, c_ in order]))
+            todo.append((a, b, [(keys[idx[a][r_]], keys[idx[b][c_]]) for r_, c_ in order]))
+    timing["model_pairs"] = float(len(todo))
     t0 = time.perf_counter()
     flat = [(lr[ka[2]], lr[kb[2]]) for _, _, kp in todo for ka, kb in kp]
     sampled = iter(_match_batched(roma, flat, matches_per_pair))
@@ -272,7 +288,8 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
         if fit is None:
             continue
         edges.append({"a": a, "b": b, "sim3": fit["sim3"], "inliers": fit["inliers"], "candidates": fit["candidates"],
-                      "residual_rel": fit["median_residual"] / scale})  # fmt: skip
+                      "residual_rel": fit["median_residual"] / scale, "similarity": round(best[(a, b)], 4),
+                      "rank": min(rank[(a, b)], rank[(b, a)])})  # fmt: skip
     return edges, timing
 
 

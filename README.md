@@ -137,10 +137,10 @@ uv run drone3d engine --warm raft_large,depth_anything_v2_large   # or run the e
   mesh (texture / shaded / wireframe), the dense cloud, the Gaussian splats, the
   flight path with camera frusta, the keyframe photos and their depth maps
   placed where they were taken, the source video picture-in-picture, a grid,
-  and *focus subject* (on by default where the flight circles something): a
-  box a camera distance around the point the optical axes converge on, which
-  hides the far field -- most of a merged model's triangles, and its least
-  accurate -- in the viewer only; the files keep all of it.
+  and *focus subject* (where the flight looks at something): a box a camera
+  distance around the point the optical axes converge on, which hides the far
+  field -- most of a merged model's triangles, and its least accurate -- in the
+  viewer only; the files keep all of it.
   Orbit, fly (<kbd>W A S D Q E</kbd>) or *follow flight* along the drone's own
   path and view (the video follows); zoom, fit, all models; click a keyframe
   to look through it with its photo over the model; 0.5–2× render resolution;

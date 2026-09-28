@@ -6,14 +6,15 @@ import { viewLive } from './live.js';
 import { viewRuns } from './runs.js';
 import { viewRun } from './run.js';
 import { viewAbout } from './about.js';
+import { viewModel } from './model.js';
 
-const routes = { console: viewConsole, new: viewNew, live: viewLive, runs: viewRuns, run: viewRun, about: viewAbout };
+const routes = { console: viewConsole, new: viewNew, live: viewLive, runs: viewRuns, run: viewRun, about: viewAbout, model: viewModel };
 
 function route() {
   leave();
   const [, page = 'console', ...rest] = location.hash.split('/');
   const arg = rest.length ? decodeURIComponent(rest.join('/')) : undefined;
-  const nav = page === 'run' ? 'runs' : page;
+  const nav = page === 'run' || page === 'model' ? 'runs' : page;
   $$('.rail a.nav').forEach((a) => a.classList.toggle('on', a.dataset.nav === nav));
   const main = $('#main');
   main.innerHTML = '';

@@ -138,7 +138,7 @@ class Engine:
         """``slots`` runs execute at once: 1 measures one video's time; 2 overlaps one run's CPU phases
         (mapping, file writing) with another's GPU phases for throughput on a batch."""
         self.repo, self.outputs = Path(repo), Path(outputs)
-        self.cache = models.ModelCache(device=device, reserve_gb=reserve_gb)
+        self.cache = models.ModelCache(device=device, reserve_gb=reserve_gb, concurrent=int(slots) > 1)
         models.activate(self.cache)
         self.release_after_job = release_after_job
         self.slots = max(1, int(slots))

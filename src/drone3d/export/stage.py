@@ -95,16 +95,14 @@ def _axis_depth(points: np.ndarray, eye: np.ndarray, axis: np.ndarray, cone_deg:
     return float(np.median(along[along > 0])) if (along > 0).any() else 1.0
 
 
-def _subject_view(points: np.ndarray, cams: np.ndarray, axes: np.ndarray) -> np.ndarray:
-    """The viewer's first pose ``[eye, target]``: the keyframe that looks most directly at what the drone circled.
+def _subject(cams: np.ndarray, axes: np.ndarray) -> tuple[np.ndarray, float] | None:
+    """What an orbit circles -> ``(point, radius)``, or None when the optical axes hardly converge.
 
-    The subject is the point closest, in least squares, to every keyframe's optical axis; the keyframe whose
-    axis passes nearest it (in angle) is the eye, looking at its own axis depth. The middle keyframe, the
-    previous choice, looked at Rome's skyline in the Colosseum model merged from seven shots. When the axes
-    hardly converge (a nadir survey, a straight fly-by), the middle keyframe stays.
+    The point is closest, in least squares, to every keyframe's optical axis; the radius is the cameras'
+    median distance to it. A nadir survey or a straight fly-by (near-parallel axes) has no such point.
     """
-    mid = len(cams) // 2
-    pick = mid
+    if len(cams) < 3:
+        return None
     a = np.zeros((3, 3))
     b = np.zeros(3)
     for c, d in zip(cams, axes):
@@ -112,11 +110,25 @@ def _subject_view(points: np.ndarray, cams: np.ndarray, axes: np.ndarray) -> np.
         a += proj
         b += proj @ c
     w = np.linalg.eigvalsh(a)
-    if len(cams) >= 3 and w[0] > 0.02 * w[-1]:
-        subject = np.linalg.solve(a, b)
-        rel = subject - cams
-        dist = np.linalg.norm(rel, axis=1)
-        cos = np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12)
+    if w[0] <= 0.02 * w[-1]:
+        return None
+    point = np.linalg.solve(a, b)
+    return point, float(np.median(np.linalg.norm(cams - point, axis=1)))
+
+
+def _subject_view(points: np.ndarray, cams: np.ndarray, axes: np.ndarray) -> np.ndarray:
+    """The viewer's first pose ``[eye, target]``: the keyframe that looks most directly at what the drone circled.
+
+    Of the keyframes, the one whose axis passes nearest the subject (in angle) is the eye, looking at its own
+    axis depth. The middle keyframe, the previous choice, looked at Rome's skyline in the Colosseum model
+    merged from seven shots. When the axes hardly converge (a nadir survey, a straight fly-by), the middle
+    keyframe stays.
+    """
+    pick = len(cams) // 2
+    sub = _subject(cams, axes)
+    if sub is not None:
+        rel = sub[0] - cams
+        cos = np.einsum("ij,ij->i", rel, axes) / np.maximum(np.linalg.norm(rel, axis=1), 1e-12)
         if cos.max() > np.cos(np.radians(20)):
             pick = int(np.argmax(cos))
     return np.array([cams[pick], cams[pick] + _axis_depth(points, cams[pick], axes[pick]) * axes[pick]])
@@ -327,7 +339,11 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         cam0 = rec.cameras[posed[0].camera_id]
         intr = {"f": float(cam0.focal_length_x), "width": int(cam0.width), "height": int(cam0.height)}
         # initial viewer pose: the keyframe looking most directly at the subject (optical axes: third rows)
-        view = _subject_view(p, cams, np.array([im.cam_from_world().rotation.matrix()[2] for im in posed]))
+        axes = np.array([im.cam_from_world().rotation.matrix()[2] for im in posed])
+        view = _subject_view(p, cams, axes)
+        subject = _subject(cams, axes)  # the viewer's focus box: the subject, a camera distance around it
+        if subject is not None:
+            view = np.vstack([view, subject[0]])  # moved into the export frame with the view
         # The full-density mesh is the measurement deliverable (PLY); the viewable copies
         # (GLB, textured OBJ/GLB, FBX) are capped: a 1.5M-triangle model made a 120 MB
         # GLB that browsers load slowly and a 4096^2 soup atlas cannot texture finely.
@@ -433,6 +449,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             "georeferenced": geo is not None, "up": [0, 0, 1],
             # frame the view on the bulk of the model, not on stray far-field fragments
             "view": {"eye": view[0].round(4).tolist(), "target": view[1].round(4).tolist()},
+            "focus": {"center": view[2].round(4).tolist(), "radius": round(subject[1] * scale, 4)} if subject is not None else None,
             "bounds": np.vstack([np.percentile(v if len(v) else p, [2, 98], axis=0), cams.min(0), cams.max(0)]).round(4).tolist() if len(cams) else None,
             "files": [{"label": Path(r).name, "path": r} for r in rel],
             "stats": {"keyframes": m.get("keyframes"), "triangles": f"{len(f):,}", "points": f"{len(p):,}",

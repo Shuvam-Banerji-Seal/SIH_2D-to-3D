@@ -65,7 +65,7 @@ $('subtitle').textContent = `${scn.title || ''} · ${cfg.georeferenced ? 'georef
 $('stats').innerHTML = Object.entries(cfg.stats || {}).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
 $('files').innerHTML = (cfg.files || []).map((f) => `<a href="${f.path}" download>${f.label}</a>`).join('') || '—';
 await x.setScene([cfg]);
-const LAYERS = [['mesh', 'Mesh'], ['texture', 'Texture'], ['shaded', 'Shaded'], ['wireframe', 'Wire'], ['points', 'Points'], ['splats', 'Splats'], ['cameras', 'Flight path'], ['photos', 'Photos'], ['depth', 'Depth'], ['grid', 'Grid']];
+const LAYERS = [['mesh', 'Mesh'], ['texture', 'Texture'], ['shaded', 'Shaded'], ['wireframe', 'Wire'], ['points', 'Points'], ['splats', 'Splats'], ['cameras', 'Flight path'], ['photos', 'Photos'], ['depth', 'Depth'], ['grid', 'Grid'], ['focus', 'Focus']];
 const drawLayers = () => { $('layers').innerHTML = LAYERS.filter(([k]) => x.layerAvailable(k)).map(([k, t]) => `<button data-l="${k}" class="${x.layers[k] ? 'on' : ''}">${t}</button>`).join('');
   $('layers').querySelectorAll('button').forEach((b) => (b.onclick = async () => { await x.setLayer(b.dataset.l, !x.layers[b.dataset.l]); drawLayers(); })); };
 drawLayers();

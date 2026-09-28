@@ -116,7 +116,7 @@ def _score(f: np.ndarray, tri: np.ndarray, sky: np.ndarray, rng: np.random.Gener
     near = z <= np.quantile(z, 0.8)  # extrapolation split: the nearest 80 % calibrate
     for split, fit in (("random", cal), ("far", near)):
         a, b = _fit(ff[fit], np.log(z[fit]))
-        rel = lambda lz: float(np.median(np.abs(np.exp(lz) - z[~fit]) / z[~fit]))  # noqa: E731
+        rel = lambda lz, fit=fit: float(np.median(np.abs(np.exp(lz) - z[~fit]) / z[~fit]))  # noqa: E731
         out[split] = rel(a * ff[~fit] + b)
         try:  # the fill's calibration, given the prior's robust slope as it is in drone3d.fastsfm.mono
             out[f"{split}_monotone"] = rel(MonotoneMap(ff[fit], z[fit], slope=a)(ff[~fit])) if a > 0 else float("nan")

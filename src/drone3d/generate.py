@@ -3,8 +3,9 @@
 The measured model (flow SfM, fused depth) is only as complete as the flight: the far side of a building
 the drone never circled is missing, a short shot leaves gaps. TRELLIS.2 (microsoft/TRELLIS.2-4B) generates a
 complete, textured object from one image. It is *not* a measurement -- the sides the keyframe does not
-show are invented and the scale is arbitrary -- so it is written apart (``export/generated/``), listed in
-the model catalog as generated, and never enters the deliverables or the metrics.
+show are invented; its pose and scale are fitted to the measured subject (``align_to_model``) -- so it is
+written apart (``export/generated/``), listed in the model catalog as generated, and never enters the
+deliverables or the metrics.
 
 It runs in TRELLIS.2's own environment (``tools/setup_trellis2.sh``: torch 2.7, its CUDA extensions) as a
 subprocess of ``tools/trellis2_generate.py``: ~2.5 min to load the weights, ~80 s to generate at 1024^3 and

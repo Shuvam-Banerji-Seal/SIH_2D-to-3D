@@ -505,6 +505,7 @@ class Pipeline:
             texture_views=cfg.texture_views,
             texture_size=cfg.texture_size,
             max_triangles=cfg.max_triangles,
+            clean_mesh=cfg.clean_mesh,
             splats=self._stage_result("splat") if cfg.splats else None,
             max_splats=cfg.max_splats,
             texture_gain=cfg.texture_gain,

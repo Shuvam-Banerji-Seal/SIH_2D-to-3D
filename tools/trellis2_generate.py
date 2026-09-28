@@ -70,11 +70,10 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
-    import torch
-    from PIL import Image
-
     import o_voxel
+    import torch
     import torch.nn.functional as F
+    from PIL import Image
     from trellis2.modules import image_feature_extractor as fe
     from trellis2.pipelines import Trellis2ImageTo3DPipeline
 

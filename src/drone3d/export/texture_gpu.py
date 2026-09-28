@@ -37,6 +37,7 @@ class View:
     translation: np.ndarray
     image: torch.Tensor  # uint8 [H, W, 3] on the device
     k1: float = 0.0  # SIMPLE_RADIAL / RADIAL: at Jal Mahal's k1 = 0.12, 50 px at the image corners
+    mask: torch.Tensor | None = None  # bool [H, W]: a burnt-in overlay this view must not texture from
 
 
 def _project(pts: torch.Tensor, v: View) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -145,6 +146,11 @@ def bake_soup_texture(
         dist = to_cam.norm(dim=-1).clamp_min(1e-9)
         facing = (nrm * to_cam).sum(-1).abs() / dist  # TSDF normals may point either way
         inside = (z > 0) & (u >= 0) & (u <= w - 1) & (y >= 0) & (y <= h - 1)
+        if v.mask is not None:  # a logo in this corner of the frame is not the surface behind it
+            mh, mw = v.mask.shape
+            mx = (u * (mw / w)).long().clamp(0, mw - 1)
+            my = (y * (mh / h)).long().clamp(0, mh - 1)
+            inside &= ~v.mask[my, mx]
         s = zbuf / max(h, w)
         zw, zh = max(1, int(w * s)), max(1, int(h * s))
         cx = (u * s).long().clamp(0, zw - 1)

@@ -120,6 +120,14 @@ class _PairFlows:
 
 
 @torch.inference_mode()
+def _in_mask(mask: torch.Tensor, xy: torch.Tensor) -> torch.Tensor:
+    """Whether each ``[N, 2]`` pixel position lies in the bool ``[H, W]`` mask."""
+    h, w = mask.shape
+    x = xy[:, 0].round().long().clamp(0, w - 1)
+    y = xy[:, 1].round().long().clamp(0, h - 1)
+    return mask[y, x]
+
+
 def build_tracks(
     frames: torch.Tensor,
     flow: RaftFlow,
@@ -128,6 +136,7 @@ def build_tracks(
     stride: int = 8,
     max_dev_px: float = 1.0,
     block: int = 8,
+    mask: torch.Tensor | None = None,
 ) -> FlowTracks:
     """Tracks through consecutive keyframes ``frames`` (uint8 ``[N, H, W, 3]`` on the GPU).
 
@@ -137,6 +146,8 @@ def build_tracks(
         stride: grid spacing (px) for seeding, and the occupancy cell size.
         max_dev_px: largest disagreement between the chained position and a
             direct prediction before the track ends.
+        mask: bool ``[H, W]``, a burnt-in overlay (drone3d.io.overlay): it moves with the
+            camera, so no track starts on it and a track that reaches it ends.
     """
     n, h, w, _ = frames.shape
     dev = frames.device
@@ -164,6 +175,8 @@ def build_tracks(
             gx = (grid[:, 0] / stride).long()
             gy = (grid[:, 1] / stride).long()
             seeds = grid[~occ[gy * cw + gx]]
+            if mask is not None:
+                seeds = seeds[~_in_mask(mask, seeds)]
             fwd, bwd = pf.get(k, k + 1)
             _, ok = _step(fwd, bwd, seeds)
             seeds = seeds[ok]
@@ -183,6 +196,8 @@ def build_tracks(
         # advance to k + 1: chained step, checked against direct flows from k-1, k-2, ...
         fwd, bwd = pf.get(k, k + 1)
         nxt, ok = _step(fwd, bwd, pos)
+        if mask is not None:
+            ok &= ~_in_mask(mask, nxt)
         acc, cnt = nxt.clone(), torch.ones(len(pos), device=dev)
         for d in range(2, span + 1):
             if k + 1 - d < 0:

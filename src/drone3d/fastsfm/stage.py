@@ -18,6 +18,7 @@ import numpy as np
 
 from drone3d.fastsfm.colmap import map_tracks, summarize, write_database
 from drone3d.fastsfm.tracks import FlowTracks, build_tracks
+from drone3d.io.overlay import load_mask
 from drone3d.logging_utils import get_logger
 
 __all__ = ["load_frames", "run_flow_sfm"]
@@ -243,7 +244,9 @@ def run_flow_sfm(
             frames, full = load_frames(paths, long_side)
             timing["load"] += time.perf_counter() - t0
             t0 = time.perf_counter()
-            tracks = _to_full(build_tracks(frames, raft, span=span, stride=stride), full)
+            overlay = load_mask(images.parent, (frames.shape[2], frames.shape[1]))
+            overlay = torch.from_numpy(overlay).to(frames.device) if overlay is not None else None
+            tracks = _to_full(build_tracks(frames, raft, span=span, stride=stride, mask=overlay), full)
             torch.cuda.synchronize()
             timing["tracks"] += time.perf_counter() - t0
             del frames

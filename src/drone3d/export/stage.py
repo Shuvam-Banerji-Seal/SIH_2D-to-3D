@@ -166,6 +166,10 @@ def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec
     if not len(f) or not torch.cuda.is_available():
         return None
     pick = [posed[int(round(i))] for i in np.linspace(0, len(posed) - 1, min(views, len(posed)))]
+    from drone3d.io.overlay import load_mask
+
+    overlay = load_mask(images.parent)  # the baker scales it to each view; None: the video has no overlay
+    overlay = torch.from_numpy(overlay).cuda() if overlay is not None else None
     vs = []
     for im in pick:
         path = images / im.name
@@ -177,7 +181,7 @@ def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec
         pose = im.cam_from_world()
         vs.append(View(cam.params[0] * s, cam.params[1] * s, cam.params[2] * s,
                        np.asarray(pose.rotation.matrix()), np.asarray(pose.translation), img,
-                       float(cam.params[3]) if cam.model.name in ("SIMPLE_RADIAL", "RADIAL") else 0.0))  # fmt: skip
+                       float(cam.params[3]) if cam.model.name in ("SIMPLE_RADIAL", "RADIAL") else 0.0, overlay))  # fmt: skip
     if not vs:
         return None
     uv, albedo, info = bake_soup_texture(v, f, vs, size=size, fallback_rgb=vc, gain=gain)

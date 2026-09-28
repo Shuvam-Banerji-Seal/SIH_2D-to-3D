@@ -76,6 +76,9 @@ class KeyframeConfig:
     output_long_side: int | None = None  # None keeps the source resolution
     jpeg_quality: int = 95  # keyframe JPEG quality (nvJPEG)
     crop_letterbox: bool = True  # detect and remove black bars before analysis
+    # find burnt-in logos / captions / OSD (static sharp detail over a moving scene, experiments/overlay_check.py)
+    # and keep them out of the tracks, the depth and the texture; none found on the fifteen samples
+    mask_overlays: bool = True
     passes: list[int] = field(default_factory=list)  # restrict to these pass ids
     skip_degenerate: bool = True  # drop passes with no recoverable 3D structure
     hwaccel: bool = True  # decode with NVDEC (falls back to CPU if unavailable)

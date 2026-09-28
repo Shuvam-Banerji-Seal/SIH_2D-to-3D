@@ -112,3 +112,19 @@ def test_projection_follows_colmaps_radial_distortion() -> None:
     u, w, _ = _project(torch.as_tensor(pts, dtype=torch.float64, device="cuda"), view)
     got = np.stack([u.cpu().numpy(), w.cpu().numpy()], 1) + 0.5  # _project returns pixel centres at integers
     assert np.abs(got - want).max() < 1e-6
+
+
+def test_a_view_does_not_texture_from_under_its_overlay() -> None:
+    """Two views see the plane; the red one's overlay covers its frame, so the blue one colours it."""
+    v, f = _plane()
+    h, w = 100, 100
+    red = torch.zeros(h, w, 3, dtype=torch.uint8, device="cuda")
+    red[..., 0] = 220
+    blue = torch.zeros(h, w, 3, dtype=torch.uint8, device="cuda")
+    blue[..., 2] = 220
+    covered = torch.ones(20, 20, dtype=torch.bool, device="cuda")  # any size: scaled to the view
+    views = [View(60.0, 50.0, 50.0, np.eye(3), np.zeros(3), red, mask=covered),
+             View(60.0, 50.0, 50.0, np.eye(3), np.array([0.05, 0.0, 0.0]), blue)]  # fmt: skip
+    uv, albedo, info = bake_soup_texture(v, f, views, size=256, gain=False)
+    used = albedo.reshape(-1, 3)[albedo.reshape(-1, 3).sum(1) > 0]
+    assert (used[:, 2] > used[:, 0]).mean() > 0.95

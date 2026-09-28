@@ -180,6 +180,23 @@ class Pipeline:
             metrics=payload,
         )
 
+    def _overlay_mask(self, info, size, crop, pairs) -> dict | None:  # type: ignore[no-untyped-def]
+        """Detect a burnt-in overlay on the motion probe's frames; save its mask in keyframe coordinates."""
+        from drone3d.io.nvdec import scaled_crop
+        from drone3d.io.overlay import save_mask, static_overlay_mask
+
+        w, h = size
+        luma = [p[0][: w * h].reshape(h, w) for p in (pairs or []) if p[0] is not None]
+        mask = static_overlay_mask(luma) if len(luma) >= 6 else None
+        if mask is not None and crop is not None:  # the keyframes are the cropped frame
+            x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), size, multiple=1)
+            mask = mask[y0:y1, x0:x1]
+        save_mask(self.dataset, mask if mask is not None and mask.any() else None)
+        if mask is None or not mask.any():
+            return None
+        log.info("overlay: a static logo / caption covers %.1f %% of the frame; masked", 100 * mask.mean())
+        return {"share": round(float(mask.mean()), 4), "mask": "dataset/overlay_mask.png"}
+
     def _stage_keyframes(self) -> StageReport:
         import torch
 
@@ -212,6 +229,7 @@ class Pipeline:
         if cfg.crop_letterbox:
             crop = (letterbox_from_frames(info, [p[0] for p in pairs], size) if pairs and len(pairs) >= 4
                     else detect_letterbox(info))  # fmt: skip
+        overlay = self._overlay_mask(info, size, crop, pairs) if cfg.mask_overlays else None
         if cfg.adaptive_rate:
             stride, probe = _adapt_stride(info, size, stride, flow_model, crop, cfg, pairs=pairs)
         # One decode for analysis and keyframes when the keyframes are small enough to write
@@ -304,6 +322,7 @@ class Pipeline:
         passes = [p.__dict__ for p in selection.passes]
         payload = {
             "crop": list(crop) if crop else None,
+            "overlay": overlay,
             "analysis": analysis,
             "timing_s": {
                 "decode_and_flow": round(t1 - t0, 2),

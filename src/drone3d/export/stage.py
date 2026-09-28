@@ -96,10 +96,14 @@ def _axis_depth(points: np.ndarray, eye: np.ndarray, axis: np.ndarray, cone_deg:
 
 
 def _subject(cams: np.ndarray, axes: np.ndarray) -> tuple[np.ndarray, float] | None:
-    """What an orbit circles -> ``(point, radius)``, or None when the optical axes hardly converge.
+    """What the flight looks at -> ``(point, radius)``, or None when there is no such thing.
 
     The point is closest, in least squares, to every keyframe's optical axis; the radius is the cameras'
-    median distance to it. A nadir survey or a straight fly-by (near-parallel axes) has no such point.
+    median distance to it. A nadir survey or a straight fly-by (near-parallel axes) has no such point, and a
+    pan or a turning fly-by has one nobody looks at. On the fifteen sample videos' 95 models, 42 had a point;
+    7 of them were aimed at by no keyframe at all (Hanoi, Eiffel Tower, Qutub Minar, Reichstag, Cristo
+    Redentor) and 4 by under 30 % (the FPV flights). Asking at least 30 % of the keyframes to aim within
+    25 degrees of it keeps 31 (experiments/generality.py).
     """
     if len(cams) < 3:
         return None
@@ -113,7 +117,12 @@ def _subject(cams: np.ndarray, axes: np.ndarray) -> tuple[np.ndarray, float] | N
     if w[0] <= 0.02 * w[-1]:
         return None
     point = np.linalg.solve(a, b)
-    return point, float(np.median(np.linalg.norm(cams - point, axis=1)))
+    rel = point - cams
+    dist = np.linalg.norm(rel, axis=1)
+    aimed = np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12) > np.cos(np.radians(25))
+    if aimed.mean() < 0.3:
+        return None
+    return point, float(np.median(dist))
 
 
 def _subject_view(points: np.ndarray, cams: np.ndarray, axes: np.ndarray) -> np.ndarray:

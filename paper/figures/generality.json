@@ -1,0 +1,1328 @@
+[
+ {
+  "run": "map_above_clouds_pnb_merdeka_118_cinematic_a",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 76,
+    "subject": true,
+    "aimed_share": 0.658,
+    "in_front_share": 0.974,
+    "mesh_in_box": 1.0
+   },
+   {
+    "model": "1",
+    "keyframes": 63,
+    "subject": true,
+    "aimed_share": 0.762,
+    "in_front_share": 0.921,
+    "mesh_in_box": 1.0
+   },
+   {
+    "model": "2",
+    "keyframes": 13,
+    "subject": true,
+    "aimed_share": 0.923,
+    "in_front_share": 1.0,
+    "mesh_in_box": 1.0
+   },
+   {
+    "model": "3",
+    "keyframes": 4,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 4,
+   "groups": [],
+   "timing": {
+    "load": 20.5,
+    "descriptors": 4.5,
+    "matching": 4.1,
+    "lifting": 2.4,
+    "model_pairs": 6.0
+   },
+   "links": [],
+   "rejected_best_share": 0.0
+  }
+ },
+ {
+  "run": "map_aerial_views_of_rural_riches_drone_shot",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 21,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 1,
+   "groups": [],
+   "links": []
+  }
+ },
+ {
+  "run": "map_angkor_wat_breathtaking_cinematic_aerial",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 30,
+    "subject": false
+   },
+   {
+    "model": "1",
+    "keyframes": 20,
+    "subject": false
+   },
+   {
+    "model": "2",
+    "keyframes": 20,
+    "subject": false
+   },
+   {
+    "model": "3",
+    "keyframes": 18,
+    "subject": false
+   },
+   {
+    "model": "4",
+    "keyframes": 7,
+    "subject": false
+   },
+   {
+    "model": "5",
+    "keyframes": 7,
+    "subject": false
+   },
+   {
+    "model": "6",
+    "keyframes": 7,
+    "subject": false
+   },
+   {
+    "model": "7",
+    "keyframes": 6,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 8,
+   "groups": [
+    {
+     "members": [
+      "2",
+      "3"
+     ],
+     "images": 38,
+     "gaps": {
+      "2": {
+       "overlap": 0.984,
+       "gap": 0.003
+      },
+      "3": {
+       "overlap": 1.0,
+       "gap": 0.0029
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 3.4,
+    "matching": 17.5,
+    "lifting": 5.3,
+    "model_pairs": 28.0
+   },
+   "links": [
+    {
+     "a": "2",
+     "b": "3",
+     "inliers": 2703,
+     "share": 0.676,
+     "rank": 0
+    }
+   ],
+   "rejected_best_share": 0.073
+  }
+ },
+ {
+  "run": "map_breathtaking_aerial_views_of_hanoi_opera",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 43,
+    "subject": true,
+    "aimed_share": 0.0,
+    "in_front_share": 0.791,
+    "mesh_in_box": 1.0
+   },
+   {
+    "model": "1",
+    "keyframes": 25,
+    "subject": true,
+    "aimed_share": 0.52,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.439
+   },
+   {
+    "model": "2",
+    "keyframes": 6,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 3,
+   "groups": [],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 2.1,
+    "matching": 1.8,
+    "lifting": 1.1,
+    "model_pairs": 3.0
+   },
+   "links": [],
+   "rejected_best_share": 0.15
+  }
+ },
+ {
+  "run": "map_colosseum_like_never_before_4k_drone_aer",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 12,
+    "subject": false
+   },
+   {
+    "model": "1",
+    "keyframes": 10,
+    "subject": false
+   },
+   {
+    "model": "2",
+    "keyframes": 9,
+    "subject": false
+   },
+   {
+    "model": "3",
+    "keyframes": 8,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.208
+   },
+   {
+    "model": "4",
+    "keyframes": 6,
+    "subject": false
+   },
+   {
+    "model": "5",
+    "keyframes": 6,
+    "subject": false
+   },
+   {
+    "model": "6",
+    "keyframes": 5,
+    "subject": false
+   },
+   {
+    "model": "7",
+    "keyframes": 5,
+    "subject": false
+   },
+   {
+    "model": "8",
+    "keyframes": 5,
+    "subject": false
+   },
+   {
+    "model": "9",
+    "keyframes": 5,
+    "subject": false
+   },
+   {
+    "model": "10",
+    "keyframes": 4,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 11,
+   "groups": [
+    {
+     "members": [
+      "0",
+      "8"
+     ],
+     "images": 17,
+     "gaps": {
+      "0": {
+       "overlap": 0.79,
+       "gap": 0.0077
+      },
+      "8": {
+       "overlap": 1.0,
+       "gap": 0.0059
+      }
+     }
+    },
+    {
+     "members": [
+      "1",
+      "10",
+      "2",
+      "3",
+      "5",
+      "6",
+      "7"
+     ],
+     "images": 47,
+     "gaps": {
+      "1": {
+       "overlap": 0.997,
+       "gap": 0.0045
+      },
+      "6": {
+       "overlap": 0.992,
+       "gap": 0.0039
+      },
+      "10": {
+       "overlap": 1.0,
+       "gap": 0.0044
+      },
+      "3": {
+       "overlap": 0.576,
+       "gap": 0.0051
+      },
+      "5": {
+       "overlap": 0.759,
+       "gap": 0.0042
+      },
+      "2": {
+       "overlap": 0.991,
+       "gap": 0.0201
+      },
+      "7": {
+       "overlap": 1.0,
+       "gap": 0.0015
+      }
+     }
+    },
+    {
+     "members": [
+      "4",
+      "9"
+     ],
+     "images": 11,
+     "gaps": {
+      "4": {
+       "overlap": 1.0,
+       "gap": 0.006
+      },
+      "9": {
+       "overlap": 0.542,
+       "gap": 0.0112
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 2.4,
+    "matching": 33.5,
+    "lifting": 7.5,
+    "model_pairs": 55.0
+   },
+   "links": [
+    {
+     "a": "0",
+     "b": "8",
+     "inliers": 1173,
+     "share": 0.293,
+     "rank": 0
+    },
+    {
+     "a": "1",
+     "b": "2",
+     "inliers": 1209,
+     "share": 0.302,
+     "rank": 0
+    },
+    {
+     "a": "1",
+     "b": "3",
+     "inliers": 1074,
+     "share": 0.269,
+     "rank": 0
+    },
+    {
+     "a": "1",
+     "b": "5",
+     "inliers": 938,
+     "share": 0.234,
+     "rank": 4
+    },
+    {
+     "a": "1",
+     "b": "6",
+     "inliers": 1271,
+     "share": 0.318,
+     "rank": 2
+    },
+    {
+     "a": "1",
+     "b": "10",
+     "inliers": 1077,
+     "share": 0.269,
+     "rank": 2
+    },
+    {
+     "a": "2",
+     "b": "6",
+     "inliers": 1233,
+     "share": 0.308,
+     "rank": 2
+    },
+    {
+     "a": "3",
+     "b": "6",
+     "inliers": 937,
+     "share": 0.234,
+     "rank": 5
+    },
+    {
+     "a": "4",
+     "b": "9",
+     "inliers": 1153,
+     "share": 0.288,
+     "rank": 3
+    },
+    {
+     "a": "6",
+     "b": "7",
+     "inliers": 1218,
+     "share": 0.304,
+     "rank": 0
+    }
+   ],
+   "rejected_best_share": 0.17
+  }
+ },
+ {
+  "run": "map_eiffel_tower_drone_4k",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 48,
+    "subject": false
+   },
+   {
+    "model": "1",
+    "keyframes": 23,
+    "subject": false
+   },
+   {
+    "model": "2",
+    "keyframes": 21,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.278
+   },
+   {
+    "model": "3",
+    "keyframes": 20,
+    "subject": true,
+    "aimed_share": 0.0,
+    "in_front_share": 0.0,
+    "mesh_in_box": 0.0
+   },
+   {
+    "model": "4",
+    "keyframes": 18,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 1.0
+   },
+   {
+    "model": "5",
+    "keyframes": 15,
+    "subject": false
+   },
+   {
+    "model": "6",
+    "keyframes": 15,
+    "subject": true,
+    "aimed_share": 0.0,
+    "in_front_share": 0.0,
+    "mesh_in_box": 0.009
+   },
+   {
+    "model": "7",
+    "keyframes": 14,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.253
+   },
+   {
+    "model": "8",
+    "keyframes": 11,
+    "subject": false
+   },
+   {
+    "model": "9",
+    "keyframes": 8,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 10,
+   "groups": [
+    {
+     "members": [
+      "2",
+      "7",
+      "9"
+     ],
+     "images": 43,
+     "gaps": {
+      "2": {
+       "overlap": 0.321,
+       "gap": 0.0142
+      },
+      "9": {
+       "overlap": 0.904,
+       "gap": 0.0198
+      },
+      "7": {
+       "overlap": 0.57,
+       "gap": 0.0197
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 5.5,
+    "matching": 29.4,
+    "lifting": 10.3,
+    "model_pairs": 45.0
+   },
+   "links": [
+    {
+     "a": "2",
+     "b": "7",
+     "inliers": 889,
+     "share": 0.222,
+     "rank": 0
+    },
+    {
+     "a": "2",
+     "b": "9",
+     "inliers": 1446,
+     "share": 0.361,
+     "rank": 1
+    }
+   ],
+   "rejected_best_share": 0.156
+  }
+ },
+ {
+  "run": "map_fpv_drone_flight_through_beautiful_icela",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 189,
+    "subject": true,
+    "aimed_share": 0.302,
+    "in_front_share": 0.365,
+    "mesh_in_box": 0.187
+   },
+   {
+    "model": "1",
+    "keyframes": 175,
+    "subject": true,
+    "aimed_share": 0.069,
+    "in_front_share": 0.343,
+    "mesh_in_box": 0.344
+   },
+   {
+    "model": "2",
+    "keyframes": 118,
+    "subject": true,
+    "aimed_share": 0.551,
+    "in_front_share": 0.669,
+    "mesh_in_box": 0.324
+   },
+   {
+    "model": "3",
+    "keyframes": 86,
+    "subject": true,
+    "aimed_share": 0.151,
+    "in_front_share": 0.186,
+    "mesh_in_box": 0.349
+   },
+   {
+    "model": "4",
+    "keyframes": 26,
+    "subject": true,
+    "aimed_share": 0.654,
+    "in_front_share": 0.923,
+    "mesh_in_box": 0.074
+   },
+   {
+    "model": "5",
+    "keyframes": 9,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 6,
+   "groups": [
+    {
+     "members": [
+      "2",
+      "3"
+     ],
+     "images": 204,
+     "gaps": {
+      "2": {
+       "overlap": 0.134,
+       "gap": 0.0257
+      },
+      "3": {
+       "overlap": 0.283,
+       "gap": 0.0309
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 18.6,
+    "matching": 9.2,
+    "lifting": 6.6,
+    "model_pairs": 15.0
+   },
+   "links": [
+    {
+     "a": "2",
+     "b": "3",
+     "inliers": 904,
+     "share": 0.226,
+     "rank": 2
+    }
+   ],
+   "rejected_best_share": 0.144
+  }
+ },
+ {
+  "run": "map_gopro_flying_a_drone_through_a_waterfall",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 179,
+    "subject": true,
+    "aimed_share": 0.698,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.753
+   }
+  ],
+  "merge": {
+   "models": 1,
+   "groups": [],
+   "links": []
+  }
+ },
+ {
+  "run": "map_hagia_sophia_4k_vibes_of_istanbul",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 21,
+    "subject": false
+   },
+   {
+    "model": "1",
+    "keyframes": 13,
+    "subject": false
+   },
+   {
+    "model": "2",
+    "keyframes": 8,
+    "subject": false
+   },
+   {
+    "model": "3",
+    "keyframes": 5,
+    "subject": false
+   },
+   {
+    "model": "4",
+    "keyframes": 5,
+    "subject": false
+   },
+   {
+    "model": "5",
+    "keyframes": 5,
+    "subject": false
+   },
+   {
+    "model": "6",
+    "keyframes": 4,
+    "subject": false
+   },
+   {
+    "model": "7",
+    "keyframes": 4,
+    "subject": false
+   },
+   {
+    "model": "8",
+    "keyframes": 4,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 9,
+   "groups": [],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 2.0,
+    "matching": 20.7,
+    "lifting": 5.0,
+    "model_pairs": 36.0
+   },
+   "links": [],
+   "rejected_best_share": 0.139
+  }
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 41,
+    "subject": false
+   },
+   {
+    "model": "1",
+    "keyframes": 39,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.145
+   },
+   {
+    "model": "2",
+    "keyframes": 19,
+    "subject": false
+   },
+   {
+    "model": "3",
+    "keyframes": 14,
+    "subject": false
+   },
+   {
+    "model": "4",
+    "keyframes": 10,
+    "subject": false
+   },
+   {
+    "model": "5",
+    "keyframes": 5,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 6,
+   "groups": [
+    {
+     "members": [
+      "1",
+      "4",
+      "5"
+     ],
+     "images": 54,
+     "gaps": {
+      "1": {
+       "overlap": 0.131,
+       "gap": 0.0165
+      },
+      "5": {
+       "overlap": 1.0,
+       "gap": 0.0038
+      },
+      "4": {
+       "overlap": 0.914,
+       "gap": 0.0059
+      }
+     }
+    },
+    {
+     "members": [
+      "2",
+      "3"
+     ],
+     "images": 33,
+     "gaps": {
+      "2": {
+       "overlap": 0.048,
+       "gap": 0.0291
+      },
+      "3": {
+       "overlap": 0.612,
+       "gap": 0.0249
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 4.3,
+    "matching": 9.8,
+    "lifting": 4.1,
+    "model_pairs": 15.0
+   },
+   "links": [
+    {
+     "a": "1",
+     "b": "4",
+     "inliers": 962,
+     "share": 0.24,
+     "rank": 1
+    },
+    {
+     "a": "1",
+     "b": "5",
+     "inliers": 1818,
+     "share": 0.455,
+     "rank": 0
+    },
+    {
+     "a": "2",
+     "b": "3",
+     "inliers": 948,
+     "share": 0.237,
+     "rank": 1
+    }
+   ],
+   "rejected_best_share": 0.18
+  }
+ },
+ {
+  "run": "map_notre_dame_drone_paris_4k",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 26,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.598
+   },
+   {
+    "model": "1",
+    "keyframes": 23,
+    "subject": false
+   },
+   {
+    "model": "2",
+    "keyframes": 21,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.998
+   },
+   {
+    "model": "3",
+    "keyframes": 19,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.384
+   },
+   {
+    "model": "4",
+    "keyframes": 10,
+    "subject": false
+   },
+   {
+    "model": "5",
+    "keyframes": 8,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.935
+   }
+  ],
+  "merge": {
+   "models": 6,
+   "groups": [
+    {
+     "members": [
+      "2",
+      "5"
+     ],
+     "images": 29,
+     "gaps": {
+      "2": {
+       "overlap": 0.822,
+       "gap": 0.0141
+      },
+      "5": {
+       "overlap": 0.615,
+       "gap": 0.0144
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 3.6,
+    "matching": 9.9,
+    "lifting": 3.8,
+    "model_pairs": 15.0
+   },
+   "links": [
+    {
+     "a": "2",
+     "b": "5",
+     "inliers": 813,
+     "share": 0.203,
+     "rank": 1
+    }
+   ],
+   "rejected_best_share": 0.172
+  }
+ },
+ {
+  "run": "map_petronas_twin_tower_in_fpv_drone_4k_nich",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 64,
+    "subject": true,
+    "aimed_share": 0.703,
+    "in_front_share": 0.75,
+    "mesh_in_box": 0.045
+   },
+   {
+    "model": "1",
+    "keyframes": 58,
+    "subject": true,
+    "aimed_share": 0.603,
+    "in_front_share": 0.655,
+    "mesh_in_box": 0.116
+   },
+   {
+    "model": "2",
+    "keyframes": 39,
+    "subject": true,
+    "aimed_share": 0.282,
+    "in_front_share": 0.667,
+    "mesh_in_box": 1.0
+   },
+   {
+    "model": "3",
+    "keyframes": 38,
+    "subject": true,
+    "aimed_share": 0.132,
+    "in_front_share": 0.368,
+    "mesh_in_box": 0.028
+   },
+   {
+    "model": "4",
+    "keyframes": 27,
+    "subject": true,
+    "aimed_share": 0.926,
+    "in_front_share": 0.963,
+    "mesh_in_box": 0.093
+   },
+   {
+    "model": "5",
+    "keyframes": 25,
+    "subject": true,
+    "aimed_share": 0.92,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.066
+   }
+  ],
+  "merge": {
+   "models": 6,
+   "groups": [],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 7.5,
+    "matching": 9.7,
+    "lifting": 6.4,
+    "model_pairs": 15.0
+   },
+   "links": [],
+   "rejected_best_share": 0.146
+  }
+ },
+ {
+  "run": "map_qutub_minar_new_delhi_india_4k_drone_vid",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 39,
+    "subject": false
+   },
+   {
+    "model": "1",
+    "keyframes": 21,
+    "subject": false
+   },
+   {
+    "model": "2",
+    "keyframes": 13,
+    "subject": true,
+    "aimed_share": 0.0,
+    "in_front_share": 0.0,
+    "mesh_in_box": 0.0
+   },
+   {
+    "model": "3",
+    "keyframes": 10,
+    "subject": true,
+    "aimed_share": 0.0,
+    "in_front_share": 0.0,
+    "mesh_in_box": 0.01
+   },
+   {
+    "model": "4",
+    "keyframes": 7,
+    "subject": false
+   },
+   {
+    "model": "5",
+    "keyframes": 6,
+    "subject": false
+   },
+   {
+    "model": "6",
+    "keyframes": 5,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.408
+   },
+   {
+    "model": "7",
+    "keyframes": 5,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 8,
+   "groups": [
+    {
+     "members": [
+      "4",
+      "6"
+     ],
+     "images": 12,
+     "gaps": {
+      "4": {
+       "overlap": 0.192,
+       "gap": 0.0034
+      },
+      "6": {
+       "overlap": 0.806,
+       "gap": 0.004
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 3.0,
+    "matching": 17.3,
+    "lifting": 5.6,
+    "model_pairs": 28.0
+   },
+   "links": [
+    {
+     "a": "4",
+     "b": "6",
+     "inliers": 1072,
+     "share": 0.268,
+     "rank": 0
+    }
+   ],
+   "rejected_best_share": 0.131
+  }
+ },
+ {
+  "run": "map_reichstag_berlin_in_4k_stunning_drone_vi",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 18,
+    "subject": true,
+    "aimed_share": 0.0,
+    "in_front_share": 0.167,
+    "mesh_in_box": 0.0
+   },
+   {
+    "model": "1",
+    "keyframes": 14,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.862
+   },
+   {
+    "model": "2",
+    "keyframes": 10,
+    "subject": false
+   },
+   {
+    "model": "3",
+    "keyframes": 9,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.172
+   },
+   {
+    "model": "4",
+    "keyframes": 5,
+    "subject": false
+   },
+   {
+    "model": "5",
+    "keyframes": 5,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.216
+   },
+   {
+    "model": "6",
+    "keyframes": 5,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.099
+   },
+   {
+    "model": "7",
+    "keyframes": 4,
+    "subject": false
+   }
+  ],
+  "merge": {
+   "models": 8,
+   "groups": [
+    {
+     "members": [
+      "1",
+      "3",
+      "6"
+     ],
+     "images": 28,
+     "gaps": {
+      "1": {
+       "overlap": 1.0,
+       "gap": 0.003
+      },
+      "3": {
+       "overlap": 0.724,
+       "gap": 0.0047
+      },
+      "6": {
+       "overlap": 0.835,
+       "gap": 0.0043
+      }
+     }
+    },
+    {
+     "members": [
+      "2",
+      "5",
+      "7"
+     ],
+     "images": 19,
+     "gaps": {
+      "2": {
+       "overlap": 0.984,
+       "gap": 0.0042
+      },
+      "7": {
+       "overlap": 0.861,
+       "gap": 0.0049
+      },
+      "5": {
+       "overlap": 0.275,
+       "gap": 0.0047
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 2.0,
+    "matching": 14.3,
+    "lifting": 4.4,
+    "model_pairs": 28.0
+   },
+   "links": [
+    {
+     "a": "1",
+     "b": "3",
+     "inliers": 843,
+     "share": 0.211,
+     "rank": 0
+    },
+    {
+     "a": "2",
+     "b": "5",
+     "inliers": 1071,
+     "share": 0.268,
+     "rank": 1
+    },
+    {
+     "a": "2",
+     "b": "7",
+     "inliers": 1955,
+     "share": 0.489,
+     "rank": 0
+    },
+    {
+     "a": "3",
+     "b": "6",
+     "inliers": 1733,
+     "share": 0.433,
+     "rank": 0
+    },
+    {
+     "a": "5",
+     "b": "7",
+     "inliers": 1012,
+     "share": 0.253,
+     "rank": 0
+    }
+   ],
+   "rejected_best_share": 0.196
+  }
+ },
+ {
+  "run": "map_the_messiah_cristo_redentor_4k_drone_foo",
+  "subject": [
+   {
+    "model": "0",
+    "keyframes": 52,
+    "subject": true,
+    "aimed_share": 0.981,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.02
+   },
+   {
+    "model": "1",
+    "keyframes": 13,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.009
+   },
+   {
+    "model": "2",
+    "keyframes": 12,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.002
+   },
+   {
+    "model": "3",
+    "keyframes": 10,
+    "subject": false
+   },
+   {
+    "model": "4",
+    "keyframes": 8,
+    "subject": false
+   },
+   {
+    "model": "5",
+    "keyframes": 6,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.103
+   },
+   {
+    "model": "6",
+    "keyframes": 5,
+    "subject": true,
+    "aimed_share": 0.0,
+    "in_front_share": 0.0,
+    "mesh_in_box": 0.0
+   },
+   {
+    "model": "7",
+    "keyframes": 4,
+    "subject": true,
+    "aimed_share": 1.0,
+    "in_front_share": 1.0,
+    "mesh_in_box": 0.042
+   }
+  ],
+  "merge": {
+   "models": 8,
+   "groups": [
+    {
+     "members": [
+      "0",
+      "1",
+      "7"
+     ],
+     "images": 69,
+     "gaps": {
+      "0": {
+       "overlap": 0.264,
+       "gap": 0.0139
+      },
+      "7": {
+       "overlap": 1.0,
+       "gap": 0.005
+      },
+      "1": {
+       "overlap": 0.023,
+       "gap": 0.0079
+      }
+     }
+    }
+   ],
+   "timing": {
+    "load": 0.0,
+    "descriptors": 3.2,
+    "matching": 13.8,
+    "lifting": 5.3,
+    "model_pairs": 28.0
+   },
+   "links": [
+    {
+     "a": "0",
+     "b": "1",
+     "inliers": 846,
+     "share": 0.245,
+     "rank": 0
+    },
+    {
+     "a": "0",
+     "b": "7",
+     "inliers": 1808,
+     "share": 0.452,
+     "rank": 0
+    }
+   ],
+   "rejected_best_share": 0.125
+  }
+ }
+]

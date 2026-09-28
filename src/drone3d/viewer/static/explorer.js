@@ -46,7 +46,7 @@ export class Explorer extends EventTarget {
     this.marks = new THREE.Group();
     this.scene.add(this.root, this.marks);
     this.models = [];
-    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false, focus: true };
+    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false, focus: false };
     this.pointSize = 1.5;
     this.imageScale = 2.5; // keyframe photo / depth planes: big enough to read at the model's framing
     this.nav = 'orbit';
@@ -234,8 +234,9 @@ export class Explorer extends EventTarget {
     this.dispatchEvent(new CustomEvent('layers'));
   }
 
-  // Four vertical planes a camera distance around what the drone circled: the far field (most of a merged
-  // model's triangles, and its least accurate) is hidden, not deleted -- the files keep all of it.
+  // Four vertical planes a camera distance around what the drone looked at: the far field (most of a merged
+  // model's triangles, and its least accurate) is hidden, not deleted -- the files keep all of it. Off at first:
+  // on some sample videos (Cristo Redentor, the FPV flights) the box holds under 10 % of the mesh.
   _focusPlanes(entry) {
     const f = entry.spec.focus;
     if (!f) return null;

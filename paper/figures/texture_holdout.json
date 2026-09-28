@@ -1,0 +1,642 @@
+[
+ {
+  "model": "map_above_clouds_pnb_merdeka_118_cinematic_a:0",
+  "variant": "centroids",
+  "held_out": 9,
+  "candidates": 48,
+  "psnr_median": 11.73,
+  "psnr_mean": 11.94,
+  "unseen_share": 0.0114,
+  "coverage": 0.754
+ },
+ {
+  "model": "map_above_clouds_pnb_merdeka_118_cinematic_a:0",
+  "variant": "centroids+slope",
+  "held_out": 9,
+  "candidates": 48,
+  "psnr_median": 11.73,
+  "psnr_mean": 11.94,
+  "unseen_share": 0.0077,
+  "coverage": 0.754
+ },
+ {
+  "model": "map_above_clouds_pnb_merdeka_118_cinematic_a:0",
+  "variant": "samples+slope",
+  "held_out": 9,
+  "candidates": 48,
+  "psnr_median": 11.81,
+  "psnr_mean": 11.98,
+  "unseen_share": 0.0155,
+  "coverage": 0.754
+ },
+ {
+  "model": "map_above_clouds_pnb_merdeka_118_cinematic_a:0",
+  "variant": "samples+slope@512",
+  "held_out": 9,
+  "candidates": 48,
+  "psnr_median": 11.67,
+  "psnr_mean": 11.9,
+  "unseen_share": 0.0029,
+  "coverage": 0.754
+ },
+ {
+  "model": "map_aerial_views_of_rural_riches_drone_shot:0",
+  "variant": "centroids",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 23.67,
+  "psnr_mean": 22.42,
+  "unseen_share": 0.0227,
+  "coverage": 0.931
+ },
+ {
+  "model": "map_aerial_views_of_rural_riches_drone_shot:0",
+  "variant": "centroids+slope",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 23.8,
+  "psnr_mean": 22.48,
+  "unseen_share": 0.0124,
+  "coverage": 0.931
+ },
+ {
+  "model": "map_aerial_views_of_rural_riches_drone_shot:0",
+  "variant": "samples+slope",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 23.71,
+  "psnr_mean": 22.44,
+  "unseen_share": 0.0159,
+  "coverage": 0.931
+ },
+ {
+  "model": "map_aerial_views_of_rural_riches_drone_shot:0",
+  "variant": "samples+slope@512",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 23.84,
+  "psnr_mean": 22.54,
+  "unseen_share": 0.0071,
+  "coverage": 0.931
+ },
+ {
+  "model": "map_angkor_wat_breathtaking_cinematic_aerial:0",
+  "variant": "centroids",
+  "held_out": 4,
+  "candidates": 26,
+  "psnr_median": 20.53,
+  "psnr_mean": 20.96,
+  "unseen_share": 0.012,
+  "coverage": 0.997
+ },
+ {
+  "model": "map_angkor_wat_breathtaking_cinematic_aerial:0",
+  "variant": "centroids+slope",
+  "held_out": 4,
+  "candidates": 26,
+  "psnr_median": 20.53,
+  "psnr_mean": 20.96,
+  "unseen_share": 0.0079,
+  "coverage": 0.997
+ },
+ {
+  "model": "map_angkor_wat_breathtaking_cinematic_aerial:0",
+  "variant": "samples+slope",
+  "held_out": 4,
+  "candidates": 26,
+  "psnr_median": 20.53,
+  "psnr_mean": 20.96,
+  "unseen_share": 0.0124,
+  "coverage": 0.997
+ },
+ {
+  "model": "map_angkor_wat_breathtaking_cinematic_aerial:0",
+  "variant": "samples+slope@512",
+  "held_out": 4,
+  "candidates": 26,
+  "psnr_median": 20.52,
+  "psnr_mean": 20.95,
+  "unseen_share": 0.0046,
+  "coverage": 0.997
+ },
+ {
+  "model": "map_breathtaking_aerial_views_of_hanoi_opera:0",
+  "variant": "centroids",
+  "held_out": 5,
+  "candidates": 38,
+  "psnr_median": NaN,
+  "psnr_mean": NaN,
+  "unseen_share": 0.0195,
+  "coverage": 0.892
+ },
+ {
+  "model": "map_breathtaking_aerial_views_of_hanoi_opera:0",
+  "variant": "centroids+slope",
+  "held_out": 5,
+  "candidates": 38,
+  "psnr_median": NaN,
+  "psnr_mean": NaN,
+  "unseen_share": 0.0151,
+  "coverage": 0.892
+ },
+ {
+  "model": "map_breathtaking_aerial_views_of_hanoi_opera:0",
+  "variant": "samples+slope",
+  "held_out": 5,
+  "candidates": 38,
+  "psnr_median": NaN,
+  "psnr_mean": NaN,
+  "unseen_share": 0.0688,
+  "coverage": 0.892
+ },
+ {
+  "model": "map_breathtaking_aerial_views_of_hanoi_opera:0",
+  "variant": "samples+slope@512",
+  "held_out": 5,
+  "candidates": 38,
+  "psnr_median": NaN,
+  "psnr_mean": NaN,
+  "unseen_share": 0.0033,
+  "coverage": 0.892
+ },
+ {
+  "model": "map_colosseum_like_never_before_4k_drone_aer:0",
+  "variant": "centroids",
+  "held_out": 1,
+  "candidates": 11,
+  "psnr_median": 25.87,
+  "psnr_mean": 25.87,
+  "unseen_share": 0.0873,
+  "coverage": 0.907
+ },
+ {
+  "model": "map_colosseum_like_never_before_4k_drone_aer:0",
+  "variant": "centroids+slope",
+  "held_out": 1,
+  "candidates": 11,
+  "psnr_median": 25.85,
+  "psnr_mean": 25.85,
+  "unseen_share": 0.0723,
+  "coverage": 0.907
+ },
+ {
+  "model": "map_colosseum_like_never_before_4k_drone_aer:0",
+  "variant": "samples+slope",
+  "held_out": 1,
+  "candidates": 11,
+  "psnr_median": 25.86,
+  "psnr_mean": 25.86,
+  "unseen_share": 0.0825,
+  "coverage": 0.907
+ },
+ {
+  "model": "map_colosseum_like_never_before_4k_drone_aer:0",
+  "variant": "samples+slope@512",
+  "held_out": 1,
+  "candidates": 11,
+  "psnr_median": 25.83,
+  "psnr_mean": 25.83,
+  "unseen_share": 0.0595,
+  "coverage": 0.907
+ },
+ {
+  "model": "map_eiffel_tower_drone_4k:0",
+  "variant": "centroids",
+  "held_out": 6,
+  "candidates": 42,
+  "psnr_median": 15.24,
+  "psnr_mean": 14.83,
+  "unseen_share": 0.1069,
+  "coverage": 0.59
+ },
+ {
+  "model": "map_eiffel_tower_drone_4k:0",
+  "variant": "centroids+slope",
+  "held_out": 6,
+  "candidates": 42,
+  "psnr_median": 15.23,
+  "psnr_mean": 14.81,
+  "unseen_share": 0.0832,
+  "coverage": 0.59
+ },
+ {
+  "model": "map_eiffel_tower_drone_4k:0",
+  "variant": "samples+slope",
+  "held_out": 6,
+  "candidates": 42,
+  "psnr_median": 15.24,
+  "psnr_mean": 14.81,
+  "unseen_share": 0.2263,
+  "coverage": 0.59
+ },
+ {
+  "model": "map_eiffel_tower_drone_4k:0",
+  "variant": "samples+slope@512",
+  "held_out": 6,
+  "candidates": 42,
+  "psnr_median": 15.23,
+  "psnr_mean": 14.81,
+  "unseen_share": 0.0491,
+  "coverage": 0.59
+ },
+ {
+  "model": "map_fpv_drone_flight_through_beautiful_icela:0",
+  "variant": "centroids",
+  "held_out": 24,
+  "candidates": 48,
+  "psnr_median": 24.49,
+  "psnr_mean": 23.95,
+  "unseen_share": 0.2104,
+  "coverage": 0.94
+ },
+ {
+  "model": "map_fpv_drone_flight_through_beautiful_icela:0",
+  "variant": "centroids+slope",
+  "held_out": 24,
+  "candidates": 48,
+  "psnr_median": 24.73,
+  "psnr_mean": 24.03,
+  "unseen_share": 0.152,
+  "coverage": 0.94
+ },
+ {
+  "model": "map_fpv_drone_flight_through_beautiful_icela:0",
+  "variant": "samples+slope",
+  "held_out": 24,
+  "candidates": 48,
+  "psnr_median": 24.18,
+  "psnr_mean": 23.76,
+  "unseen_share": 0.2421,
+  "coverage": 0.94
+ },
+ {
+  "model": "map_fpv_drone_flight_through_beautiful_icela:0",
+  "variant": "samples+slope@512",
+  "held_out": 24,
+  "candidates": 48,
+  "psnr_median": 24.87,
+  "psnr_mean": 24.1,
+  "unseen_share": 0.1129,
+  "coverage": 0.94
+ },
+ {
+  "model": "map_gopro_flying_a_drone_through_a_waterfall:0",
+  "variant": "centroids",
+  "held_out": 22,
+  "candidates": 48,
+  "psnr_median": 19.96,
+  "psnr_mean": 18.47,
+  "unseen_share": 0.1213,
+  "coverage": 0.961
+ },
+ {
+  "model": "map_gopro_flying_a_drone_through_a_waterfall:0",
+  "variant": "centroids+slope",
+  "held_out": 22,
+  "candidates": 48,
+  "psnr_median": 19.96,
+  "psnr_mean": 18.48,
+  "unseen_share": 0.0786,
+  "coverage": 0.961
+ },
+ {
+  "model": "map_gopro_flying_a_drone_through_a_waterfall:0",
+  "variant": "samples+slope",
+  "held_out": 22,
+  "candidates": 48,
+  "psnr_median": 20.04,
+  "psnr_mean": 18.41,
+  "unseen_share": 0.1465,
+  "coverage": 0.961
+ },
+ {
+  "model": "map_gopro_flying_a_drone_through_a_waterfall:0",
+  "variant": "samples+slope@512",
+  "held_out": 22,
+  "candidates": 48,
+  "psnr_median": 19.95,
+  "psnr_mean": 18.47,
+  "unseen_share": 0.0602,
+  "coverage": 0.961
+ },
+ {
+  "model": "map_hagia_sophia_4k_vibes_of_istanbul:0",
+  "variant": "centroids",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 19.41,
+  "psnr_mean": 19.71,
+  "unseen_share": 0.0708,
+  "coverage": 0.622
+ },
+ {
+  "model": "map_hagia_sophia_4k_vibes_of_istanbul:0",
+  "variant": "centroids+slope",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 19.42,
+  "psnr_mean": 19.71,
+  "unseen_share": 0.0489,
+  "coverage": 0.622
+ },
+ {
+  "model": "map_hagia_sophia_4k_vibes_of_istanbul:0",
+  "variant": "samples+slope",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 19.54,
+  "psnr_mean": 19.87,
+  "unseen_share": 0.0652,
+  "coverage": 0.622
+ },
+ {
+  "model": "map_hagia_sophia_4k_vibes_of_istanbul:0",
+  "variant": "samples+slope@512",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 19.28,
+  "psnr_mean": 19.56,
+  "unseen_share": 0.043,
+  "coverage": 0.622
+ },
+ {
+  "model": "map_jal_mahal_jaipur_india_drone_cinematic:0",
+  "variant": "centroids",
+  "held_out": 5,
+  "candidates": 36,
+  "psnr_median": 24.86,
+  "psnr_mean": 24.95,
+  "unseen_share": 0.1146,
+  "coverage": 0.797
+ },
+ {
+  "model": "map_jal_mahal_jaipur_india_drone_cinematic:0",
+  "variant": "centroids+slope",
+  "held_out": 5,
+  "candidates": 36,
+  "psnr_median": 24.79,
+  "psnr_mean": 24.91,
+  "unseen_share": 0.0852,
+  "coverage": 0.797
+ },
+ {
+  "model": "map_jal_mahal_jaipur_india_drone_cinematic:0",
+  "variant": "samples+slope",
+  "held_out": 5,
+  "candidates": 36,
+  "psnr_median": 24.88,
+  "psnr_mean": 25.0,
+  "unseen_share": 0.1071,
+  "coverage": 0.797
+ },
+ {
+  "model": "map_jal_mahal_jaipur_india_drone_cinematic:0",
+  "variant": "samples+slope@512",
+  "held_out": 5,
+  "candidates": 36,
+  "psnr_median": 24.64,
+  "psnr_mean": 24.76,
+  "unseen_share": 0.0528,
+  "coverage": 0.797
+ },
+ {
+  "model": "map_notre_dame_drone_paris_4k:0",
+  "variant": "centroids",
+  "held_out": 3,
+  "candidates": 23,
+  "psnr_median": 14.8,
+  "psnr_mean": 14.52,
+  "unseen_share": 0.0598,
+  "coverage": 0.927
+ },
+ {
+  "model": "map_notre_dame_drone_paris_4k:0",
+  "variant": "centroids+slope",
+  "held_out": 3,
+  "candidates": 23,
+  "psnr_median": 14.79,
+  "psnr_mean": 14.51,
+  "unseen_share": 0.0454,
+  "coverage": 0.927
+ },
+ {
+  "model": "map_notre_dame_drone_paris_4k:0",
+  "variant": "samples+slope",
+  "held_out": 3,
+  "candidates": 23,
+  "psnr_median": 14.7,
+  "psnr_mean": 14.54,
+  "unseen_share": 0.0644,
+  "coverage": 0.927
+ },
+ {
+  "model": "map_notre_dame_drone_paris_4k:0",
+  "variant": "samples+slope@512",
+  "held_out": 3,
+  "candidates": 23,
+  "psnr_median": 14.65,
+  "psnr_mean": 14.44,
+  "unseen_share": 0.0367,
+  "coverage": 0.927
+ },
+ {
+  "model": "map_petronas_twin_tower_in_fpv_drone_4k_nich:0",
+  "variant": "centroids",
+  "held_out": 8,
+  "candidates": 48,
+  "psnr_median": 16.34,
+  "psnr_mean": 16.04,
+  "unseen_share": 0.1367,
+  "coverage": 0.938
+ },
+ {
+  "model": "map_petronas_twin_tower_in_fpv_drone_4k_nich:0",
+  "variant": "centroids+slope",
+  "held_out": 8,
+  "candidates": 48,
+  "psnr_median": 16.32,
+  "psnr_mean": 16.03,
+  "unseen_share": 0.0962,
+  "coverage": 0.938
+ },
+ {
+  "model": "map_petronas_twin_tower_in_fpv_drone_4k_nich:0",
+  "variant": "samples+slope",
+  "held_out": 8,
+  "candidates": 48,
+  "psnr_median": 16.34,
+  "psnr_mean": 16.06,
+  "unseen_share": 0.1481,
+  "coverage": 0.938
+ },
+ {
+  "model": "map_petronas_twin_tower_in_fpv_drone_4k_nich:0",
+  "variant": "samples+slope@512",
+  "held_out": 8,
+  "candidates": 48,
+  "psnr_median": 16.32,
+  "psnr_mean": 16.03,
+  "unseen_share": 0.0791,
+  "coverage": 0.938
+ },
+ {
+  "model": "map_reichstag_berlin_in_4k_stunning_drone_vi:0",
+  "variant": "centroids",
+  "held_out": 2,
+  "candidates": 16,
+  "psnr_median": 14.05,
+  "psnr_mean": 14.05,
+  "unseen_share": 0.0838,
+  "coverage": 0.811
+ },
+ {
+  "model": "map_reichstag_berlin_in_4k_stunning_drone_vi:0",
+  "variant": "centroids+slope",
+  "held_out": 2,
+  "candidates": 16,
+  "psnr_median": 14.06,
+  "psnr_mean": 14.06,
+  "unseen_share": 0.0651,
+  "coverage": 0.811
+ },
+ {
+  "model": "map_reichstag_berlin_in_4k_stunning_drone_vi:0",
+  "variant": "samples+slope",
+  "held_out": 2,
+  "candidates": 16,
+  "psnr_median": 14.07,
+  "psnr_mean": 14.07,
+  "unseen_share": 0.0999,
+  "coverage": 0.811
+ },
+ {
+  "model": "map_reichstag_berlin_in_4k_stunning_drone_vi:0",
+  "variant": "samples+slope@512",
+  "held_out": 2,
+  "candidates": 16,
+  "psnr_median": 14.05,
+  "psnr_mean": 14.05,
+  "unseen_share": 0.0496,
+  "coverage": 0.811
+ },
+ {
+  "model": "map_the_messiah_cristo_redentor_4k_drone_foo:0",
+  "variant": "centroids",
+  "held_out": 6,
+  "candidates": 46,
+  "psnr_median": 16.57,
+  "psnr_mean": 16.38,
+  "unseen_share": 0.0136,
+  "coverage": 0.465
+ },
+ {
+  "model": "map_the_messiah_cristo_redentor_4k_drone_foo:0",
+  "variant": "centroids+slope",
+  "held_out": 6,
+  "candidates": 46,
+  "psnr_median": 16.56,
+  "psnr_mean": 16.38,
+  "unseen_share": 0.01,
+  "coverage": 0.465
+ },
+ {
+  "model": "map_the_messiah_cristo_redentor_4k_drone_foo:0",
+  "variant": "samples+slope",
+  "held_out": 6,
+  "candidates": 46,
+  "psnr_median": 16.58,
+  "psnr_mean": 16.39,
+  "unseen_share": 0.0156,
+  "coverage": 0.465
+ },
+ {
+  "model": "map_the_messiah_cristo_redentor_4k_drone_foo:0",
+  "variant": "samples+slope@512",
+  "held_out": 6,
+  "candidates": 46,
+  "psnr_median": 16.56,
+  "psnr_mean": 16.37,
+  "unseen_share": 0.0079,
+  "coverage": 0.465
+ },
+ {
+  "model": "merge2_colosseum:0",
+  "variant": "centroids",
+  "held_out": 6,
+  "candidates": 41,
+  "psnr_median": 17.61,
+  "psnr_mean": 17.86,
+  "unseen_share": 0.0128,
+  "coverage": 0.924
+ },
+ {
+  "model": "merge2_colosseum:0",
+  "variant": "centroids+slope",
+  "held_out": 6,
+  "candidates": 41,
+  "psnr_median": 17.61,
+  "psnr_mean": 17.86,
+  "unseen_share": 0.0069,
+  "coverage": 0.924
+ },
+ {
+  "model": "merge2_colosseum:0",
+  "variant": "samples+slope",
+  "held_out": 6,
+  "candidates": 41,
+  "psnr_median": 17.61,
+  "psnr_mean": 17.88,
+  "unseen_share": 0.0136,
+  "coverage": 0.924
+ },
+ {
+  "model": "merge2_colosseum:0",
+  "variant": "samples+slope@512",
+  "held_out": 6,
+  "candidates": 41,
+  "psnr_median": 17.6,
+  "psnr_mean": 17.85,
+  "unseen_share": 0.0035,
+  "coverage": 0.924
+ },
+ {
+  "model": "merge_kinbane:0",
+  "variant": "centroids",
+  "held_out": 4,
+  "candidates": 25,
+  "psnr_median": 16.93,
+  "psnr_mean": 17.26,
+  "unseen_share": 0.0997,
+  "coverage": 0.714
+ },
+ {
+  "model": "merge_kinbane:0",
+  "variant": "centroids+slope",
+  "held_out": 4,
+  "candidates": 25,
+  "psnr_median": 16.92,
+  "psnr_mean": 17.25,
+  "unseen_share": 0.0824,
+  "coverage": 0.714
+ },
+ {
+  "model": "merge_kinbane:0",
+  "variant": "samples+slope",
+  "held_out": 4,
+  "candidates": 25,
+  "psnr_median": 16.99,
+  "psnr_mean": 17.26,
+  "unseen_share": 0.1192,
+  "coverage": 0.714
+ },
+ {
+  "model": "merge_kinbane:0",
+  "variant": "samples+slope@512",
+  "held_out": 4,
+  "candidates": 25,
+  "psnr_median": 16.88,
+  "psnr_mean": 17.23,
+  "unseen_share": 0.0537,
+  "coverage": 0.714
+ }
+]

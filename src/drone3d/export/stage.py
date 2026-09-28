@@ -109,7 +109,7 @@ def _subject(cams: np.ndarray, axes: np.ndarray) -> tuple[np.ndarray, float] | N
         return None
     a = np.zeros((3, 3))
     b = np.zeros(3)
-    for c, d in zip(cams, axes):
+    for c, d in zip(cams, axes, strict=True):
         proj = np.eye(3) - np.outer(d, d)
         a += proj
         b += proj @ c
@@ -141,6 +141,35 @@ def _subject_view(points: np.ndarray, cams: np.ndarray, axes: np.ndarray) -> np.
         if cos.max() > np.cos(np.radians(20)):
             pick = int(np.argmax(cos))
     return np.array([cams[pick], cams[pick] + _axis_depth(points, cams[pick], axes[pick]) * axes[pick]])
+
+
+def _clean_mesh(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, geo: dict | None, points: np.ndarray, cams: np.ndarray,
+                cam_rots: np.ndarray, *, voxel: float, subject) -> tuple:  # type: ignore[no-untyped-def]  # fmt: skip
+    """The clean model (drone3d.export.terrain) of a fused mesh, in the SfM frame the texture is baked in.
+
+    Cleaning needs z up: the export's own frame (the georeference, or the levelling), and back. The opening
+    window is 0.6 x the subject radius -- the cameras' distance to what they circle, wider than it -- or a tenth
+    of the scene where the flight circles nothing. Colours: the nearest fused vertex's.
+    """
+    from scipy.spatial import cKDTree
+
+    from drone3d.export.terrain import clean_model
+
+    if geo is not None:
+        tr = geo["transform"]
+        s_, r_, t_ = float(tr["scale"]), np.asarray(tr["rotation"]), np.asarray(tr["translation"])
+    else:
+        s_, r_, t_ = 1.0, _level(points, cams, np.transpose(cam_rots, (0, 2, 1))), np.zeros(3)
+    up = s_ * v @ r_.T + t_
+    extent = float(np.linalg.norm(np.percentile(up[:, :2], 95, 0) - np.percentile(up[:, :2], 5, 0)))
+    window = 0.6 * s_ * subject[1] if subject is not None else 0.1 * extent
+    cv, cf, info = clean_model(up, f, voxel=max(voxel * s_, 1e-6), window=window)
+    back = ((cv - t_) / s_) @ r_
+    colours = None
+    if vc is not None:
+        _, near = cKDTree(v).query(back, workers=8)
+        colours = vc[near]
+    return back, cf, colours, info
 
 
 def _level(points: np.ndarray, cams: np.ndarray, rotations: np.ndarray | None = None) -> np.ndarray:
@@ -309,7 +338,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                las: bool = True, geotiff: bool = True, raster_cell: float | None = None, viewer: bool = True,
                images: Path | None = None, texture: bool = True, texture_views: int = 48,
                texture_size: int = 4096, max_triangles: int = 600_000, splats: dict | None = None,
-               max_splats: int = 1_500_000, texture_gain: bool = True) -> dict:  # fmt: skip
+               max_splats: int = 1_500_000, texture_gain: bool = True, clean_mesh: bool = True) -> dict:  # fmt: skip
     import open3d as o3d
     import pycolmap
 
@@ -360,10 +389,25 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         # The full-density mesh is the measurement deliverable (PLY); the viewable copies
         # (GLB, textured OBJ/GLB, FBX) are capped: a 1.5M-triangle model made a 120 MB
         # GLB that browsers load slowly and a 4096^2 soup atlas cannot texture finely.
-        dv, df, dvc = v, f, vc
-        if len(f) > 1.25 * max_triangles:  # 630k -> 600k cost 2.3 s per model for nothing a viewer notices
+        # They are the clean model (drone3d.export.terrain): the ground as a terrain surface, what stands on it
+        # smoothed, fragments dropped -- the fused mesh's crumpled walls and holed ground read as broken triangles.
+        src_v, src_f, src_vc, src_mesh = v, f, vc, mesh
+        clean_info = None
+        if clean_mesh:
+            with clock("clean"):
+                try:
+                    src_v, src_f, src_vc, clean_info = _clean_mesh(v, f, vc, geo_by_model.get(m["model"]), p, cams, cam_rots,
+                                                                   voxel=float(m.get("voxel") or 0.0), subject=subject)  # fmt: skip
+                    src_mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(src_v), o3d.utility.Vector3iVector(src_f))
+                    if src_vc is not None:
+                        src_mesh.vertex_colors = o3d.utility.Vector3dVector(src_vc[:, :3] / 255.0)
+                except (ValueError, IndexError, RuntimeError, MemoryError) as exc:  # an odd model: the fused mesh is still one
+                    log.warning("clean model failed for model %s: %s", name, exc)
+                    clean_info = {"status": "failed", "reason": str(exc)[:200]}
+        dv, df, dvc = src_v, src_f, src_vc
+        if len(src_f) > 1.25 * max_triangles:  # 630k -> 600k cost 2.3 s per model for nothing a viewer notices
             with clock("decimate"):
-                dv, df, dvc = _decimate(mesh, v, f, vc, max_triangles)
+                dv, df, dvc = _decimate(src_mesh, src_v, src_f, src_vc, max_triangles)
         baked, tex_info = None, None
         if texture and images is not None:
             try:
@@ -450,7 +494,7 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         rel = [str(x.relative_to(out_dir)) for x in files if x]
         rows.append({"model": m["model"], "frame": frame, "units": units, "epsg": epsg, "files": rel,
                      "vertices": len(v), "triangles": len(f), "viewer_triangles": len(df), "points": len(p),
-                     "texture": tex_info, "splats": splat_info})  # fmt: skip
+                     "texture": tex_info, "splats": splat_info, "clean": clean_info})  # fmt: skip
         scene_models.append({
             "name": f"model {name}",
             "mesh": f"model_{name}/mesh_textured.glb" if baked is not None else (f"model_{name}/mesh.glb" if "glb" in mesh_formats else None),
@@ -487,6 +531,18 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             if dst.exists():
                 shutil.rmtree(dst) if dst.is_dir() else dst.unlink()
             shutil.copytree(src, dst) if src.is_dir() else shutil.copy2(src, dst)
+        gen = out_dir / "generated" / "result.json"  # a generated object placed earlier (drone3d.generate) stays linked
+        if gen.is_file():
+            from drone3d.generate import NOTE
+
+            try:
+                g = json.loads(gen.read_text())
+                aligned = g.get("aligned") or {}
+                k = int(aligned.get("model", -1))
+                if g.get("status") == "ok" and aligned.get("placed") and 0 <= k < len(scene_models):
+                    scene_models[k]["generated"] = {"mesh": "generated/object_aligned.glb", "note": NOTE}
+            except (ValueError, TypeError):
+                pass
         (out_dir / "scene.json").write_text(json.dumps({"title": title, "models": scene_models}, indent=1))
     return {"models": rows, "viewer": str(out_dir / "index.html") if viewer and scene_models else None,
             "timing_s": clock.rounded()}  # fmt: skip

@@ -84,6 +84,21 @@ def _render(scene, f_uv: np.ndarray, albedo: np.ndarray, rec, im, images: Path):
     return out.reshape(h, w, 3), photo, hit.reshape(h, w)
 
 
+def _clean(run: Path, k: str, v: np.ndarray, f: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """drone3d.export.terrain.clean_model in the export's levelled frame, returned to the SfM frame."""
+    from drone3d.export.terrain import clean_model
+
+    fr_ = json.loads((run / "export" / f"model_{k}" / "frame.json").read_text())
+    s_, r_, t_ = float(fr_["scale"]), np.asarray(fr_["rotation"]), np.asarray(fr_["translation"])
+    dense = json.loads((run / "dense" / "result.json").read_text())
+    voxel = next(m["voxel"] for m in dense["models"] if Path(m["model"]).name == k) * s_
+    scene = next(m for m in json.loads((run / "export" / "scene.json").read_text())["models"] if m["dir"] == f"model_{k}")
+    ve = s_ * v @ r_.T + t_
+    window = 0.6 * scene["focus"]["radius"] if scene.get("focus") else 0.1 * float(np.linalg.norm(np.ptp(ve[:, :2], 0)))
+    cv, cf, _ = clean_model(ve, f, voxel=voxel, window=window)
+    return ((cv - t_) / s_) @ r_, cf
+
+
 def main() -> None:
     import open3d as o3d
     import pycolmap
@@ -91,44 +106,55 @@ def main() -> None:
     from drone3d.export.stage import _decimate
     from drone3d.export.texture_gpu import bake_soup_texture
 
+    clean = "--clean" in sys.argv  # raw fused mesh against drone3d.export.terrain's clean model, the baker's default
     rows = []
-    for spec in sys.argv[1:]:
+    for spec in [a for a in sys.argv[1:] if not a.startswith("--")]:
         run_name, k = spec.split(":")
         run = ROOT / "outputs" / run_name
         images = run / "dataset" / "images"
         mesh = o3d.io.read_triangle_mesh(str(run / "dense" / f"model_{k}" / "mesh.ply"))
         v, f, vc = np.asarray(mesh.vertices), np.asarray(mesh.triangles), np.asarray(mesh.vertex_colors)
-        if len(f) > 1.25 * 600_000:
-            v, f, vc = _decimate(mesh, v, f, vc, 600_000)
+        meshes = [("raw", v, f, vc)]
+        if clean:
+            cv, cf = _clean(run, k, v, f)
+            from scipy.spatial import cKDTree
+
+            _, near = cKDTree(v).query(cv)  # colours for untextured triangles: the nearest raw vertex's
+            meshes.append(("clean", cv, cf, vc[near]))
         rec = pycolmap.Reconstruction(str(run / "dataset" / "sparse" / k))
         posed = [im for im in sorted(rec.images.values(), key=lambda i: i.name) if im.has_pose]
         held = posed[4::8]
         rest = [im for im in posed if im not in held]
         cand = [rest[int(round(i))] for i in np.linspace(0, len(rest) - 1, min(48, len(rest)))]
         views = _views(rec, cand, images)
-        tm = o3d.t.geometry.TriangleMesh()
-        tm.vertex.positions = o3d.core.Tensor(v.astype(np.float32))
-        tm.triangle.indices = o3d.core.Tensor(f.astype(np.int32))
-        scene = o3d.t.geometry.RaycastingScene()
-        scene.add_triangles(tm)
-        for name, occ, slope, zbuf in VARIANTS:
-            f_uv, albedo, info = bake_soup_texture(v, f, views, size=4096, fallback_rgb=vc, gain=True, zbuf=zbuf,
-                                                   occluders=occ, slope=slope)  # fmt: skip
-            psnr, cover = [], []
-            for im in held:
-                img, photo, hit = _render(scene, f_uv, albedo, rec, im, images)
-                if not hit.any():  # the mesh is not in this view at all (Hanoi): nothing to compare
-                    continue
-                mse = float(((img[hit] - photo[hit]) ** 2).mean())
-                psnr.append(10 * np.log10(255.0**2 / max(mse, 1e-9)))
-                cover.append(float(hit.mean()))
-            row = {"model": spec, "variant": name, "held_out": len(held), "candidates": len(views),
-                   "psnr_median": round(float(np.median(psnr)), 2) if psnr else None,
-                   "psnr_mean": round(float(np.mean(psnr)), 2) if psnr else None, "views_compared": len(psnr),
-                   "unseen_share": round(info["unseen_triangles"] / len(f), 4), "coverage": round(float(np.median(cover)), 3)}  # fmt: skip
-            rows.append(row)
-            print(row, flush=True)
-    out = ROOT / "paper" / "figures" / "texture_holdout.json"
+        for label, v, f, vc in meshes:
+            if len(f) > 1.25 * 600_000:
+                m_ = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(v), o3d.utility.Vector3iVector(f))
+                m_.vertex_colors = o3d.utility.Vector3dVector(vc)
+                v, f, vc = _decimate(m_, v, f, vc, 600_000)
+            tm = o3d.t.geometry.TriangleMesh()
+            tm.vertex.positions = o3d.core.Tensor(v.astype(np.float32))
+            tm.triangle.indices = o3d.core.Tensor(f.astype(np.int32))
+            scene = o3d.t.geometry.RaycastingScene()
+            scene.add_triangles(tm)
+            for name, occ, slope, zbuf in (VARIANTS[1:2] if clean else VARIANTS):
+                f_uv, albedo, info = bake_soup_texture(v, f, views, size=4096, fallback_rgb=vc, gain=True, zbuf=zbuf,
+                                                       occluders=occ, slope=slope)  # fmt: skip
+                psnr, cover = [], []
+                for im in held:
+                    img, photo, hit = _render(scene, f_uv, albedo, rec, im, images)
+                    if not hit.any():  # the mesh is not in this view at all (Hanoi): nothing to compare
+                        continue
+                    mse = float(((img[hit] - photo[hit]) ** 2).mean())
+                    psnr.append(10 * np.log10(255.0**2 / max(mse, 1e-9)))
+                    cover.append(float(hit.mean()))
+                row = {"model": spec, "variant": name, "mesh": label, "held_out": len(held), "candidates": len(views),
+                       "psnr_median": round(float(np.median(psnr)), 2) if psnr else None,
+                       "psnr_mean": round(float(np.mean(psnr)), 2) if psnr else None, "views_compared": len(psnr),
+                       "unseen_share": round(info["unseen_triangles"] / len(f), 4), "coverage": round(float(np.median(cover)), 3)}  # fmt: skip
+                rows.append(row)
+                print(row, flush=True)
+    out = ROOT / "paper" / "figures" / ("clean_holdout.json" if clean else "texture_holdout.json")
     out.write_text(json.dumps(rows, indent=1))
 
 

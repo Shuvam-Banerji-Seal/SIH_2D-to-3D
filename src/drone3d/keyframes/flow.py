@@ -211,7 +211,7 @@ class RaftFlow:
                     self._eager(sa, sb)
             torch.cuda.current_stream(self.device).wait_stream(side)
             graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph, capture_error_mode="thread_local"):  # another slot may be running kernels
+            with torch.cuda.graph(graph, capture_error_mode="relaxed"):  # another slot may be running kernels and nvJPEG
                 out = self._eager(sa, sb)
             self._graphs[key] = (graph, sa, sb, out)
         return self._graphs[key]

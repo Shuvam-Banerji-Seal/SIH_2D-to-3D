@@ -438,7 +438,7 @@ def write_sidecar_jpegs(chunks: Iterator[tuple], out_dir: Path, *, quality: int 
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    from torchvision.io import encode_jpeg
+    from drone3d.gpu.nvjpeg import encode_jpeg
 
     out_dir.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -705,7 +705,7 @@ def extract_frames(
         return _ffmpeg_cmd(info, size, [select], hwaccel)
 
     try:
-        from torchvision.io import encode_jpeg
+        from drone3d.gpu.nvjpeg import encode_jpeg
     except ImportError:  # pragma: no cover - torchvision is a gpu-extra dependency
         encode_jpeg = None
     color = _color_args(info)

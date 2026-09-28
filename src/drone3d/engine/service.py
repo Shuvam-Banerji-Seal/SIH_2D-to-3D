@@ -500,7 +500,8 @@ def capabilities(repo: Path) -> dict[str, Any]:
         import cv2
         import numpy as np
         import torch
-        from torchvision.io import decode_jpeg
+
+        from drone3d.gpu.nvjpeg import decode_jpeg
 
         ok, buf = cv2.imencode(".jpg", np.zeros((64, 64, 3), np.uint8))
         decode_jpeg(torch.from_numpy(buf.ravel()), device="cuda")

@@ -110,9 +110,10 @@ def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec
                  views: int = 16, size: int = 4096, gain: bool = True):  # type: ignore[no-untyped-def]  # fmt: skip
     """Keyframe texture for the mesh (model frame) -> ``(corner_uv, albedo, info)`` or ``None``."""
     import torch
-    from torchvision.io import decode_jpeg, read_file
+    from torchvision.io import read_file
 
     from drone3d.export.texture_gpu import View, bake_soup_texture
+    from drone3d.gpu.nvjpeg import decode_jpeg
 
     if not len(f) or not torch.cuda.is_available():
         return None

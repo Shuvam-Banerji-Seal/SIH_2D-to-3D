@@ -1,0 +1,26 @@
+[
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "parallel": 1,
+  "models": 5,
+  "wall_s": 177.6,
+  "sum_model_s": 177.6,
+  "psnr_mean": 26.15
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "parallel": 2,
+  "models": 5,
+  "wall_s": 248.7,
+  "sum_model_s": 462.7,
+  "psnr_mean": 26.87
+ },
+ {
+  "run": "map_jal_mahal_jaipur_india_drone_cinematic",
+  "parallel": 3,
+  "models": 5,
+  "wall_s": 264.0,
+  "sum_model_s": 699.7,
+  "psnr_mean": 26.71
+ }
+]

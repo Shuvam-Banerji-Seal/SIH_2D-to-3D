@@ -180,7 +180,9 @@ class SplatConfig:
     init: str = "dense"  # dense | sparse: start from the dense TSDF cloud (when the dense stage ran) or the SfM points
     init_points: int = 400_000  # dense starting points per model (random subset)
     min_model_images: int = 8  # smaller SfM models are not trained
-    parallel: int = 1  # models trained at once (a trainer needs ~0.5 GB; see experiments/splat_parallel.py)
+    # models trained at once. Concurrent Vulkan trainers time-slice the GPU: Jal Mahal's 5 models took 178 s one at
+    # a time, 249 s two and 264 s three at once on an idle A100 (experiments/splat_parallel.py), so 1.
+    parallel: int = 1
     cache_images: str = "disk"  # disk | cpu: cpu is faster but holds every decoded image in RAM
     flags: dict[str, object] = field(default_factory=dict)  # extra spirula train flags (key: value)
 

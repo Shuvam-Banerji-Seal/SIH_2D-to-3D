@@ -1,0 +1,37 @@
+[
+ {
+  "size": [
+   480,
+   272
+  ],
+  "batch": 16,
+  "flows_per_s": 205.7,
+  "reserved_gb": 1.8
+ },
+ {
+  "size": [
+   480,
+   272
+  ],
+  "batch": 32,
+  "flows_per_s": 205.0,
+  "reserved_gb": 3.2
+ },
+ {
+  "size": [
+   480,
+   272
+  ],
+  "batch": 64,
+  "flows_per_s": 206.9,
+  "reserved_gb": 5.9
+ },
+ {
+  "size": [
+   480,
+   272
+  ],
+  "batch": 128,
+  "error": "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED (grid_sample)"
+ }
+]

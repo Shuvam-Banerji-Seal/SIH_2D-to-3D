@@ -136,6 +136,10 @@ class DenseConfig:
     # auto: 2 for models of up to 12 depth maps, else 3 -- 8-65 / 3-12 points of completeness for <= 0.1 % more
     # depth error; 2 on large models stacks layers in the far field (experiments/tsdf_weight.py).
     min_views: str = "auto"
+    # The monocular fill stops at this x a view's 99th-percentile triangulated depth (beyond: left empty). 1.5 on
+    # Colosseum's merged model: completeness 0.910 -> 0.900 and the mesh barely changed -- little fill lies past
+    # 1.5 x; the far field's radial streaks come from grazing views, not from the cut.
+    far_factor: float = 3.0
     min_model_images: int = 3  # SfM models with fewer registered keyframes are skipped
 
 

@@ -279,7 +279,7 @@ def run_train(
     depth_weight: float = 0.0,
     eval_interval: int = 8,
     flags: dict[str, object] | None = None,
-    stall_s: float = 300.0,
+    stall_s: float = 180.0,  # the trainer reports every few seconds; a hang sat at step 1
 ) -> TrainResult:
     """``spirula train`` headless; held-out views every ``eval_interval``-th image."""
     binary = spirula_binary()

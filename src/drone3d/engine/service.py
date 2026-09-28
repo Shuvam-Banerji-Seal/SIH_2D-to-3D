@@ -117,6 +117,7 @@ class Job:
     stages: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
     warm: list[str] = field(default_factory=list)  # models already loaded when it started
+    front: bool = False  # ahead of ordinary work (live segments, "run next")
     cancel: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def public(self) -> dict[str, Any]:
@@ -201,6 +202,7 @@ class Engine:
                     run_dir=r["run_dir"],
                     kind=r.get("kind", "run"),
                     live=r.get("live"),
+                    front=bool(r.get("front")),
                 )
             except Exception as exc:
                 log.warning("could not restore queued job %s: %s", r.get("name"), exc)
@@ -216,14 +218,17 @@ class Engine:
             if any(j.name == name for j in self.queue) or name in self.running:
                 raise ValueError(f"run {name!r} is already queued or running")
             job = Job(
-                name=name, run_dir=str(run), config=copy.deepcopy(config), kind=kind, live=live
+                name=name, run_dir=str(run), config=copy.deepcopy(config), kind=kind, live=live, front=front
             )
             run.mkdir(parents=True, exist_ok=True)
             import yaml
 
             (run / "ui_config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
             self._state(job)
-            (self.queue.appendleft if front else self.queue.append)(job)
+            if front:  # ahead of ordinary work, behind what is already ahead of it: live segments stay in order
+                self.queue.insert(next((i for i, q in enumerate(self.queue) if not q.front), len(self.queue)), job)
+            else:
+                self.queue.append(job)
         self._wake.set()
         return job
 

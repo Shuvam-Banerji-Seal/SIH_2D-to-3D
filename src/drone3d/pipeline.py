@@ -584,7 +584,12 @@ class Pipeline:
             with ThreadPoolExecutor(min(cfg.parallel, len(models)), thread_name_prefix="splat") as pool:
                 trained = list(pool.map(train, models))  # model order kept
         else:
-            trained = [train(m) for m in models]
+            trained = []
+            for m in models:  # a stop request is honoured between models, not only after the whole stage
+                if self.cancel is not None and self.cancel.is_set():
+                    log.info("splat: stopped after %d of %d models", len(trained), len(models))
+                    break
+                trained.append(train(m))
         payload = {"models": trained, "depth_supervised": have_depth and cfg.depth_weight > 0}
         _write_json(self._stage_dir("splat") / "result.json", payload)
         ok = [t for t in trained if t.get("status") != "failed"]

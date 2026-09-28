@@ -29,7 +29,9 @@ def load_frames(paths: list[Path], long_side: int, device: str = "cuda"):  # typ
     """nvJPEG-decode and area-resize keyframes -> (uint8 ``[N, h, w, 3]`` on ``device``, full (w, h))."""
     import torch
     import torch.nn.functional as F
-    from torchvision.io import decode_jpeg, read_file
+    from torchvision.io import read_file
+
+    from drone3d.gpu.nvjpeg import decode_jpeg
 
     out, full = [], None
     for p in paths:

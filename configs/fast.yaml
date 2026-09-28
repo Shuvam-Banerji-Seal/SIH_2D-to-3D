@@ -8,7 +8,8 @@
 # Keyframes by overlap as in the default profile, written at 1920 px; SfM from
 # RAFT flow tracks (no SIFT); dense depth from flow triangulation, completed by
 # Depth Anything V2 calibrated to it; GPU TSDF mesh and point cloud; exports in
-# OBJ, PLY, GLB, FBX, LAS and GeoTIFF; web viewer. No splat training.
+# OBJ, PLY, GLB, FBX, LAS and GeoTIFF; web viewer. No splat training unless the splat
+# stage is added (the console's module switch); then at the settings below.
 
 run_name: fast
 stages: [ingest, keyframes, sfm, dense, georef, export, metrics, report]
@@ -30,3 +31,12 @@ dense:
   long_side: 480
   mono_model: depth-anything/Depth-Anything-V2-Large-hf
   keyframe_stride: 2  # depth references: every 2nd keyframe on passes of 40+ keyframes
+# When the splat stage is switched on: medium quality, 7000 steps from the dense cloud (the benchmark's settings,
+# ~1 M splats a model, 1-2 min each on the A100). The library default (high, 30k steps) grew Mont Saint-Michel's
+# fog-bound models to 3 M splats and took 1 h 48 min on a shared GPU.
+splat:
+  models: all
+  quality: medium
+  iterations: 7000
+  depth_weight: 0
+  parallel: 1

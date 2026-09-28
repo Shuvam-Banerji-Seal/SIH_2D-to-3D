@@ -1,6 +1,6 @@
 """Render the promo animation and composite real pipeline output into its slots.
 
-    uv run python promo/compose.py [RUN_DIR]        # default outputs/jal_mahal
+    uv run python promo/compose.py [RUN_DIR]        # default outputs/merge_colosseum
 
 1. ``promo/build.py`` fills the page's FACTS; the javascript-animation skill's
    ``render.mjs`` renders it (with its synthesized score) to ``build/film_anim.mp4``.
@@ -35,6 +35,7 @@ SKILL = (
     / "scripts"
 )
 FF = ffmpeg_bin()
+SOURCE_START_S = 7.0  # into the source video: Colosseum's opening shot shows the whole amphitheatre
 
 
 def run(cmd: list[str], **kw) -> None:  # type: ignore[no-untyped-def]
@@ -118,7 +119,7 @@ def depth_strip(run_dir: Path, out: Path, w: int, h: int, dur: float) -> Path | 
 
 
 def main() -> None:
-    run_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "outputs" / "jal_mahal"
+    run_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "outputs" / "merge_colosseum"
     BUILD.mkdir(parents=True, exist_ok=True)
     run([sys.executable, ROOT / "promo" / "build.py", run_dir])
     page = BUILD / "film.html"
@@ -144,7 +145,7 @@ def main() -> None:
     for s in slots(page):
         dur, w, h, out = s["t1"] - s["t0"], s["w"], s["h"], BUILD / f"slot_{s['id']}.mp4"
         if s["id"] == "source":
-            sources[s["id"]] = fit_video(video, out, w, h, 18.0, dur, tuple(crop) if crop else None)
+            sources[s["id"]] = fit_video(video, out, w, h, SOURCE_START_S, dur, tuple(crop) if crop else None)
         elif s["id"] == "timeline":
             sources[s["id"]] = fit_image(
                 run_dir / "keyframes" / "keyframe_timeline.png", out, w, h, dur
@@ -155,6 +156,10 @@ def main() -> None:
             made = depth_strip(run_dir, out, w, h, dur)
             if made:
                 sources[s["id"]] = made
+        elif s["id"] == "merge" and (BUILD / "merge.mp4").is_file():  # promo/assets.py --merge-from
+            sources[s["id"]] = fit_video(BUILD / "merge.mp4", out, w, h, 0.0, dur)
+        elif s["id"] == "console" and (BUILD / "console.png").is_file():  # the run page's catalog + the generated GLB
+            sources[s["id"]] = fit_image(BUILD / "console.png", out, w, h, dur)
         elif s["id"] == "splat_inset" and (BUILD / "model_inset.mp4").is_file():
             sources[s["id"]] = fit_video(BUILD / "model_inset.mp4", out, w, h, 0.0, dur)
         elif s["id"] == "flythrough" and (BUILD / "flythrough.mp4").is_file():
@@ -182,7 +187,7 @@ def main() -> None:
     run([FF, "-hide_banner", "-loglevel", "error", "-y", *inputs, "-filter_complex", ";".join(chain) or "null",
          "-map", last if chain else "0:v", "-map", "0:a?", "-c:v", "libx264", "-preset", "slow", "-crf", "17",
          "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out])  # fmt: skip
-    info = subprocess.run([FF.replace("ffmpeg", "ffprobe"), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out],
+    info = subprocess.run([str(Path(FF).with_name("ffprobe")), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out],
                           capture_output=True, text=True).stdout.strip()  # fmt: skip
     print(f"wrote {out} ({float(info):.1f} s), slots filled: {sorted(sources)}")
 

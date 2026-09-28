@@ -1,6 +1,6 @@
 """Build the promo film page: fill FACTS from run JSON, inline the soundtrack engine.
 
-    uv run python promo/build.py [RUN_DIR]      # default outputs/jal_mahal
+    uv run python promo/build.py [RUN_DIR]      # default outputs/merge_colosseum
 
 Every number the film shows comes from a file listed in ``facts_sources`` in the
 output ``promo/build/facts.json``; a missing source leaves the film showing a
@@ -63,8 +63,11 @@ def facts(run: Path) -> tuple[dict, dict]:
     if splat and splat.get("models"):
         best = max(splat["models"], key=lambda m: m.get("num_splats") or 0)
         f["splats"] = f"{best['num_splats']:,}" if best.get("num_splats") else None
-        psnr = best.get("eval_metrics", {}).get("psnr")
-        f["psnr"] = round(psnr, 1) if psnr else None
+        ev = best.get("eval_metrics") or {}
+        psnr = ev.get("avg_psnr", ev.get("psnr"))
+        if isinstance(psnr, list):  # per held-out view
+            psnr = sum(psnr) / len(psnr) if psnr else None
+        f["psnr"] = round(psnr, 1) if isinstance(psnr, (int, float)) else None
         src["psnr"] = str(run / "splat/result.json") + " (held-out keyframes)"
     geo = load(ROOT / "paper" / "figures" / "georef_study.json")
     if geo:
@@ -81,12 +84,40 @@ def facts(run: Path) -> tuple[dict, dict]:
         tri = sum(m.get("mesh_triangles") or 0 for m in dense["models"] if m.get("status") == "ok")
         f["triangles"] = f"{tri / 1e6:.1f} million" if tri >= 1e6 else f"{tri:,}"
         src["triangles"] = str(run / "dense/result.json")
-    for name in ("dedicated_completeness.json", "fast_completeness.json"):
-        comp = (load(ROOT / "paper" / "figures" / name) or {}).get(run.name)
-        if comp and comp.get("view_completeness") is not None:
-            f["completeness"] = f"{100 * comp['view_completeness']:.0f} %"
-            src["completeness"] = f"paper/figures/{name} (non-sky pixels of the keyframes covered by the mesh)"
-            break
+    if sfm and dense:
+        sys.path.insert(0, str(ROOT / "src"))
+        from drone3d.metrics.quality import scene_view_completeness
+
+        comp = scene_view_completeness(sfm, dense)
+        if comp is not None:
+            f["completeness"] = f"{100 * comp:.0f} %"
+            src["completeness"] = str(run / "dense/result.json") + " (non-sky keyframe pixels the mesh covers, all models)"
+    merge = (sfm or {}).get("merge") or {}
+    if merge.get("status") == "ok":
+        f["merge_before"], f["merge_after"] = merge["models_before"], merge["models_after"]
+        largest = max(sfm["models"], key=lambda m: m.get("images") or 0)
+        f["merge_largest_shots"] = len(largest.get("passes") or {}) or None
+        src["merge_before"] = str(run / "sfm/result.json") + " (merge)"
+    anim = load(OUT / "merge.json")  # promo/assets.py: how the merge footage times its passes
+    if anim:
+        f["merge_anim"] = {k: anim[k] for k in ("shown", "first_s", "stagger_s")}
+        src["merge_anim"] = "promo/build/merge.json"
+    export = load(run / "export" / "result.json")
+    if export and export.get("models"):
+        tv = [(m.get("texture") or {}).get("views") for m in export["models"]]
+        f["texture_views"] = max((v for v in tv if v), default=None)
+        src["texture_views"] = str(run / "export/result.json")
+    ing = load(run / "ingest" / "result.json")
+    if ing:
+        sys.path.insert(0, str(ROOT / "experiments"))
+        from names import video_name
+
+        f["site"] = video_name(Path(ing["video"]["path"]).name)
+    bench = load(ROOT / "paper" / "figures" / "all_maps.json")
+    rows = bench.get("rows") if isinstance(bench, dict) else bench
+    if rows:
+        f["budget_share"] = f"{sum(bool(r.get('fast_within_budget')) for r in rows)} of {len(rows)}"
+        src["budget_share"] = "paper/figures/all_maps.json (the all-videos benchmark, mesh + cloud vs 1.5 x video length)"
     metrics = load(run / "metrics" / "metrics.json") or {}
     proc = metrics.get("processing") or {}
     if proc.get("seconds") and proc.get("video_seconds"):
@@ -109,7 +140,7 @@ def facts(run: Path) -> tuple[dict, dict]:
 
 
 def main() -> None:
-    run = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "outputs" / "jal_mahal"
+    run = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "outputs" / "merge_colosseum"
     OUT.mkdir(parents=True, exist_ok=True)
     f, src = facts(run)
     page = (ROOT / "promo" / "film.template.html").read_text()

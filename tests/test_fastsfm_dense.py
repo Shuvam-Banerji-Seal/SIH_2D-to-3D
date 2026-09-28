@@ -94,3 +94,16 @@ def test_tie_depths_rasterises_tie_points_at_their_camera_depth() -> None:
     (d,) = tie_depths(NS(points3D=pts), [im], 0.5, (40, 20))
     assert d.shape == (20, 40) and (d > 0).sum() == 2
     assert d[5, 10] == 5.0 and d[15, 30] == 10.0  # x, y halved; depth = z + t_z
+
+
+def test_specks_are_removed_but_the_surface_stays() -> None:
+    import open3d as o3d
+
+    from drone3d.fastsfm.dense_stage import _drop_specks
+
+    ground = o3d.geometry.TriangleMesh.create_box(10, 10, 0.1).subdivide_midpoint(4)  # the surface
+    speck = o3d.geometry.TriangleMesh.create_tetrahedron(0.05).translate((5, 5, 2))  # a floater
+    mesh = ground + speck
+    before = len(mesh.triangles)
+    out = _drop_specks(mesh, share=0.001, least=10)
+    assert out == {"components": 1, "triangles": 4} and len(mesh.triangles) == before - 4

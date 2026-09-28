@@ -28,6 +28,9 @@ ROOT = Path(__file__).resolve().parents[2]
 PYTHON = ROOT / "third_party" / "TRELLIS.2" / ".venv" / "bin" / "python"
 SCRIPT = ROOT / "tools" / "trellis2_generate.py"
 NOTE = "generated from one keyframe by TRELLIS.2, not measured: the sides the flight never saw are invented"
+# the generated object joins the model only if this share of the measured subject lies on it: a highrise orbit 0.89,
+# Jal Mahal 0.82; the Colosseum, a ring with an empty centre, was cut to one wall and fit 0.53 -- a wall in the arena
+MIN_COVER = 0.7
 LICENSES = {"microsoft/TRELLIS.2-4B": "MIT", "briaai/RMBG-2.0": "bria-rmbg-2.0 (non-commercial)",
             "facebook/dinov3-vitl16-pretrain-lvd1689m": "dinov3-license"}  # fmt: skip
 
@@ -179,22 +182,32 @@ def generate_object(run_dir: Path, *, image: Path | None = None, resolution: str
                   glb="object.glb" if ok else None, input="object.input.png" if (out / "object.input.png").is_file() else None,
                   log=tail)  # fmt: skip
     if ok:  # placed where the subject stands, so the explorer can fill the model's unseen sides with it
+        k = int(info.get("model") or 0)
         try:
-            record["aligned"] = align_to_model(run_dir, model=int(info.get("model") or 0))
-            _link_scene(run_dir, int(info.get("model") or 0))
+            record["aligned"] = align_to_model(run_dir, model=k)
+            placed = record["aligned"]["measured_covered"] >= MIN_COVER
+            record["aligned"]["placed"] = placed
+            _link_scene(run_dir, k, placed)
         except (ValueError, FileNotFoundError, KeyError) as exc:  # no subject, too little surface: unplaced
-            record["aligned"] = {"status": "skipped", "reason": str(exc)[:200]}
+            record["aligned"] = {"status": "skipped", "reason": str(exc)[:200], "placed": False}
+            _link_scene(run_dir, k, False)
     (out / "result.json").write_text(json.dumps(record, indent=1))
     if not ok:
         log.warning("generate %s failed: %s", run_dir.name, " | ".join(tail[-3:]))
     return record
 
 
-def _link_scene(run_dir: Path, model: int) -> None:
-    """Point the explorer's scene at the placed object (export/scene.json, model ``model``: ``generated``)."""
+def _link_scene(run_dir: Path, model: int, placed: bool = True) -> None:
+    """Point the explorer's scene at the placed object (export/scene.json, model ``model``: ``generated``), or
+    unlink it when it did not fit the measurement."""
     path = run_dir / "export" / "scene.json"
+    if not path.is_file():  # no viewer export: nothing to point at
+        return
     scene = json.loads(path.read_text())
-    scene["models"][model]["generated"] = {"mesh": "generated/object_aligned.glb", "note": NOTE}
+    if placed:
+        scene["models"][model]["generated"] = {"mesh": "generated/object_aligned.glb", "note": NOTE}
+    else:
+        scene["models"][model].pop("generated", None)
     path.write_text(json.dumps(scene, indent=1))
 
 

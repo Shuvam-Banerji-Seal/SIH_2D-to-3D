@@ -57,6 +57,9 @@ class MonoDepth:
         return out
 
 
+WALL_RATIO = 0.03  # triangulated vs prior log-depth spread below which a view's geometry is rejected (see below)
+
+
 def calibrate_fill(disparity: np.ndarray, tri_depth: np.ndarray, *, far_factor: float = 3.0,
                    min_samples: int = 400, sky_rel: float = 0.005) -> tuple[np.ndarray, dict]:  # fmt: skip
     """Fill ``tri_depth``'s empty pixels (0) from ``disparity`` calibrated on its filled ones.
@@ -78,6 +81,16 @@ def calibrate_fill(disparity: np.ndarray, tri_depth: np.ndarray, *, far_factor: 
     if have.sum() < min_samples:
         return tri_depth, {**info, "status": "too-few-samples"}
     p_at, z = p[have].astype(np.float64), tri_depth[have].astype(np.float64)
+    # A view whose triangulated depth is a wall where the prior sees depth has wrong geometry, not a flat
+    # scene: a collapsed SfM model (Qutub Minar's hovering keyframes) put every pixel within 1-2 % of one
+    # depth, and filling it built walls that crashed Open3D's extraction. Healthy views spread their
+    # log-depth at least 0.44 x as much as the prior's (Jal Mahal, Kinbane, Cristo Redentor, Hagia Sophia);
+    # that model, 0.01 x. Nadir views of flat ground are safe: there the prior is flat too.
+    p_spread = float(np.quantile(p_at, 0.95) - np.quantile(p_at, 0.05))
+    z_spread = float(np.quantile(np.log(z), 0.95) - np.quantile(np.log(z), 0.05))
+    if p_spread > 0.3 and z_spread < WALL_RATIO * p_spread:
+        return np.zeros_like(tri_depth), {**info, "status": "depth-contradicts-prior",
+                                          "spread_ratio": round(z_spread / p_spread, 4)}  # fmt: skip
     fit = fit_log_affine(p_at, z)
     if fit is None or fit.a <= 0:
         return tri_depth, {**info, "status": "prior-not-monotone"}

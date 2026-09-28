@@ -30,3 +30,16 @@ def test_too_few_samples_leaves_the_map_alone() -> None:
     depth, info = calibrate_fill(disparity, tri, min_samples=50)
     assert info["status"] == "too-few-samples"
     np.testing.assert_array_equal(depth, tri)
+
+
+def test_a_wall_where_the_prior_sees_depth_is_rejected_but_flat_ground_is_not() -> None:
+    h, w = 60, 80
+    z_true = np.tile(np.linspace(10.0, 40.0, h)[:, None], (1, w))
+    disparity = 100.0 / z_true  # the prior sees a 4x range of depth
+    wall = np.where(np.arange(w)[None, :] % 3 == 0, 20.0 + 0.1 * np.random.default_rng(0).random((h, w)), 0.0).astype(np.float32)
+    depth, info = calibrate_fill(disparity, wall, min_samples=50)  # triangulation: one depth everywhere (collapsed poses)
+    assert info["status"] == "depth-contradicts-prior" and not depth.any()
+    flat = np.full((h, w), 30.0) * (1 + 0.004 * np.random.default_rng(1).random((h, w)))  # nadir over flat ground
+    tri = np.where(np.arange(w)[None, :] % 3 == 0, flat, 0.0).astype(np.float32)
+    depth, info = calibrate_fill(100.0 / flat, tri, min_samples=50)  # the prior is flat too
+    assert info["status"] != "depth-contradicts-prior" and (depth > 0).mean() > 0.9

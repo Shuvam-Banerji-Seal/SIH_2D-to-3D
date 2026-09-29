@@ -97,7 +97,8 @@ def load_parts(path: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray | No
 def render_parts(parts, fpx: float, R: np.ndarray, c: np.ndarray, size: tuple[int, int], *,  # type: ignore[no-untyped-def]
                  background: tuple[int, int, int] = (11, 29, 51)) -> tuple[np.ndarray, np.ndarray]:
     """Ray-cast ``load_parts`` parts together from a pinhole camera (``fpx``, principal point at the centre,
-    cam_from_world ``R``, centre ``c``), unlit: the nearest hit wins -> (RGB [h, w, 3], hit mask [h, w])."""
+    cam_from_world ``R``, centre ``c``), unlit: the nearest hit wins -> (RGB [h, w, 3], the part each pixel
+    shows [h, w]: its index in ``parts``, -1 where none; ``>= 0`` is the hit mask)."""
     import open3d as o3d
     import open3d.core as o3c
 
@@ -127,7 +128,10 @@ def render_parts(parts, fpx: float, R: np.ndarray, c: np.ndarray, size: tuple[in
         tx = np.clip(tuv[:, 0] * sw - 0.5, 0, sw - 1).astype(np.int64)
         ty = np.clip((1.0 - tuv[:, 1]) * sh - 0.5, 0, sh - 1).astype(np.int64)
         out[sel] = albedo[ty, tx]
-    return out.reshape(h, w, 3), ok.reshape(h, w)
+    part = np.full(h * w, -1, np.int64)
+    for k, gid in enumerate(ids):
+        part[ok & (geo == gid)] = k
+    return out.reshape(h, w, 3), part.reshape(h, w)
 
 
 def _encode(frames_dir: Path, fps: int, out: Path) -> None:

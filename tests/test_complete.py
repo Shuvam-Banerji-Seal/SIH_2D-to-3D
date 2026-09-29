@@ -66,6 +66,11 @@ def test_solidify_closes_an_open_top_into_a_solid() -> None:
     assert m.is_watertight and info["watertight"]
     assert info["fill"] == "enclosed on two axes"
     assert m.volume == pytest.approx(12.0, rel=0.1)  # a solid, not a shell
+    from drone3d.complete import _closed_as_stored
+
+    assert _closed_as_stored(sv, sf)  # closed as a file stores it, positions merged in float32
+    flat, _ = snap_planes(sv, sf, tol=0.03, corners=False)
+    assert _closed_as_stored(flat, sf)  # snapped along the normals only, it stays closed
 
 
 def test_solidify_keeps_a_courtyard_open_when_the_walls_are_closed() -> None:

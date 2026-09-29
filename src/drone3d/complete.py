@@ -11,6 +11,8 @@ module makes that object the model:
   baker's exposure gains and lens model, the two best views blended. So the walls the flight filmed carry
   the photographs; texels no keyframe sees keep the generated colour, moved to the photographs' statistics
   (where both exist) and blended into them by viewing angle;
+- **no platform** -- a slab the generator stood the object on goes, outside what stands on it (Jal Mahal's
+  lake);
 - **planes** -- the object's large planes (facades, roofs) are made flat: the generator's window recesses are
   not the real facade's, and photographs projected onto them smear;
 - **carving** -- faces the keyframes saw through (nearer than the measured surface behind them) go: what the
@@ -38,7 +40,7 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["carve", "complete_model", "link_scene", "retexture", "snap_planes", "solidify", "splats_360", "transfer_texture"]
+__all__ = ["carve", "complete_model", "drop_base_slab", "link_scene", "retexture", "snap_planes", "solidify", "splats_360", "transfer_texture"]
 
 log = get_logger(__name__)
 
@@ -142,6 +144,46 @@ def _sky_masks(views, width: int = 640, model: str = "depth-anything/Depth-Anyth
     return out
 
 
+def drop_base_slab(v: np.ndarray, f: np.ndarray, *, band: float = 0.02, min_share: float = 0.15) -> np.ndarray:
+    """Faces of the platform a generator stood its object on -> keep mask.
+
+    TRELLIS.2 gave Jal Mahal its lake: a horizontal slab at a third of the palace's height, 52 % of the
+    object's area, the reflection painted on it. The platform is the ``band``-thick height band in the object's
+    lower half with the most horizontal area, when that is ``min_share`` of the area or more; its faces
+    outside the footprint of what stands on it go, and everything below it (under ground or water). The
+    highrise's largest horizontal areas are its roofs (6 % each, at the top): nothing goes.
+    """
+    from scipy import ndimage
+
+    z0, height = float(v[:, 2].min()), float(np.ptp(v[:, 2]))
+    tri = v[f]
+    cen = tri.mean(1)
+    cr = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    area = 0.5 * np.linalg.norm(cr, axis=1)
+    flat = np.abs(cr[:, 2]) / np.maximum(2 * area, 1e-12) > 0.9
+    rel = (cen[:, 2] - z0) / max(height, 1e-12)
+    bins = np.floor(rel / band).astype(int)
+    lower = flat & (rel < 0.5)
+    if not lower.any():
+        return np.ones(len(f), bool)
+    per = np.bincount(bins[lower], weights=area[lower])
+    k = int(per.argmax())
+    if per[k] < min_share * area.sum():
+        return np.ones(len(f), bool)
+    zp = z0 + (k + 0.5) * band * height
+    cell = float(np.ptp(v[:, :2], 0).max()) / 200
+    lo = v[:, :2].min(0) - 4 * cell
+    shape = tuple((np.ptp(v[:, :2], 0) / cell).astype(int)[::-1] + 9)
+    ij = np.floor((tri[cen[:, 2] > zp + 2.5 * band * height].reshape(-1, 3)[:, :2] - lo) / cell).astype(int)
+    foot = np.zeros(shape, bool)
+    foot[ij[:, 1], ij[:, 0]] = True
+    foot = ndimage.binary_dilation(ndimage.binary_fill_holes(ndimage.binary_closing(foot, iterations=2)), iterations=3)
+    cj = np.floor((cen[:, :2] - lo) / cell).astype(int)
+    out = ~foot[cj[:, 1], cj[:, 0]]
+    below = cen[:, 2] < zp - band * height  # under the platform (the ground, the water) is not the object
+    return ~((out & (cen[:, 2] < zp + 2.5 * band * height)) | below)  # a thick slab: its upper face too
+
+
 def snap_planes(v: np.ndarray, f: np.ndarray, *, tol: float = 0.025, min_share: float = 0.04, max_planes: int = 16,
                 seed: int = 0) -> tuple[np.ndarray, list[dict]]:  # fmt: skip
     """The object's large planes made flat -> ``(vertices, planes)``.
@@ -229,7 +271,7 @@ def snap_planes(v: np.ndarray, f: np.ndarray, *, tol: float = 0.025, min_share: 
 
 def carve(v: np.ndarray, f: np.ndarray, views, measured: tuple[np.ndarray, np.ndarray], *,  # type: ignore[no-untyped-def]
           sky: list[np.ndarray] | None = None, margin: float = 0.03, min_views: int = 2, window: int = 7,
-          device: str = "cuda") -> np.ndarray:  # fmt: skip
+          sky_margin: int = 5, device: str = "cuda") -> np.ndarray:  # fmt: skip
     """Faces of a generated object that the keyframes saw through -> keep mask.
 
     A face whose centroid lies nearer a keyframe than the measured surface the keyframe saw at that pixel, by
@@ -237,7 +279,8 @@ def carve(v: np.ndarray, f: np.ndarray, views, measured: tuple[np.ndarray, np.nd
     invented it (TRELLIS.2 put a canopy in front of the highrise's facade). The measured depth is min-filtered
     over ``window`` pixels at 640 px, so the object's own silhouette -- 1 % off the measured one -- is not eaten.
     ``sky`` (per keyframe, at the depth maps' size): the sky is seen through as well -- the generated crown stood
-    above the real roof line. What no keyframe looked at is never carved.
+    above the real roof line -- ``sky_margin`` pixels in from its edge: Jal Mahal's generated domes, a few
+    pixels off the real ones, were carved at the edge. What no keyframe looked at is never carved.
     """
     import torch
     import torch.nn.functional as F
@@ -257,7 +300,9 @@ def carve(v: np.ndarray, f: np.ndarray, views, measured: tuple[np.ndarray, np.nd
         near = dm[((y + 0.5) * s).long().clamp(0, dm.shape[0] - 1), ((u + 0.5) * s).long().clamp(0, dm.shape[1] - 1)]
         free = torch.isfinite(near) & (z < near * (1 - margin))
         if sky is not None:
-            sk = torch.as_tensor(sky[k], device=device)
+            from scipy import ndimage
+
+            sk = torch.as_tensor(ndimage.binary_erosion(sky[k], iterations=sky_margin), device=device)
             free |= sk[((y + 0.5) * s).long().clamp(0, sk.shape[0] - 1), ((u + 0.5) * s).long().clamp(0, sk.shape[1] - 1)]
         votes += (inside & free).int()
     return (votes < min_views).cpu().numpy()
@@ -623,8 +668,10 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     import open3d.core as o3c
     import trimesh
 
-    # 1. flat facades, then carve what the keyframes saw through
+    # 1. no ground disc, flat facades, then carve what the keyframes saw through
     t0 = time.perf_counter()
+    slab_keep = drop_base_slab(gv, gf)
+    gf = gf[slab_keep]
     gv, planes = snap_planes(gv, gf)
     walls = [pl for pl in planes if abs(pl["normal"][2]) < 0.3]
     yaw = float(np.arctan2(walls[0]["normal"][1], walls[0]["normal"][0])) if walls else 0.0
@@ -732,7 +779,8 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     result = {
         "status": "ok", "model": model, "frame": frame.get("frame"), "units": frame.get("units"),
         "pivot_export_frame": fp_centre.round(5).tolist(), "height": round(height, 4),
-        "generated_triangles": int(len(gf)), "planes_snapped": planes, "carved_triangles": carved,
+        "generated_triangles": int(len(gf)), "base_slab_triangles": int((~slab_keep).sum()), "planes_snapped": planes,
+        "carved_triangles": carved,
         "subject_triangles": int(len(solid_f)), "solid": solid_info, "watertight": bool(solid.is_watertight),
         "scene_triangles": int(len(keep_f)), "shell_triangles_replaced": int(shell.sum()),
         "ground_fill_triangles": int(len(gff)),
@@ -768,6 +816,14 @@ def _sky_gradient(images: list[np.ndarray], skies: list[np.ndarray], bands: int 
         near = have[np.abs(have - b).argmin()]
         out[b] = acc[near] / cnt[near]
     return out
+
+
+def _part_names(path: Path) -> list[str]:
+    """The node names of a GLB's meshes, in ``render_mesh.load_parts`` order."""
+    import trimesh
+
+    scene = trimesh.load(str(path), process=False)
+    return list(scene.graph.nodes_geometry) if isinstance(scene, trimesh.Scene) else ["mesh"]
 
 
 def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg: float = 20.0,
@@ -875,8 +931,11 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
     column = np.stack([np.interp(np.arange(h) + 0.5, centres, grad[:, ch]) for ch in range(3)], 1)
     bg = np.broadcast_to(column[:, None, :], (h, w, 3)).round().astype(np.uint8)
     names = []
+    names_in_glb = _part_names(out / "scene.glb")
+    subject_part = names_in_glb.index("subject") if "subject" in names_in_glb else -2
     for k, (az, de, c, R) in enumerate(views):
-        img, hit = render_parts(parts, fpx, R, c, (w, h))
+        img, part = render_parts(parts, fpx, R, c, (w, h))
+        hit = part >= 0
         img = np.where(hit[..., None], img, bg)
         nm = f"virtual/v{k:03d}_az{int(az):03d}_e{int(de):02d}.jpg"
         Image.fromarray(img).save(data / "images" / nm, quality=92)
@@ -885,6 +944,8 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
         ys = np.arange(h)[:, None] + 0.5
         up = (R.T @ np.stack([np.zeros_like(ys[:, 0]), (ys[:, 0] - h / 2) / fpx, np.ones(h)]))[2] > 0  # per row
         keep = hit | up[:, None]
+        if (np.abs((flown - az + 180) % 360 - 180)).min() < gap_deg:  # above the flight: the photographs have the
+            keep = (part == subject_part) | (up[:, None] & ~hit)  # surroundings; the subject is what hazed there
         Image.fromarray((keep * 255).astype(np.uint8)).save(data / "masks" / Path(nm).with_suffix(".png"))
         names.append(nm)
     t_render = time.perf_counter() - t0

@@ -119,3 +119,19 @@ def test_ground_is_filled_where_nothing_covers_it() -> None:
     c = gv[gf].mean(1)
     assert (np.hypot(c[:, 0] - 3, c[:, 1]) < 3.5).mean() > 0.5  # the fill is where the hole was
     assert np.abs(gv[:, 2]).max() < 0.05 and (gc == 120).all()
+
+
+def test_the_platform_a_generator_stood_the_object_on_goes() -> None:
+    from drone3d.complete import drop_base_slab
+
+    house_v, house_f = _box([4, 4, 0], [8, 8, 6], n=12)  # the object, standing from 0 to 6
+    slab_v, slab_f = _box([0, 0, 1.8], [12, 12, 2.0], n=24)  # a lake slab at a third of its height
+    v = np.concatenate([house_v, slab_v])
+    f = np.concatenate([house_f, slab_f + len(house_v)])
+    keep = drop_base_slab(v, f)
+    cen = v[f].mean(1)
+    assert not keep[len(house_f) :][~((abs(cen[len(house_f) :, 0] - 6) < 2.2) & (abs(cen[len(house_f) :, 1] - 6) < 2.2))].any()
+    assert not keep[: len(house_f)][cen[: len(house_f), 2] < 1.7].any()  # under the water line: not the object
+    assert keep[: len(house_f)][cen[: len(house_f), 2] > 2.2].all()  # what stands on it stays
+    alone = drop_base_slab(house_v, house_f)
+    assert alone.all()  # no platform, nothing goes (the roof is horizontal, but at the top)

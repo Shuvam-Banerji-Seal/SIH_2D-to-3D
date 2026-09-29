@@ -241,8 +241,11 @@ round the subject, flown or not.
 [Fire3D](https://github.com/xiahongchi/Fire3D) (MIT) completes every object of a posed RGB-D video
 from all its frames at once; `tools/fire3d_export.py` writes a run's model in its input format
 (keyframes, depth ray-cast from the fused mesh, levelled poses at room scale) and
-`tools/fire3d_outdoor_protocol.json` is its ScanNet++ protocol without the indoor wall fitting. Its
-weights are 62 GB; it has not been run here yet.
+`tools/fire3d_outdoor_protocol.json` is its ScanNet++ protocol without the indoor wall fitting. Run on
+the highrise (its environment built with xformers for the sparse attention and SDPA where attention is
+masked; 62 GB of weights; 10.6 min), its perception found 17 objects and generated each as an indoor
+piece -- the tower a hollow frame among furniture-like blocks: trained on room scans, it does not carry
+over to drone footage, and the complete model above does not use it.
 
 ## The accurate profile (3D Gaussian Splatting)
 

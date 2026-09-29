@@ -78,6 +78,34 @@ def facts() -> tuple[dict, dict]:
         f["bench_rows"] = [{"name": video_name(Path(r["video"]).name)[:26], "fast": round(r["fast_s"], 1), "budget": round(r["budget_s"], 1)}
                            for r in sorted(bench, key=lambda r: r["budget_s"])]  # fmt: skip
         src["bench_within"] = "paper/figures/all_maps.json (all 15 sample videos; mesh + point cloud vs 1.5 x the video length)"
+    sel = load(HR / "keyframes" / "selection.json")
+    ing_fps = ((ing or {}).get("video") or {}).get("fps") or 30.0
+    if sel:  # the keyframe stage's own series: flow consistency per analysis step, the keyframes and their overlap
+        ts = [i / ing_fps for i in sel["analysis_frame_indices"]]
+        f["kf_series"] = {"t": [round((a + b_) / 2, 2) for a, b_ in zip(ts, ts[1:], strict=False)],
+                          "c": [round(x, 3) for x in sel["consistency"]],
+                          "kf": [[round(k["timestamp_s"], 2), None if k["overlap_prev"] is None else round(k["overlap_prev"], 3)]
+                                 for k in sel["keyframes"]], "dur": round(ts[-1], 2)}  # fmt: skip
+        src["kf_series"] = str(HR / "keyframes/selection.json")
+    try:  # the reconstruction itself: camera centres and axes, and the dense cloud, round the subject
+        import numpy as np
+        import open3d as o3d
+
+        sys.path.insert(0, str(ROOT / "promo"))
+        from explainer_assets import _poses, _subject
+
+        c, rot, _, _, _ = _poses(HR)
+        target, radius = _subject(HR)
+        pc = o3d.io.read_point_cloud(str(HR / "export" / "model_0" / "points.ply"))
+        pts, col = np.asarray(pc.points), np.asarray(pc.colors)
+        near = np.linalg.norm(pts[:, :2] - target[:2], axis=1) < 1.6 * radius
+        pick = np.random.default_rng(0).choice(np.flatnonzero(near), min(10000, int(near.sum())), replace=False)
+        rel = lambda x: np.round((x - target) / radius, 3).tolist()  # noqa: E731
+        f["hr_sfm"] = {"cams": rel(c), "axes": np.round(rot[:, 2], 3).tolist(), "pts": rel(pts[pick]),
+                       "col": (255 * col[pick]).round().astype(int).tolist()}  # fmt: skip
+        src["hr_sfm"] = str(HR / "sfm/result.json") + " + export/model_0/points.ply (10000 points round the subject)"
+    except Exception as exc:  # noqa: BLE001 -- the film draws its own if the run is missing
+        print("no reconstruction for the poses shot:", exc)
     gpu = load(ROOT / "paper" / "figures" / "bench_gpu.json")
     fps = ((gpu or {}).get("decode", {}).get("ffmpeg9_nvdec") or {}).get("source_fps")
     if fps:
@@ -115,11 +143,11 @@ def fit(src: Path, out: Path, w: int, h: int, dur: float, *, start: float = 0.0,
 
 SOURCES = {  # slot id -> (file, start s, image?)
     "source": (ROOT / "uploads" / "highrise_orbit.webm", 3.0, False),
-    "timeline": (HR / "keyframes" / "keyframe_timeline.png", 0.0, True),
     "merge": (ROOT / "promo" / "build" / "merge.mp4", 0.0, False),
     "depth": (ROOT / "promo" / "build" / "depth_tiles.mp4", 0.0, False),
     "clean": (BUILD / "clean_wipe.mp4", 0.0, False),
     "texture": (BUILD / "fly_colosseum.mp4", 0.0, False),
+    "photo_model": (BUILD / "photo_vs_model.mp4", 0.0, False),
     "complete": (BUILD / "turn_complete.mp4", 0.0, False),
     "splats": (BUILD / "turn_splats.mp4", 0.0, False),
     "console": (BUILD / "console_complete.png", 0.0, True),
@@ -138,7 +166,7 @@ def main() -> None:
     html = BUILD / "explainer.html"
     html.write_text(page)
     (BUILD / "facts.json").write_text(json.dumps({"facts": f, "facts_sources": src}, indent=1))
-    print(json.dumps({k: v for k, v in f.items() if k != "bench_rows"}, indent=1))
+    print(json.dumps({k: v for k, v in f.items() if k not in ("bench_rows", "kf_series", "hr_sfm")}, indent=1))
     if "--no-render" in sys.argv:
         return
     anim = BUILD / "explainer_anim.mp4"

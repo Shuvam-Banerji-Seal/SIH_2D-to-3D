@@ -7,7 +7,8 @@
   what it shows was captured -- full terrain, no open backs;
 * ``turn_complete.mp4`` -- the highrise's complete model (drone3d.complete) circled 360 degrees;
 * ``turn_splats.mp4`` -- its 360-degree Gaussian splats circled the same way;
-* ``clean_wipe.mp4`` -- the fused mesh against the clean model, shaded, a wipe across the frame.
+* ``clean_wipe.mp4`` -- the fused mesh against the clean model, shaded, a wipe across the frame;
+* ``photo_vs_model.mp4`` -- keyframes wiped from the photograph into the model rendered from the same camera.
 
 Rendering is ray casting (Open3D, the CPU) for meshes and gsplat for splats; the background is the film's
 charcoal, graded, so the clips sit in its screens.
@@ -253,8 +254,75 @@ def clean_wipe(run: Path, out: Path, *, model: int = 0, seconds: float = 7.0, si
     return _encode(frames, out)
 
 
+def photo_vs_model(run: Path, out: Path, *, model: int = 0, picks: tuple[float, ...] = (0.05, 0.18, 0.3),
+                   seconds_each: float = 3.0, size=(1920, 1080)) -> Path:  # fmt: skip
+    """Keyframes (at ``picks`` of the flight) wiped from the photograph (left) into the textured clean model
+    rendered from the same camera, its lens included (right): what the model is, against what was filmed."""
+    import pycolmap
+    import torch
+    from PIL import Image
+
+    from drone3d.export.render_mesh import load_parts
+    from drone3d.fastsfm.dense import _undistort
+
+    model_dir, s, r, t = _frame(run, model)
+    rec = pycolmap.Reconstruction(str(model_dir))
+    ims = sorted((im for im in rec.images.values() if im.has_pose), key=lambda im: im.name)
+    parts = load_parts(run / "export" / f"model_{model_dir.name}" / "mesh_textured.glb")
+    w, h = size
+    frames = []
+    for u in picks:
+        im = ims[int(u * (len(ims) - 1))]
+        cam = rec.cameras[im.camera_id]
+        sc = w / cam.width
+        fx, cx, cy = cam.params[0] * sc, cam.params[1] * sc, cam.params[2] * sc
+        k1 = float(cam.params[3]) if cam.model.name in ("SIMPLE_RADIAL", "RADIAL") else 0.0
+        pose = im.cam_from_world()
+        R = np.asarray(pose.rotation.matrix()) @ r.T  # export frame
+        C = s * r @ im.projection_center() + t
+        # rays through the lens (the photograph's distortion), as the texture holdout renders them
+        ys, xs = np.mgrid[0:h, 0:w].astype(np.float64)
+        xn, yn = _undistort(torch.as_tensor((xs + 0.5 - cx) / fx), torch.as_tensor((ys + 0.5 - cy) / fx), k1)
+        render = _render_rays(parts, np.stack([xn.numpy(), yn.numpy(), np.ones_like(xs)], -1).reshape(-1, 3) @ R, C, (w, h))
+        photo = np.asarray(Image.open(run / "dataset" / "images" / im.name).convert("RGB").resize((w, h), Image.LANCZOS))
+        n = int(seconds_each * 30)
+        for i in range(n):
+            x = int(w * (0.12 + 0.76 * np.clip((i / n - 0.1) / 0.7, 0, 1)))  # the wipe crosses in 70 % of the beat
+            fr = render.copy()
+            fr[:, :x] = photo[:, :x]
+            fr[:, max(0, x - 2) : x + 2] = (245, 183, 0)
+            frames.append(fr)
+    return _encode(frames, out)
+
+
+def _render_rays(parts, dirs: np.ndarray, eye: np.ndarray, size: tuple[int, int]) -> np.ndarray:  # type: ignore[no-untyped-def]
+    """render_parts for arbitrary ray directions (a lens with distortion), on the film's background."""
+    import open3d as o3d
+    import open3d.core as o3c
+
+    w, h = size
+    scene = o3d.t.geometry.RaycastingScene()
+    ids = [scene.add_triangles(o3c.Tensor(v.astype(np.float32)), o3c.Tensor(f.astype(np.uint32))) for v, f, _, _ in parts]
+    d = dirs.astype(np.float32)
+    hit = scene.cast_rays(o3c.Tensor(np.concatenate([np.broadcast_to(eye, d.shape).astype(np.float32), d], 1)))
+    geo, prim, bary = hit["geometry_ids"].numpy(), hit["primitive_ids"].numpy().astype(np.int64), hit["primitive_uvs"].numpy()
+    ok = np.isfinite(hit["t_hit"].numpy())
+    out = _background(h, w).reshape(-1, 3)
+    for gid, (_, _f, uv, albedo) in zip(ids, parts, strict=True):
+        sel = ok & (geo == gid)
+        if not sel.any() or uv is None or albedo is None:
+            continue
+        p, b = prim[sel], bary[sel]
+        tuv = (1 - b[:, :1] - b[:, 1:]) * uv[p, 0] + b[:, :1] * uv[p, 1] + b[:, 1:] * uv[p, 2]
+        sh, sw = albedo.shape[:2]
+        tx = np.clip(tuv[:, 0] * sw - 0.5, 0, sw - 1).astype(np.int64)
+        ty = np.clip((1.0 - tuv[:, 1]) * sh - 0.5, 0, sh - 1).astype(np.int64)
+        out[sel] = albedo[ty, tx]
+    return out.reshape(h, w, 3)
+
+
 CLIPS = {  # segments picked from stills along each flight (promo/build/explainer/README: what each shows)
-    "fly_colosseum": lambda: fly(OUT / "merge_colosseum", BUILD / "fly_colosseum.mp4", seconds=8.0, back=0.2, start=0.0, span=0.45),
+    "fly_colosseum": lambda: fly(OUT / "merge_colosseum", BUILD / "fly_colosseum.mp4", seconds=8.0, back=0.2, start=0.0, span=0.3),
     "fly_notre_dame": lambda: fly(OUT / "map_notre_dame_drone_paris_4k", BUILD / "fly_notre_dame.mp4", seconds=7.0, back=0.15,
                                   start=0.0, span=0.55),
     "fly_reichstag": lambda: fly(OUT / "map_reichstag_berlin_in_4k_stunning_drone_vi", BUILD / "fly_reichstag.mp4", seconds=6.0,
@@ -268,6 +336,7 @@ CLIPS = {  # segments picked from stills along each flight (promo/build/explaine
                                            target_z=target_z(OUT / "new_highrise_orbit",
                                                              OUT / "new_highrise_orbit" / "export" / "complete" / "scene.glb", 0.55)),
     "clean_wipe": lambda: clean_wipe(OUT / "new_highrise_orbit", BUILD / "clean_wipe.mp4"),
+    "photo_vs_model": lambda: photo_vs_model(OUT / "merge_colosseum", BUILD / "photo_vs_model.mp4", picks=(0.05, 0.18), seconds_each=4.5),
 }
 
 

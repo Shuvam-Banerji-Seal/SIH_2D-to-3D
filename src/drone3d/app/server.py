@@ -82,7 +82,7 @@ def model_catalog(run: Path) -> dict:
     merge = sfm.get("merge") or {}
     return {"models": out, "registered": total, "merged": merge.get("status") == "ok",
             "models_before_merge": merge.get("models_before"), "models_after_merge": merge.get("models_after"),
-            "generated": generated_object(run)}
+            "generated": generated_object(run), "complete": complete_object(run)}
 
 
 def generated_object(run: Path) -> dict:
@@ -100,6 +100,26 @@ def generated_object(run: Path) -> dict:
             "input": f"{base}/{rec['input']}" if rec.get("input") else None, "started": rec.get("started"),
             "error": (rec.get("log") or [""])[-1][:300] if state == "failed" else None,
             "placed": (rec.get("aligned") or {}).get("measured_covered") if (rec.get("aligned") or {}).get("placed") else None}  # fmt: skip
+
+
+COMPLETE_JOBS: dict[str, str] = {}  # run name -> the complete-model job running for it ("complete" | "splats")
+
+
+def complete_object(run: Path) -> dict:
+    """The run's complete model (drone3d.complete): its state, the numbers that say what it is, its files."""
+    out = run / "export" / "complete"
+    rec = _read(out / "result.json") or {}
+    sp = _read(out / "splats_360.json") or {}
+    base = f"/runs/{run.name}/export/complete"
+    job = COMPLETE_JOBS.get(run.name)
+    files = [f for f in ("subject.glb", "subject.obj", "subject.fbx", "subject.stl", "scene.glb", "splats_360.splat") if (out / f).is_file()]
+    return {"status": "running" if job == "complete" else rec.get("status") or "none",
+            "splats": "running" if job == "splats" else ("ok" if (out / "splats_360.splat").is_file() else "none"),
+            "watertight": rec.get("watertight"), "photographed": round(1 - rec["generated_share"], 3) if "generated_share" in rec else None,
+            "triangles": rec.get("subject_triangles"), "consensus_of": rec.get("consensus_of"),
+            "splat_views": sp.get("views"), "num_splats": sp.get("num_splats"),
+            "thumb": f"{base}/thumb.jpg" if (out / "thumb.jpg").is_file() else None,
+            "files": [{"name": f, "url": f"{base}/{f}"} for f in files], "note": rec.get("note")}  # fmt: skip
 
 
 def _alive(pid: int | None) -> bool:
@@ -453,8 +473,10 @@ def create_app(
     generating: dict[str, threading.Thread] = {}
 
     @app.post("/api/runs/{name}/generate")
-    def generate_run(name: str) -> dict:
-        """Generate the run's object with TRELLIS.2 in the background (one at a time; ~5 min)."""
+    def generate_run(name: str, req: dict = Body(default={})) -> dict:  # noqa: B008
+        """Generate the run's object with TRELLIS.2 in the background (one at a time; ~5 min a keyframe).
+
+        ``{"views": 3}``: from three keyframes across the flight, the complete model their consensus."""
         from drone3d import generate
 
         run = outputs / name
@@ -466,15 +488,52 @@ def create_app(
         if busy:
             raise HTTPException(409, f"already generating {busy[0]}; one object at a time")
 
+        views = max(1, min(5, int(req.get("views") or 1)))
+
         def work() -> None:
             try:
-                generate.generate_object(run)
+                generate.generate_views(run, views=views) if views > 1 else generate.generate_object(run)
             except Exception as exc:  # recorded in result.json by generate_object where it can be
                 log.warning("generate %s: %s", name, exc)
 
         generating[name] = threading.Thread(target=work, name=f"generate-{name}", daemon=True)
         generating[name].start()
-        return {"name": name, "status": "running"}
+        return {"name": name, "status": "running", "views": views}
+
+    def _complete_job(name: str, kind: str) -> dict:
+        from drone3d import complete as comp
+
+        run = outputs / name
+        if not _NAME.match(name) or not (run / "sfm" / "result.json").is_file():
+            raise HTTPException(404, "no finished run of that name")
+        busy = [k for k, t in generating.items() if t.is_alive()]
+        if busy:
+            raise HTTPException(409, f"the GPU is busy with {busy[0]}; one generation or completion at a time")
+        if kind == "splats" and not (run / "export" / "complete" / "scene.glb").is_file():
+            raise HTTPException(409, "build the complete model first")
+
+        def work() -> None:
+            COMPLETE_JOBS[name] = kind
+            try:
+                comp.complete_model(run) if kind == "complete" else comp.splats_360(run)
+            except Exception as exc:  # the files stay as they were
+                log.warning("%s %s: %s", kind, name, exc)
+            finally:
+                COMPLETE_JOBS.pop(name, None)
+
+        generating[name] = threading.Thread(target=work, name=f"{kind}-{name}", daemon=True)
+        generating[name].start()
+        return {"name": name, "status": "running", "job": kind}
+
+    @app.post("/api/runs/{name}/complete")
+    def complete_run(name: str) -> dict:
+        """Rebuild the complete model (drone3d.complete) from the placed generated object(s) in the background."""
+        return _complete_job(name, "complete")
+
+    @app.post("/api/runs/{name}/splats360")
+    def splats360_run(name: str) -> dict:
+        """Train Gaussian splats that are whole from every heading (drone3d.complete.splats_360; ~5-10 min)."""
+        return _complete_job(name, "splats")
 
     @app.get("/api/runs/{name}/frames")
     def frames(name: str, limit: int = Query(400, le=2000)) -> dict:

@@ -140,3 +140,20 @@ def test_the_platform_a_generator_stood_the_object_on_goes() -> None:
     assert keep[: len(house_f)][cen[: len(house_f), 2] > 2.2].all()  # what stands on it stays
     alone = drop_base_slab(house_v, house_f)
     assert alone.all()  # no platform, nothing goes (the roof is horizontal, but at the top)
+
+
+def test_what_one_generation_alone_invents_is_voted_out() -> None:
+    """Three generations of a tower; one adds a wing no other has: the consensus keeps the tower alone."""
+    import trimesh
+
+    from drone3d.complete import solidify_consensus
+
+    tower = _box([0, 0, 0], [2, 2, 6], n=12)
+    wing_v, wing_f = _box([2, 0, 0], [5, 2, 2], n=12)
+    with_wing = (np.concatenate([tower[0], wing_v]), np.concatenate([tower[1], wing_f + len(tower[0])]))
+    sv, sf, info = solidify_consensus([tower, tower, with_wing], resolution=96)
+    m = trimesh.Trimesh(sv, sf, process=False)
+    assert info["consensus"] == {"of": 3, "votes": 2} and m.is_watertight
+    assert m.volume == pytest.approx(24.0, rel=0.1)  # the tower's 2 x 2 x 6; the wing (12 more) is gone
+    union, _, _ = solidify_consensus([tower, tower, with_wing], resolution=96, votes=1)
+    assert union[:, 0].max() > 4.5  # voted with one, the wing would stay

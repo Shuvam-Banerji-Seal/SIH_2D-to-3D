@@ -79,8 +79,40 @@ def pick_keyframe(run_dir: Path) -> tuple[Path, dict]:
     return run_dir / "dataset" / "images" / posed[k].name, {"model": Path(models[0]["path"]).name, "keyframe": posed[k].name}
 
 
+def pick_keyframes(run_dir: Path, views: int = 3, *, cone_deg: float = 20.0) -> list[tuple[Path, dict]]:
+    """``views`` keyframes of the largest model that look at the subject, spread across the flown arc -> [(image,
+    info)]: the subject keyframe first, then the ones 10 % in from the arc's ends (in capture order). Fewer when
+    the flight looks at the subject from fewer places."""
+    import pycolmap
+
+    from drone3d.export.stage import _subject
+
+    sfm = json.loads((run_dir / "sfm" / "result.json").read_text())
+    models = sorted(sfm.get("models", []), key=lambda m: -(m.get("images") or 0))
+    if not models:
+        raise ValueError("no SfM model: run the pipeline first")
+    rec = pycolmap.Reconstruction(models[0]["path"])
+    posed = [im for im in sorted(rec.images.values(), key=lambda i: i.name) if im.has_pose]
+    cams = np.array([im.projection_center() for im in posed])
+    axes = np.array([im.cam_from_world().rotation.matrix()[2] for im in posed])
+    first = subject_keyframe(cams, axes)
+    picks = [first]
+    sub = _subject(cams, axes)
+    if sub is not None and views > 1:
+        rel = sub[0] - cams
+        dist = np.linalg.norm(rel, axis=1)
+        looking = np.flatnonzero(np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12) > np.cos(np.radians(cone_deg)))
+        if len(looking) >= 3:  # in capture order round the arc: its start and end, 10 % in from each
+            for q in (0.1, 0.9)[: views - 1]:
+                k = int(looking[int(round(q * (len(looking) - 1)))])
+                if all(abs(k - p) > len(posed) // 8 for p in picks):
+                    picks.append(k)
+    name = Path(models[0]["path"]).name
+    return [(run_dir / "dataset" / "images" / posed[k].name, {"model": name, "keyframe": posed[k].name}) for k in picks]
+
+
 def subject_crop(run_dir: Path, image: Path, keyframe: str, *, model: int = 0, margin: float = 0.12,
-                 footprint: float = 0.3) -> Path | None:  # fmt: skip
+                 footprint: float = 0.3, out_name: str = "subject_crop.png") -> Path | None:  # fmt: skip
     """The keyframe cropped to the subject, from the measured model itself -> the crop's path, or None.
 
     The subject's surface (within ``footprint`` x the subject radius -- the cameras' distance -- of it) is projected
@@ -129,7 +161,7 @@ def subject_crop(run_dir: Path, image: Path, keyframe: str, *, model: int = 0, m
     box = (max(0, int(x0 - mx)), max(0, int(y0 - my)), min(img.width, int(x1 + mx)), min(img.height, int(y1 + my)))
     if box[2] - box[0] < 64 or box[3] - box[1] < 64:
         return None
-    out = out_dir(run_dir) / "subject_crop.png"
+    out = out_dir(run_dir) / out_name
     out.parent.mkdir(parents=True, exist_ok=True)
     img.crop(box).save(out)
     return out
@@ -145,6 +177,17 @@ def status(run_dir: Path) -> dict | None:
         return json.loads(f.read_text())
     except (OSError, ValueError):
         return None
+
+
+def _trellis(image: Path, glb: Path, *, resolution: str, seed: int, timeout_s: float) -> tuple[bool, list[str]]:
+    """TRELLIS.2 (its own environment, a subprocess) from ``image`` to ``glb`` -> (ok, the log's last lines)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("OMP_PROC_BIND", "OMP_PLACES")}  # see drone3d.__init__
+    try:
+        proc = subprocess.run([str(PYTHON), str(SCRIPT), str(glb), str(image), "--res", resolution, "--seed", str(seed)],
+                              capture_output=True, text=True, env=env, timeout=timeout_s, cwd=ROOT)  # fmt: skip
+        return proc.returncode == 0 and glb.is_file(), (proc.stdout + proc.stderr).strip().splitlines()[-12:]
+    except subprocess.TimeoutExpired:
+        return False, [f"timed out after {timeout_s:.0f} s"]
 
 
 def generate_object(run_dir: Path, *, image: Path | None = None, resolution: str = "1024", seed: int = 0,
@@ -169,16 +212,8 @@ def generate_object(run_dir: Path, *, image: Path | None = None, resolution: str
               "licenses": LICENSES}  # fmt: skip
     (out / "result.json").write_text(json.dumps(record, indent=1))
     glb = out / "object.glb"
-    # the shell's OpenMP binding pins a child to one core (see drone3d.__init__)
-    env = {k: v for k, v in os.environ.items() if k not in ("OMP_PROC_BIND", "OMP_PLACES")}
     t0 = time.perf_counter()
-    try:
-        proc = subprocess.run([str(PYTHON), str(SCRIPT), str(glb), str(image), "--res", resolution, "--seed", str(seed)],
-                              capture_output=True, text=True, env=env, timeout=timeout_s, cwd=ROOT)  # fmt: skip
-        ok = proc.returncode == 0 and glb.is_file()
-        tail = (proc.stdout + proc.stderr).strip().splitlines()[-12:]
-    except subprocess.TimeoutExpired:
-        ok, tail = False, [f"timed out after {timeout_s:.0f} s"]
+    ok, tail = _trellis(image, glb, resolution=resolution, seed=seed, timeout_s=timeout_s)
     record.update(status="ok" if ok else "failed", seconds=round(time.perf_counter() - t0, 1), finished=time.time(),
                   glb="object.glb" if ok else None, input="object.input.png" if (out / "object.input.png").is_file() else None,
                   log=tail)  # fmt: skip
@@ -250,7 +285,8 @@ def _upright_icp(gp: np.ndarray, bp: np.ndarray, yaw: float, scale: float, t: np
     return yaw, scale, t
 
 
-def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws: int = 24) -> dict:
+def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws: int = 24, src: str = "object.glb",
+                   dst: str = "object_aligned.glb", record: str | None = "aligned.json") -> dict:  # fmt: skip
     """Place the generated object in the measured model's frame -> record (also ``export/generated/aligned.json``).
 
     The generated object has its own frame and scale. It is matched to the measured surface near the subject
@@ -275,7 +311,7 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     body = mv[near & (mv[:, 2] > ground + 0.05 * r)]
     if len(body) < 500:
         raise ValueError("too little measured surface near the subject")
-    gen = trimesh.load(out / "object.glb", force="mesh", process=False)
+    gen = trimesh.load(out / src, force="mesh", process=False)
     gv = np.asarray(gen.vertices) @ np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float).T  # glTF y-up -> z-up
     gen.vertices = gv
     gp = np.asarray(trimesh.sample.sample_surface(gen, samples, seed=0)[0])  # seeded: the same fit every time
@@ -347,10 +383,84 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     placed = trimesh.Trimesh(vertices=pv, faces=faces, visual=gen.visual, process=False)
     placed.remove_unreferenced_vertices()
     placed.vertices = np.asarray(placed.vertices) @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], float).T  # back to y-up
-    placed.export(out / "object_aligned.glb")
+    placed.export(out / dst)
     rec = {"model": model, "transform_zup": t.round(6).tolist(), "measured_covered": round(score, 3),
            "median_gap_rel": round(med / r, 4), "scale": round(float(np.cbrt(abs(np.linalg.det(t[:3, :3])))), 5),
            "trimmed_faces": trimmed,
-           "glb": "object_aligned.glb"}  # fmt: skip
-    (out / "aligned.json").write_text(json.dumps(rec, indent=1))
+           "glb": dst}  # fmt: skip
+    if record:
+        (out / record).write_text(json.dumps(rec, indent=1))
     return rec
+
+
+def generate_views(run_dir: Path, *, views: int = 3, resolution: str = "1024", seed: int = 0,
+                   timeout_s: float = 3600.0) -> dict:  # fmt: skip
+    """The generated object from several keyframes across the flown arc (``pick_keyframes``) -> the result record.
+
+    Conditioning TRELLIS.2 on several images at once stacked rings (it generates in a frame tied to the view),
+    so each keyframe gets a generation of its own, placed on the measurement like the single one
+    (``object_v<i>_aligned.glb``). The best-placed is the object (``object.glb``, ``object_aligned.glb``);
+    drone3d.complete builds the complete model from all that are placed: what most of them agree is solid.
+    """
+    import shutil
+
+    if not available():
+        raise RuntimeError(f"TRELLIS.2 is not installed ({PYTHON}); run tools/setup_trellis2.sh")
+    out = out_dir(run_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    picks = pick_keyframes(run_dir, views)
+    record = {"status": "running", "started": time.time(), "pid": os.getpid(), **picks[0][1], "views": [],
+              "resolution": resolution, "seed": seed, "generator": "microsoft/TRELLIS.2-4B", "note": NOTE,
+              "licenses": LICENSES}  # fmt: skip
+    (out / "result.json").write_text(json.dumps(record, indent=1))
+    t_all = time.perf_counter()
+    for i, (image, info) in enumerate(picks):
+        try:
+            crop = subject_crop(run_dir, image, info["keyframe"], model=int(info["model"]), out_name=f"subject_crop_v{i}.png")
+        except Exception as exc:  # noqa: BLE001 -- the whole keyframe still works
+            log.warning("subject crop failed: %s", exc)
+            crop = None
+        glb = out / f"object_v{i}.glb"
+        t0 = time.perf_counter()
+        ok, tail = _trellis(crop or image, glb, resolution=resolution, seed=seed, timeout_s=timeout_s)
+        view = {"keyframe": info["keyframe"], "cropped_to_subject": crop is not None, "glb": glb.name if ok else None,
+                "seconds": round(time.perf_counter() - t0, 1), "log": tail[-3:]}  # fmt: skip
+        if ok:
+            try:
+                al = align_to_model(run_dir, model=int(info["model"]), src=glb.name, dst=f"object_v{i}_aligned.glb", record=None)
+                al["placed"] = al["measured_covered"] >= MIN_COVER
+                view["aligned"] = al
+            except (ValueError, FileNotFoundError, KeyError) as exc:
+                view["aligned"] = {"status": "skipped", "reason": str(exc)[:200], "placed": False}
+        record["views"].append(view)
+        (out / "result.json").write_text(json.dumps(record, indent=1))
+    placed = [v for v in record["views"] if (v.get("aligned") or {}).get("placed")]
+    k = int(picks[0][1]["model"])
+    if placed:
+        best = max(placed, key=lambda v: v["aligned"]["measured_covered"])
+        i = record["views"].index(best)
+        shutil.copyfile(out / best["glb"], out / "object.glb")
+        shutil.copyfile(out / best["aligned"]["glb"], out / "object_aligned.glb")
+        if (out / f"object_v{i}.input.png").is_file():
+            shutil.copyfile(out / f"object_v{i}.input.png", out / "object.input.png")
+        aligned = {**best["aligned"], "glb": "object_aligned.glb"}
+        (out / "aligned.json").write_text(json.dumps(aligned, indent=1))
+        record.update(status="ok", keyframe=best["keyframe"], glb="object.glb", input="object.input.png", aligned=aligned)
+    else:
+        record.update(status="ok" if any(v.get("glb") for v in record["views"]) else "failed",
+                      aligned={"status": "skipped", "reason": "no generation fit the measured subject", "placed": False})  # fmt: skip
+    record.update(seconds=round(time.perf_counter() - t_all, 1), finished=time.time())
+    _link_scene(run_dir, k, bool(placed))
+    (out / "result.json").write_text(json.dumps(record, indent=1))
+    if placed:
+        from drone3d.complete import complete_model
+
+        try:
+            c = complete_model(run_dir, model=k)
+            record["complete"] = {"status": "ok", "generated_share": c["generated_share"], "watertight": c["watertight"],
+                                  "consensus_of": c.get("consensus_of"), "seconds": c["seconds"]["total"]}  # fmt: skip
+        except Exception as exc:  # noqa: BLE001 -- the generated objects stand on their own
+            log.warning("complete model of %s failed: %s", run_dir.name, exc)
+            record["complete"] = {"status": "failed", "reason": str(exc)[:200]}
+        (out / "result.json").write_text(json.dumps(record, indent=1))
+    return record

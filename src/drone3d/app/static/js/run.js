@@ -133,6 +133,27 @@ export async function viewRun(main, name) {
           ${g.status === 'failed' || g.status === 'interrupted' ? `<div class="note bad" style="margin-top:4px">${g.status}${g.error ? `: ${esc(g.error)}` : ''}</div>` : ''}
           <div class="row" style="gap:6px;margin-top:8px">${act}</div></div></div>`;
   }
+  // The complete model (drone3d.complete): the subject whole from every side, photographed where the flight saw it
+  function completeCard(c, g) {
+    if (!c || (c.status === 'none' && !(g && g.placed != null))) return '';
+    const busy = c.status === 'running' || c.splats === 'running';
+    const pct = (x) => (x == null ? '—' : `${Math.round(100 * x)} %`);
+    const files = (c.files || []).map((f) => `<a class="btn tiny" href="${f.url}" download>${icon.down}${esc(f.name)}</a>`).join('');
+    const acts = busy
+      ? `<span class="note mono">${c.status === 'running' ? 'building the complete model…' : 'training 360° splats… about 5–10 min'}</span>`
+      : `<button class="btn tiny" id="cmpViews" title="TRELLIS.2 on three keyframes across the flight; the model is what they agree on">Generate from 3 keyframes</button>
+         <button class="btn tiny" id="cmpBuild">${c.status === 'ok' ? 'Rebuild' : 'Build'} complete model</button>
+         ${c.status === 'ok' ? `<button class="btn tiny" id="cmpSplats">${c.splats === 'ok' ? 'Retrain' : 'Train'} 360° splats</button>` : ''}
+         ${c.status === 'ok' ? `<button class="btn tiny" id="cmpView">${icon.eye}view 360°</button>` : ''}`;
+    return `<div class="mcard generated" style="grid-column:span 2">
+        <div class="mthumb gen" style="${c.thumb ? `background-image:url('${encodeURI(c.thumb)}');background-size:cover` : ''}"><span class="pill">complete · 360°</span></div>
+        <div style="padding:9px 11px"><b>Complete model</b> <span class="muted" style="font-size:12px">${c.consensus_of ? `consensus of ${c.consensus_of} generations` : 'from the generated object'} · the measurement, completed</span>
+          ${c.status === 'ok' ? `<div class="kv" style="margin-top:6px"><span>photographed</span><b>${pct(c.photographed)}</b><span>watertight</span><b>${c.watertight ? 'yes' : 'no'}</b>
+            <span>triangles</span><b>${c.triangles ? fmtN(c.triangles) : '—'}</b><span>360° splats</span><b>${c.splats === 'ok' ? (c.num_splats ? fmtN(c.num_splats) : 'yes') : '—'}</b></div>` : ''}
+          <div class="note" style="margin-top:6px">${esc(c.note || 'Where the flight saw the subject, the photographs; where it never flew, the generated object — carved by what the cameras saw through, closed into one solid.')}</div>
+          ${files ? `<div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${files}</div>` : ''}
+          <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${acts}</div></div></div>`;
+  }
   async function catalog() {
     try { cat = await api(`/api/runs/${enc}/models`); } catch { return; }
     if (!cat.models.length) return;
@@ -150,7 +171,7 @@ export async function viewRun(main, name) {
     el.innerHTML = `<h2>Models <span class="tag">${esc(merged)}</span><span class="grow"></span>
         ${frag.length ? `<button class="linkbtn" id="fragBtn">${showFragments ? 'hide' : 'show'} ${frag.length} fragment${frag.length > 1 ? 's' : ''}</button>` : ''}</h2>
       <div class="note" style="margin:-4px 0 10px">A model is the part of the scene one set of camera passes saw. Main models hold the bulk of the video; fragments are short shots nothing else overlaps.</div>
-      <div class="mgrid">${main.map(cardOf).join('')}${genCard(cat.generated)}${showFragments ? frag.map(cardOf).join('') : ''}</div>`;
+      <div class="mgrid">${main.map(cardOf).join('')}${genCard(cat.generated)}${completeCard(cat.complete, cat.generated)}${showFragments ? frag.map(cardOf).join('') : ''}</div>`;
     const fb = $('#fragBtn'); if (fb) fb.onclick = () => { showFragments = !showFragments; catalog(); };
     const gb = $('#genBtn');
     if (gb) gb.onclick = async () => {
@@ -158,8 +179,14 @@ export async function viewRun(main, name) {
       try { await post(`/api/runs/${enc}/generate`, {}); toast('Generating the object with TRELLIS.2 — about 5 minutes', 'ok'); } catch (e) { toast(e.message, 'bad'); }
       catalog();
     };
-    if (cat.generated?.status === 'running' && !genPoll) genPoll = every(10000, () => catalog());
-    if (cat.generated?.status !== 'running' && genPoll) { clearInterval(genPoll); genPoll = null; if (cat.generated?.status === 'ok') toast('Generated object ready', 'ok'); }
+    const job = async (url, body, msg) => { try { await post(url, body); toast(msg, 'ok'); } catch (e) { toast(e.message, 'bad'); } catalog(); };
+    const cv = $('#cmpViews'); if (cv) cv.onclick = () => { cv.disabled = true; job(`/api/runs/${enc}/generate`, { views: 3 }, 'Generating from three keyframes — about 5 minutes each'); };
+    const cb = $('#cmpBuild'); if (cb) cb.onclick = () => { cb.disabled = true; job(`/api/runs/${enc}/complete`, {}, 'Building the complete model — about 2 minutes'); };
+    const cs = $('#cmpSplats'); if (cs) cs.onclick = () => { cs.disabled = true; job(`/api/runs/${enc}/splats360`, {}, 'Training 360° splats — about 5–10 minutes'); };
+    const cw = $('#cmpView'); if (cw) cw.onclick = async () => { await xp.x.setLayer('complete', true); document.querySelector('#xp').scrollIntoView({ behavior: 'smooth' }); };
+    const running = cat.generated?.status === 'running' || cat.complete?.status === 'running' || cat.complete?.splats === 'running';
+    if (running && !genPoll) genPoll = every(10000, () => catalog());
+    if (!running && genPoll) { clearInterval(genPoll); genPoll = null; if (cat.generated?.status === 'ok') toast('Generated object ready', 'ok'); }
     $$('#catalog [data-solo]').forEach((b) => b.addEventListener('click', () => {
       const i = xp.x.models.findIndex((m) => m.spec.dir === `model_${b.dataset.solo}` || m.spec.name === `model ${b.dataset.solo}`);
       if (i >= 0) { xp.x.solo(i); document.querySelector('#xp').scrollIntoView({ behavior: 'smooth' }); }

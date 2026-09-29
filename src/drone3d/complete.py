@@ -185,14 +185,16 @@ def drop_base_slab(v: np.ndarray, f: np.ndarray, *, band: float = 0.02, min_shar
 
 
 def snap_planes(v: np.ndarray, f: np.ndarray, *, tol: float = 0.025, min_share: float = 0.04, max_planes: int = 16,
-                seed: int = 0) -> tuple[np.ndarray, list[dict]]:  # fmt: skip
+                corners: bool = True, seed: int = 0) -> tuple[np.ndarray, list[dict]]:  # fmt: skip
     """The object's large planes made flat -> ``(vertices, planes)``.
 
     A generator models a facade's windows as recesses 1-2 % of the building deep, where the real facade is flat
     to the camera: photographs projected onto relief that is not there smear with the parallax (the highrise's
     window columns ran). Planes holding ``min_share`` of the area (RANSAC, area-weighted, then a weighted PCA
     fit) take every vertex within ``tol`` of the object's size of them, inside their extent; a vertex near two
-    goes to their intersection. A statue or a dome has no such plane and is left as it is.
+    goes to their intersection -- unless ``corners`` is off: then only a vertex near one plane moves, along
+    its normal, which cannot fold a closed surface (on a solid, edge vertices meeting at one point made its
+    STL 4439 pieces). A statue or a dome has no such plane and is left as it is.
     """
     rng = np.random.default_rng(seed)
     size = float(np.ptp(v, 0).max())
@@ -254,7 +256,7 @@ def snap_planes(v: np.ndarray, f: np.ndarray, *, tol: float = 0.025, min_share: 
     out = wv.copy()
     combos, which = np.unique(hits, axis=0, return_inverse=True)
     for c, combo in enumerate(combos):  # vertices near the same planes: one projection for all of them
-        if not combo.any():
+        if not combo.any() or (not corners and combo.sum() > 1):
             continue
         ks = np.flatnonzero(combo)[:3]  # a corner is where three planes meet
         a = np.array([planes[k]["normal"] for k in ks])
@@ -428,6 +430,15 @@ def retexture(v: np.ndarray, f: np.ndarray, uv: np.ndarray | None, albedo: np.nd
     del pts, tri_scores
     torch.cuda.empty_cache()
     return out, info
+
+
+def _closed_as_stored(v: np.ndarray, f: np.ndarray) -> bool:
+    """Whether (v, f) is still one closed surface once its vertices are merged by float32 position (as an STL
+    reader, or any viewer, rebuilds it)."""
+    import trimesh
+
+    m = trimesh.Trimesh(v.astype(np.float32).astype(np.float64), f, process=True)
+    return bool(m.is_watertight)
 
 
 def solidify(v: np.ndarray, f: np.ndarray, *, resolution: int = 224, yaw: float = 0.0) -> tuple[np.ndarray, np.ndarray, dict]:
@@ -698,7 +709,9 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     t0 = time.perf_counter()
     height = float(np.ptp(gv[:, 2]))
     solid_v, solid_f, solid_info = solidify(gv, gf, yaw=yaw)
-    solid_v, _ = snap_planes(solid_v, solid_f, tol=0.03)  # the voxel steps and the stubs carving left: flat again
+    snapped, _ = snap_planes(solid_v, solid_f, tol=0.03, corners=False)  # the stubs carving left: flat again
+    if _closed_as_stored(snapped, solid_f):  # a file stores positions: it must stay closed through them
+        solid_v = snapped
     sdf = o3d.t.geometry.RaycastingScene()
     sdf.add_triangles(o3c.Tensor(solid_v.astype(np.float32)), o3c.Tensor(solid_f.astype(np.uint32)))
     cen = sv[sf].mean(1)
@@ -741,6 +754,7 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     files = _write_subject(local, solid_f, corner_uv, solid_albedo, out / "subject")
     solid = trimesh.Trimesh(local, solid_f, process=False)
     solid.export(out / "subject.stl")
+    solid = trimesh.load(out / "subject.stl")  # judged as a reader sees it: positions merged, float32
     files.append(out / "subject.stl")
     fbx = write_fbx(files[0], out / "subject.fbx")
     if fbx:

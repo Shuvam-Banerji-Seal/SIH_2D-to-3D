@@ -272,7 +272,8 @@ src/drone3d/
 ├── gpu/               NVML sampler per stage (records GPU sharing) and snapshots for the console
 ├── pipeline.py, config.py, cli.py
 experiments/            scripts behind every number above and in the paper
-paper/, promo/          LaTeX paper; code-drawn promo film + compositor
+paper/, promo/          LaTeX paper; code-drawn films + compositor: the promo, and the explainer
+                        "How it works" (promo/explainer_*.py; every example from our own runs)
 third_party/            spirula-studio, marigold-v2, javascript-animation-skills (submodules); RoMaV2,
                         MoGe (tools/setup_third_party.sh), TRELLIS.2 (tools/setup_trellis2.sh), priors/
                         (tools/setup_priors.sh, for experiments/prior_bench.py)

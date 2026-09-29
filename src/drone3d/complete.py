@@ -40,7 +40,7 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["carve", "complete_model", "drop_base_slab", "link_scene", "retexture", "snap_planes", "solidify", "splats_360", "transfer_texture"]
+__all__ = ["carve", "complete_model", "drop_base_slab", "solidify_consensus", "link_scene", "retexture", "snap_planes", "solidify", "splats_360", "transfer_texture"]
 
 log = get_logger(__name__)
 
@@ -441,51 +441,88 @@ def _closed_as_stored(v: np.ndarray, f: np.ndarray) -> bool:
     return bool(m.is_watertight)
 
 
-def solidify(v: np.ndarray, f: np.ndarray, *, resolution: int = 224, yaw: float = 0.0) -> tuple[np.ndarray, np.ndarray, dict]:
-    """A closed surface of the solid (v, f) bounds (z up) -> ``(vertices, faces, info)``.
-
-    Voxelised at ``resolution`` along its longest side in its own heading (``yaw``: its largest wall's normal,
-    so walls fall on voxel planes and come out flat), its base capped, marching cubes, outward normals, bodies
-    under 1 % dropped, lightly Taubin-smoothed (vertices only: the topology stays closed). Inside is what a
-    flood fill from outside does not reach; where a hole let the fill in -- carving opened the highrise's
-    crown, and the 3D fill added nothing to the shell -- inside is what is enclosed along two of the three axes.
-    """
-    import open3d as o3d
-    import trimesh
-    from scipy import ndimage
-    from skimage.measure import marching_cubes
-
+def _heading(yaw: float) -> np.ndarray:
     c, sn = np.cos(-yaw), np.sin(-yaw)
-    rz = np.array([[c, -sn, 0.0], [sn, c, 0.0], [0.0, 0.0, 1.0]])
-    vr = v @ rz.T
-    lo, hi = vr.min(0), vr.max(0)
-    vox = float((hi - lo).max()) / resolution
-    mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(vr), o3d.utility.Vector3iVector(f))
-    grid = o3d.geometry.VoxelGrid.create_from_triangle_mesh_within_bounds(mesh, vox, lo - 3 * vox, hi + 3 * vox)
+    return np.array([[c, -sn, 0.0], [sn, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def _occupancy(v: np.ndarray, f: np.ndarray, lo: np.ndarray, vox: float, shape: np.ndarray) -> tuple[np.ndarray, str]:
+    """What (v, f) (already in the grid's heading) encloses, on the grid at ``lo`` with ``vox`` voxels -> (solid,
+    the fill rule). Its base capped; inside is what a flood fill from outside does not reach, or, where a hole
+    let the fill in (carving opened the highrise's crown), what is enclosed along two of the three axes."""
+    import open3d as o3d
+    from scipy import ndimage
+
+    mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(v), o3d.utility.Vector3iVector(f))
+    grid = o3d.geometry.VoxelGrid.create_from_triangle_mesh_within_bounds(mesh, vox, lo, lo + (shape - 1) * vox)
     idx = np.array([x.grid_index for x in grid.get_voxels()])
-    shape = np.ceil((hi - lo + 6 * vox) / vox).astype(int) + 1
     occ = np.zeros(shape, bool)
+    if not len(idx):
+        return occ, "empty"
+    idx = np.minimum(idx, shape - 1)
     occ[idx[:, 0], idx[:, 1], idx[:, 2]] = True
     base = int(idx[:, 2].min())
     foot = ndimage.binary_fill_holes(ndimage.binary_closing(occ.any(2), iterations=2))
     occ[:, :, base : base + 2] |= foot[:, :, None]  # the base, which a placed object is trimmed open at
     shell = ndimage.binary_dilation(occ, iterations=1)
     solid = ndimage.binary_erosion(ndimage.binary_fill_holes(shell), iterations=1) | occ
-    rule = "flood fill"
     if solid.sum() - occ.sum() < 0.5 * occ.sum():  # hollow: the fill came in through a hole
         enclosed = sum((np.maximum.accumulate(occ, axis=a) & np.flip(np.maximum.accumulate(np.flip(occ, a), axis=a), a))
                        .astype(np.int8) for a in range(3))  # fmt: skip
-        solid = ndimage.binary_fill_holes(occ | (enclosed >= 2))
-        rule = "enclosed on two axes"
+        return ndimage.binary_fill_holes(occ | (enclosed >= 2)), "enclosed on two axes"
+    return solid, "flood fill"
+
+
+def _surface(solid: np.ndarray, lo: np.ndarray, vox: float, rz: np.ndarray) -> tuple[np.ndarray, np.ndarray, bool, float]:
+    """Marching cubes of a voxel solid, outward normals, bodies under 1 % dropped, lightly Taubin-smoothed
+    (vertices only: the topology stays closed) -> (vertices in the world's heading, faces, watertight, volume)."""
+    import trimesh
+    from skimage.measure import marching_cubes
+
     verts, faces, _, _ = marching_cubes(np.pad(solid, 1).astype(np.float32), 0.5)
-    m = trimesh.Trimesh((verts - 1) * vox + lo - 3 * vox, faces, process=True)
+    m = trimesh.Trimesh((verts - 1) * vox + lo, faces, process=True)
     parts = m.split(only_watertight=False)
     m = trimesh.util.concatenate([p for p in parts if len(p.faces) >= 0.01 * len(m.faces)]) if len(parts) > 1 else m
     if m.volume < 0:
         m.invert()
     trimesh.smoothing.filter_taubin(m, iterations=5)
-    info = {"voxel": round(vox, 5), "fill": rule, "watertight": bool(m.is_watertight), "volume": round(float(m.volume), 4)}
-    return np.asarray(m.vertices, np.float64) @ rz, np.asarray(m.faces, np.int64), info
+    return np.asarray(m.vertices, np.float64) @ rz, np.asarray(m.faces, np.int64), bool(m.is_watertight), float(m.volume)
+
+
+def solidify(v: np.ndarray, f: np.ndarray, *, resolution: int = 224, yaw: float = 0.0) -> tuple[np.ndarray, np.ndarray, dict]:
+    """A closed surface of the solid (v, f) bounds (z up) -> ``(vertices, faces, info)``.
+
+    Voxelised at ``resolution`` along its longest side in its own heading (``yaw``: its largest wall's normal,
+    so walls fall on voxel planes and come out flat), filled (``_occupancy``), meshed (``_surface``).
+    """
+    return solidify_consensus([(v, f)], resolution=resolution, yaw=yaw)
+
+
+def solidify_consensus(meshes: list[tuple[np.ndarray, np.ndarray]], *, resolution: int = 224, yaw: float = 0.0,
+                       votes: int | None = None) -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
+    """The closed surface of what at least ``votes`` of ``meshes`` (default: most of them) enclose, on one grid.
+
+    Several generations of the object, each from its own keyframe, invent differently where the flight saw
+    nothing; what most of them agree on is kept, what one alone invents goes.
+    """
+    rz = _heading(yaw)
+    rot = [(v @ rz.T, f) for v, f in meshes]
+    lo = np.min([v.min(0) for v, _ in rot], axis=0)
+    hi = np.max([v.max(0) for v, _ in rot], axis=0)
+    vox = float((hi - lo).max()) / resolution
+    lo = lo - 3 * vox
+    shape = np.ceil((hi - lo + 3 * vox) / vox).astype(int) + 1
+    count = np.zeros(shape, np.int16)
+    rules = []
+    for v, f in rot:
+        occ, rule = _occupancy(v, f, lo, vox, shape)
+        count += occ
+        rules.append(rule)
+    need = votes if votes is not None else len(meshes) // 2 + 1
+    sv, sf, closed, volume = _surface(count >= need, lo, vox, rz)
+    info = {"voxel": round(vox, 5), "fill": rules[0] if len(rules) == 1 else rules, "watertight": closed,
+            "volume": round(volume, 4), "consensus": {"of": len(meshes), "votes": need} if len(meshes) > 1 else None}  # fmt: skip
+    return sv, sf, info
 
 
 def transfer_texture(v: np.ndarray, f: np.ndarray, src: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray], *,
@@ -636,6 +673,25 @@ def _write_subject(v: np.ndarray, f: np.ndarray, corner_uv: np.ndarray, albedo: 
     return [glb, obj, mtl, tex]
 
 
+def _thumbnail(glb: Path, out: Path, base: np.ndarray, height: float, first_cam: np.ndarray, size=(640, 360)) -> Path:
+    """The scene, textured, from the side opposite the flight's first camera, looking at the subject."""
+    from PIL import Image
+
+    from drone3d.export.render_mesh import load_parts, render_parts
+
+    target = base + np.array([0.0, 0.0, 0.45 * height])
+    away = target[:2] - first_cam[:2]
+    away /= max(np.linalg.norm(away), 1e-9)
+    eye = target + np.array([*(away * 2.2 * height), 0.9 * height])
+    f_ = (target - eye) / np.linalg.norm(target - eye)
+    right = np.cross(f_, [0.0, 0.0, 1.0])
+    right /= np.linalg.norm(right)
+    img, part = render_parts(load_parts(glb), 0.9 * size[0], np.stack([right, np.cross(f_, right), f_]), eye, size,
+                             background=(14, 16, 19))  # fmt: skip
+    Image.fromarray(img).save(out, quality=88)
+    return out
+
+
 def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) -> dict:
     """The complete subject and scene of a run whose generated object is placed (drone3d.generate)."""
     import pycolmap
@@ -688,36 +744,52 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     import open3d.core as o3c
     import trimesh
 
-    # 1. no ground disc, flat facades, then carve what the keyframes saw through
+    # 1. no ground disc, flat facades, then carve what the keyframes saw through -- each generation alike
     t0 = time.perf_counter()
-    slab_keep = drop_base_slab(gv, gf)
-    gf = gf[slab_keep]
-    gv, planes = snap_planes(gv, gf)
+    raw = o3d.io.read_triangle_mesh(str(run_dir / "dense" / f"model_{name}" / "mesh.ply"))  # the measurement
+    measured = (np.asarray(raw.vertices), np.asarray(raw.triangles))
+    sky = _sky_masks(views)
+
+    def clean(v: np.ndarray, f: np.ndarray, uv: np.ndarray | None):  # type: ignore[no-untyped-def]
+        f = f[drop_base_slab(v, f)]
+        v, planes_ = snap_planes(v, f)
+        keep = carve(to_sfm(v), f, views, measured, sky=sky)
+        # what the carving cut loose (pieces under 1 %), connected through positions: the GLB splits its vertices
+        # along UV seams, 13108 index-connected pieces of what is one body
+        _, weld = np.unique(np.round(v / (1e-6 * float(np.ptp(v, 0).max())), 0), axis=0, return_inverse=True)
+        kf = f[keep]
+        adj = trimesh.graph.face_adjacency(weld.reshape(-1)[kf])
+        comps = trimesh.graph.connected_components(adj, nodes=np.arange(len(kf)), min_len=1)
+        big = [c for c in comps if len(c) >= 0.01 * len(kf)]
+        f2 = kf[np.sort(np.concatenate(big))] if big else kf
+        used = np.unique(f2)
+        remap = np.full(len(v), -1)
+        remap[used] = np.arange(len(used))
+        return v[used], (uv[used] if uv is not None else None), remap[f2], planes_, int((~keep).sum())
+
+    n_generated = len(gf)
+    slab_faces = int((~drop_base_slab(gv, gf)).sum())
+    gv, guv, gf, planes, carved = clean(gv, gf, guv)
     walls = [pl for pl in planes if abs(pl["normal"][2]) < 0.3]
     yaw = float(np.arctan2(walls[0]["normal"][1], walls[0]["normal"][0])) if walls else 0.0
-    raw = o3d.io.read_triangle_mesh(str(run_dir / "dense" / f"model_{name}" / "mesh.ply"))  # the measurement
-    sky = _sky_masks(views)
-    keep = carve(to_sfm(gv), gf, views, (np.asarray(raw.vertices), np.asarray(raw.triangles)), sky=sky)
-    carved = int((~keep).sum())
-    # what the carving cut loose (pieces under 1 %), connected through positions: the GLB splits its vertices
-    # along UV seams, 13108 index-connected pieces of what is one body
-    _, weld = np.unique(np.round(gv / (1e-6 * float(np.ptp(gv, 0).max())), 0), axis=0, return_inverse=True)
-    kf = gf[keep]
-    adj = trimesh.graph.face_adjacency(weld.reshape(-1)[kf])
-    comps = trimesh.graph.connected_components(adj, nodes=np.arange(len(kf)), min_len=1)
-    big = [c for c in comps if len(c) >= 0.01 * len(kf)]
-    gf = kf[np.sort(np.concatenate(big))] if big else kf
-    used = np.unique(gf)
-    remap = np.full(len(gv), -1)
-    remap[used] = np.arange(len(used))
-    gv, guv, gf = gv[used], guv[used], remap[gf]
+    # the other generations placed on the measurement (drone3d.generate.generate_views): geometry for the vote
+    others = []
+    for vw in gen.get("views") or []:
+        al = vw.get("aligned") or {}
+        if al.get("placed") and al.get("glb") and (gen_dir / al["glb"]).is_file() and vw["keyframe"] != gen.get("keyframe"):
+            ov, of, _, _ = _load_glb(gen_dir / al["glb"])
+            cv_, _, cf_, _, _ = clean(ov, of, None)
+            others.append((cv_, cf_))
     t_carve = time.perf_counter() - t0
 
     # 2. the solid, and with it the measured shell that gives way: measured triangles inside the subject or
     #    within 2 % of its size outside it (the fused walls lie ~1 % off); the ground and the podium beside stay
     t0 = time.perf_counter()
     height = float(np.ptp(gv[:, 2]))
-    solid_v, solid_f, solid_info = solidify(gv, gf, yaw=yaw)
+    if len(others) >= 2:  # three or more generations: what most of them agree is solid
+        solid_v, solid_f, solid_info = solidify_consensus([(gv, gf), *others], yaw=yaw)
+    else:
+        solid_v, solid_f, solid_info = solidify(gv, gf, yaw=yaw)
     snapped, _ = snap_planes(solid_v, solid_f, tol=0.03, corners=False)  # the stubs carving left: flat again
     if _closed_as_stored(snapped, solid_f):  # a file stores positions: it must stay closed through them
         solid_v = snapped
@@ -750,7 +822,7 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     corner_uv, gen_albedo, texels = transfer_texture(solid_v, solid_f, (gv, gf, guv, galb), size=TEXTURE_SIZE)
     solid_albedo, tex_info = retexture(to_sfm(solid_v), solid_f, None, gen_albedo, views, occluders=(to_sfm(sv), keep_f),
                                        sky=sky, texels=texels)  # fmt: skip
-    del views
+    views.clear()  # the keyframes on the GPU: freed
     torch.cuda.empty_cache()
     t_tex = time.perf_counter() - t0
 
@@ -799,16 +871,23 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
                        node_name="subject", geom_name="subject", transform=pivot)  # fmt: skip
     scene.export(out / "scene.glb")
     files.append(out / "scene.glb")
+    try:  # the console's card: the complete model from where the flight never was (opposite its first keyframe)
+        _thumbnail(out / "scene.glb", out / "thumb.jpg", fp_centre, height, cams[0] * fs @ fr.T + ft)
+    except (ValueError, RuntimeError, IndexError) as exc:
+        log.warning("complete model thumbnail: %s", exc)
     result = {
         "status": "ok", "model": model, "frame": frame.get("frame"), "units": frame.get("units"),
         "pivot_export_frame": fp_centre.round(5).tolist(), "height": round(height, 4),
-        "generated_triangles": int(len(gf)), "base_slab_triangles": int((~slab_keep).sum()), "planes_snapped": planes,
+        "generated_triangles": n_generated, "base_slab_triangles": slab_faces, "planes_snapped": planes,
+        "consensus_of": 1 + len(others) if len(others) >= 2 else None,
         "carved_triangles": carved,
         "subject_triangles": int(len(solid_f)), "solid": solid_info, "watertight": bool(solid.is_watertight),
         "scene_triangles": int(len(keep_f)), "shell_triangles_replaced": int(shell.sum()),
         "ground_fill_triangles": int(len(gff)),
         "texture": tex_info, "generated_share": round(1 - tex_info["photo_texels"], 4),
-        "note": "photographed where the keyframes see the object; elsewhere generated by TRELLIS.2 from one keyframe, not measured",
+        "note": "photographed where the keyframes see the object; elsewhere generated by TRELLIS.2 "
+        + (f"from {1 + len(others)} keyframes (the shape they agree on)" if len(others) >= 2 else "from one keyframe")
+        + ", not measured",
         "files": [str(p.relative_to(run_dir / "export")) for p in files],
         "seconds": {"carve": round(t_carve, 1), "texture": round(t_tex, 1), "solid": round(t_solid, 1), "total": round(time.perf_counter() - t_start, 1)},
     }  # fmt: skip

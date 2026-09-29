@@ -193,6 +193,17 @@ def generate_object(run_dir: Path, *, image: Path | None = None, resolution: str
             record["aligned"] = {"status": "skipped", "reason": str(exc)[:200], "placed": False}
             _link_scene(run_dir, k, False)
     (out / "result.json").write_text(json.dumps(record, indent=1))
+    if ok and (record.get("aligned") or {}).get("placed"):  # the model whole: drone3d.complete
+        from drone3d.complete import complete_model
+
+        try:
+            c = complete_model(run_dir, model=int(info.get("model") or 0))
+            record["complete"] = {"status": "ok", "generated_share": c["generated_share"], "watertight": c["watertight"],
+                                  "seconds": c["seconds"]["total"]}  # fmt: skip
+        except Exception as exc:  # noqa: BLE001 -- the generated object stands on its own
+            log.warning("complete model of %s failed: %s", run_dir.name, exc)
+            record["complete"] = {"status": "failed", "reason": str(exc)[:200]}
+        (out / "result.json").write_text(json.dumps(record, indent=1))
     if not ok:
         log.warning("generate %s failed: %s", run_dir.name, " | ".join(tail[-3:]))
     return record

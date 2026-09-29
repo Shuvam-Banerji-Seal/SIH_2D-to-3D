@@ -406,6 +406,8 @@ def create_app(
                     m[key] = f"{url}/export/{m[key]}"
             if (m.get("generated") or {}).get("mesh"):  # drone3d.generate's object, placed in this model's frame
                 m["generated"] = {**m["generated"], "mesh": f"{url}/export/{m['generated']['mesh']}"}
+            if m.get("complete"):  # drone3d.complete: the whole subject in its scene, and 360-degree splats
+                m["complete"] = {k: (f"{url}/export/{v}" if k != "note" and v else v) for k, v in m["complete"].items()}
             m["files"] = [{**f, "path": f"{url}/export/{f['path']}"} for f in m.get("files", [])]
             frame = (
                 _read(run_dir / "export" / (m.get("dir") or "") / "frame.json")

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-__all__ = ["MeshRenderer", "render_mesh_flythrough"]
+__all__ = ["MeshRenderer", "load_parts", "render_mesh_flythrough", "render_parts"]
 
 
 class MeshRenderer:
@@ -63,6 +63,71 @@ class MeshRenderer:
                    + a[y0 + 1, x0] * (1 - fx) * fy + a[y0 + 1, x0 + 1] * fx * fy)  # fmt: skip
             out[ok] = col.round().clip(0, 255).astype(np.uint8)
         return out.reshape(h, w, 3)
+
+
+def load_parts(path: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None]]:
+    """A mesh file's parts in the z-up export frame -> [(vertices, faces, corner UVs [F, 3, 2] (v up) or None,
+    albedo or None)] -- for a vertex-coloured part, (vertices, faces, vertex colours, None); a GLB's node
+    transforms applied."""
+    import trimesh
+
+    scene = trimesh.load(str(path), process=False, maintain_order=True)
+    if isinstance(scene, trimesh.Scene):
+        meshes = [scene.geometry[g].copy().apply_transform(scene.graph[n][0])
+                  for n, g in ((n, scene.graph[n][1]) for n in scene.graph.nodes_geometry)]  # fmt: skip
+    else:
+        meshes = [scene]
+    parts = []
+    for m in meshes:
+        v, f = np.asarray(m.vertices, np.float64), np.asarray(m.faces, np.int64)
+        if path.suffix.lower() in (".glb", ".gltf"):  # glTF is y-up: back to the export's z-up frame
+            v = np.stack([v[:, 0], -v[:, 2], v[:, 1]], 1)
+        vis = getattr(m, "visual", None)
+        mat = getattr(vis, "material", None)
+        img = getattr(mat, "baseColorTexture", None) or getattr(mat, "image", None)
+        uv = getattr(vis, "uv", None)
+        ok = uv is not None and img is not None
+        if not ok and getattr(vis, "kind", None) == "vertex":  # vertex colours: albedo None, the colours in place of UV
+            parts.append((v, f, np.asarray(vis.vertex_colors)[:, :3].astype(np.float64), None))
+            continue
+        parts.append((v, f, np.asarray(uv)[f] if ok else None, np.asarray(img.convert("RGB")) if ok else None))
+    return parts
+
+
+def render_parts(parts, fpx: float, R: np.ndarray, c: np.ndarray, size: tuple[int, int], *,  # type: ignore[no-untyped-def]
+                 background: tuple[int, int, int] = (11, 29, 51)) -> tuple[np.ndarray, np.ndarray]:
+    """Ray-cast ``load_parts`` parts together from a pinhole camera (``fpx``, principal point at the centre,
+    cam_from_world ``R``, centre ``c``), unlit: the nearest hit wins -> (RGB [h, w, 3], hit mask [h, w])."""
+    import open3d as o3d
+    import open3d.core as o3c
+
+    w, h = size
+    scene = o3d.t.geometry.RaycastingScene()
+    ids = [scene.add_triangles(o3c.Tensor(v.astype(np.float32)), o3c.Tensor(f.astype(np.uint32))) for v, f, _, _ in parts]
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    d = (np.stack([(xs + 0.5 - w / 2) / fpx, (ys + 0.5 - h / 2) / fpx, np.ones_like(xs)], -1).reshape(-1, 3) @ R).astype(np.float32)
+    hit = scene.cast_rays(o3c.Tensor(np.concatenate([np.broadcast_to(c, d.shape).astype(np.float32), d], 1)))
+    geo, prim, bary = hit["geometry_ids"].numpy(), hit["primitive_ids"].numpy().astype(np.int64), hit["primitive_uvs"].numpy()
+    ok = np.isfinite(hit["t_hit"].numpy())
+    out = np.tile(np.array(background, np.uint8), (h * w, 1))
+    for gid, (_, _, uv, albedo) in zip(ids, parts, strict=True):
+        sel = ok & (geo == gid)
+        if not sel.any():
+            continue
+        p, b = prim[sel], bary[sel]
+        if uv is None:
+            out[sel] = (200, 200, 200)
+            continue
+        if albedo is None:  # vertex colours
+            ff = parts[ids.index(gid)][1][p]
+            out[sel] = ((1 - b[:, :1] - b[:, 1:]) * uv[ff[:, 0]] + b[:, :1] * uv[ff[:, 1]] + b[:, 1:] * uv[ff[:, 2]]).astype(np.uint8)
+            continue
+        tuv = (1 - b[:, :1] - b[:, 1:]) * uv[p, 0] + b[:, :1] * uv[p, 1] + b[:, 1:] * uv[p, 2]
+        sh, sw = albedo.shape[:2]
+        tx = np.clip(tuv[:, 0] * sw - 0.5, 0, sw - 1).astype(np.int64)
+        ty = np.clip((1.0 - tuv[:, 1]) * sh - 0.5, 0, sh - 1).astype(np.int64)
+        out[sel] = albedo[ty, tx]
+    return out.reshape(h, w, 3), ok.reshape(h, w)
 
 
 def _encode(frames_dir: Path, fps: int, out: Path) -> None:

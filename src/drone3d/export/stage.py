@@ -544,6 +544,12 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             except (ValueError, TypeError):
                 pass
         (out_dir / "scene.json").write_text(json.dumps({"title": title, "models": scene_models}, indent=1))
+        comp = out_dir / "complete" / "result.json"  # a complete model built earlier (drone3d.complete) stays linked
+        if comp.is_file():
+            from drone3d.complete import link_scene
+
+            with contextlib.suppress(ValueError, KeyError, IndexError):
+                link_scene(out_dir.parent, int(json.loads(comp.read_text()).get("model", 0)))
     return {"models": rows, "viewer": str(out_dir / "index.html") if viewer and scene_models else None,
             "timing_s": clock.rounded()}  # fmt: skip
 

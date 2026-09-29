@@ -46,7 +46,7 @@ export class Explorer extends EventTarget {
     this.marks = new THREE.Group();
     this.scene.add(this.root, this.marks);
     this.models = [];
-    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false, focus: false, generated: true };
+    this.layers = { mesh: true, texture: true, wireframe: false, shaded: false, points: false, splats: false, cameras: true, photos: false, depth: false, grid: false, focus: false, generated: true, complete: true };
     this.pointSize = 1.5;
     this.imageScale = 2.5; // keyframe photo / depth planes: big enough to read at the model's framing
     this.nav = 'orbit';
@@ -97,6 +97,7 @@ export class Explorer extends EventTarget {
     this.models.push(entry);
     this._cameraTrack(entry);
     if (m.mesh) await this._loadMesh(entry).catch((e) => this.status(`mesh failed: ${e.message || e}`));
+    if (m.complete?.scene && this.layers.complete) await this._loadComplete(entry).catch((e) => this.status(`complete model failed: ${e.message || e}`));
     if (m.generated && this.layers.generated) await this._loadGenerated(entry).catch((e) => this.status(`generated object failed: ${e.message || e}`));
     else if (m.points) { this.layers.points = true; await this._loadPoints(entry); }
     if (this.layers.points && m.points && !entry.pointsObj) await this._loadPoints(entry);
@@ -118,11 +119,28 @@ export class Explorer extends EventTarget {
     entry.genObj = gltf.scene; entry.group.add(gltf.scene); this._apply(entry);
   }
 
-  async _loadMesh(entry) {
-    this.status(`loading ${entry.spec.name} mesh…`);
-    const gltf = await new GLTFLoader().loadAsync(entry.spec.mesh);
-    if (entry.spec.gltf_up === 'y') { gltf.scene.rotation.x = Math.PI / 2; gltf.scene.updateMatrixWorld(true); } // glTF y-up -> survey z-up
-    gltf.scene.traverse((o) => {
+  // The complete model (drone3d.complete): the subject whole -- photographed where the flight saw it, generated
+  // elsewhere -- in the measured scene, the unseen ground filled. It stands in for the measured mesh while on.
+  // A path in scene.json is relative to export/; the console serves it absolute (older consoles did not).
+  _exportUrl(entry, u) {
+    if (!u || /^(\/|https?:)/.test(u)) return u;
+    const m = /^(.*\/export\/)/.exec(entry.spec.mesh || '');
+    return m ? m[1] + u : u;
+  }
+
+  async _loadComplete(entry) {
+    this.status(`loading ${entry.spec.name} complete model…`);
+    const gltf = await new GLTFLoader().loadAsync(this._exportUrl(entry, entry.spec.complete.scene));
+    gltf.scene.rotation.x = Math.PI / 2; gltf.scene.updateMatrixWorld(true); // glTF y-up -> survey z-up
+    this._prepare(entry, gltf.scene, false);
+    entry.completeObj = gltf.scene;
+    entry.group.add(gltf.scene);
+    this._apply(entry);
+    this.status('');
+  }
+
+  _prepare(entry, root, count = true) {
+    root.traverse((o) => {
       if (!o.isMesh) return;
       const map = o.material?.map || null;
       if (map) { // triangle-soup atlas: mip levels blend neighbouring cells into a visible grid
@@ -132,8 +150,15 @@ export class Explorer extends EventTarget {
       if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
       o.userData.map = map;
       o.userData.vc = !!o.geometry.attributes.color;
-      entry.triangles += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
+      if (count) entry.triangles += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
     });
+  }
+
+  async _loadMesh(entry) {
+    this.status(`loading ${entry.spec.name} mesh…`);
+    const gltf = await new GLTFLoader().loadAsync(entry.spec.mesh);
+    if (entry.spec.gltf_up === 'y') { gltf.scene.rotation.x = Math.PI / 2; gltf.scene.updateMatrixWorld(true); } // glTF y-up -> survey z-up
+    this._prepare(entry, gltf.scene);
     entry.meshObj = gltf.scene;
     entry.group.add(gltf.scene);
     entry.box.expandByObject(gltf.scene);
@@ -154,7 +179,8 @@ export class Explorer extends EventTarget {
   }
 
   async _loadSplat(entry) {
-    if (!entry.spec.splat || entry.splatObj) return;
+    const whole = this.layers.complete && entry.spec.complete?.splat; // splats trained on every heading (drone3d.complete)
+    if (whole ? entry.splat360Obj : (!entry.spec.splat || entry.splatObj)) return;
     this.status(`loading ${entry.spec.name} Gaussian splats…`);
     if (!this.spark) {
       const mod = await import(this.sparkUrl || new URL('./vendor/spark/spark.module.min.js', import.meta.url).href);
@@ -162,9 +188,9 @@ export class Explorer extends EventTarget {
       this.spark = new mod.SparkRenderer({ renderer: this.renderer });
       this.scene.add(this.spark);
     }
-    const splat = new this.sparkMod.SplatMesh({ url: entry.spec.splat, fileType: 'splat' });
+    const splat = new this.sparkMod.SplatMesh({ url: whole ? this._exportUrl(entry, entry.spec.complete.splat) : entry.spec.splat, fileType: 'splat' });
     await splat.initialized;
-    entry.splatObj = splat;
+    if (whole) entry.splat360Obj = splat; else entry.splatObj = splat;
     entry.splats = splat.packedSplats?.numSplats ?? 0;
     entry.group.add(splat);
     this.status('');
@@ -241,6 +267,8 @@ export class Explorer extends EventTarget {
     if (name === 'photos' && on) for (const m of this.models) if (!m.photoObj) m.photoObj = this._imagePlanes(m, 'photo');
     if (name === 'depth' && on) for (const m of this.models) if (!m.depthObj) m.depthObj = this._imagePlanes(m, 'depth');
     if (name === 'generated' && on) for (const m of this.models) if (m.spec.generated && !m.genObj) await this._loadGenerated(m);
+    if (name === 'complete' && on) for (const m of this.models) if (m.spec.complete?.scene && !m.completeObj) await this._loadComplete(m);
+    if ((name === 'complete' || name === 'splats') && this.layers.splats) for (const m of this.models) if (m.visible) await this._loadSplat(m).catch((e) => this.status(`splats failed: ${e.message || e}`));
     this.models.forEach((m) => this._apply(m));
     if (name === 'grid') this._grid(on);
     this.dispatchEvent(new CustomEvent('layers'));
@@ -263,9 +291,11 @@ export class Explorer extends EventTarget {
   _apply(entry) { this.wake();
     const L = this.layers;
     const clip = L.focus ? this._focusPlanes(entry) : null;
-    if (entry.meshObj) {
-      entry.meshObj.visible = L.mesh;
-      entry.meshObj.traverse((o) => {
+    const whole = L.complete && !!entry.completeObj;
+    for (const obj of [entry.meshObj, entry.completeObj]) {
+      if (!obj) continue;
+      obj.visible = L.mesh && (obj === entry.completeObj ? whole : !whole);
+      obj.traverse((o) => {
         if (!o.isMesh) return;
         const map = L.texture ? o.userData.map : null;
         const vc = !map && L.texture !== false && o.userData.vc;
@@ -277,11 +307,13 @@ export class Explorer extends EventTarget {
       });
     }
     if (entry.pointsObj) { entry.pointsObj.visible = L.points; entry.pointsObj.material.size = this.pointSize; entry.pointsObj.material.clippingPlanes = clip; }
-    if (entry.splatObj) entry.splatObj.visible = L.splats;
+    const whole360 = L.complete && !!entry.splat360Obj;
+    if (entry.splatObj) entry.splatObj.visible = L.splats && !whole360;
+    if (entry.splat360Obj) entry.splat360Obj.visible = L.splats && whole360;
     if (entry.camObj) entry.camObj.visible = L.cameras;
     if (entry.photoObj) entry.photoObj.visible = L.photos;
     if (entry.depthObj) entry.depthObj.visible = L.depth;
-    if (entry.genObj) entry.genObj.visible = L.generated && L.mesh;
+    if (entry.genObj) entry.genObj.visible = L.generated && L.mesh && !whole;
   }
 
   layerAvailable(name) {
@@ -289,7 +321,7 @@ export class Explorer extends EventTarget {
     return { mesh: v.some((m) => m.mesh), texture: v.some((m) => m.mesh), points: v.some((m) => m.points), splats: v.some((m) => m.splat),
       cameras: v.some((m) => (m.cameras || []).length > 1), photos: v.some((m) => m.images && m.camera_rotations && (m.frames?.photo || m.thumb)),
       depth: v.some((m) => m.images && m.camera_rotations && (m.frames?.depth || m.base)), focus: v.some((m) => m.focus),
-      generated: v.some((m) => m.generated) }[name] ?? true;
+      generated: v.some((m) => m.generated), complete: v.some((m) => m.complete?.scene) }[name] ?? true;
   }
 
   setPointSize(s) { this.wake(); this.pointSize = s; this.models.forEach((m) => this._apply(m)); }

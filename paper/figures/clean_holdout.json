@@ -1,0 +1,122 @@
+[
+ {
+  "model": "new_highrise_orbit:0",
+  "variant": "centroids+slope",
+  "mesh": "raw",
+  "held_out": 5,
+  "candidates": 36,
+  "psnr_median": 17.03,
+  "psnr_mean": 17.3,
+  "views_compared": 5,
+  "unseen_share": 0.0085,
+  "coverage": 0.619
+ },
+ {
+  "model": "new_highrise_orbit:0",
+  "variant": "centroids+slope",
+  "mesh": "clean",
+  "held_out": 5,
+  "candidates": 36,
+  "psnr_median": 17.11,
+  "psnr_mean": 17.32,
+  "views_compared": 5,
+  "unseen_share": 0.035,
+  "coverage": 0.629
+ },
+ {
+  "model": "merge_colosseum:0",
+  "variant": "centroids+slope",
+  "mesh": "raw",
+  "held_out": 6,
+  "candidates": 41,
+  "psnr_median": 17.42,
+  "psnr_mean": 17.71,
+  "views_compared": 6,
+  "unseen_share": 0.0164,
+  "coverage": 0.928
+ },
+ {
+  "model": "merge_colosseum:0",
+  "variant": "centroids+slope",
+  "mesh": "clean",
+  "held_out": 6,
+  "candidates": 41,
+  "psnr_median": 17.45,
+  "psnr_mean": 17.69,
+  "views_compared": 6,
+  "unseen_share": 0.0237,
+  "coverage": 0.951
+ },
+ {
+  "model": "map_jal_mahal_jaipur_india_drone_cinematic:0",
+  "variant": "centroids+slope",
+  "mesh": "raw",
+  "held_out": 7,
+  "candidates": 47,
+  "psnr_median": 17.7,
+  "psnr_mean": 18.19,
+  "views_compared": 7,
+  "unseen_share": 0.0545,
+  "coverage": 0.564
+ },
+ {
+  "model": "map_jal_mahal_jaipur_india_drone_cinematic:0",
+  "variant": "centroids+slope",
+  "mesh": "clean",
+  "held_out": 7,
+  "candidates": 47,
+  "psnr_median": 17.44,
+  "psnr_mean": 18.19,
+  "views_compared": 7,
+  "unseen_share": 0.058,
+  "coverage": 0.578
+ },
+ {
+  "model": "map_aerial_views_of_rural_riches_drone_shot:0",
+  "variant": "centroids+slope",
+  "mesh": "raw",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 23.83,
+  "psnr_mean": 22.5,
+  "views_compared": 3,
+  "unseen_share": 0.0067,
+  "coverage": 0.93
+ },
+ {
+  "model": "map_aerial_views_of_rural_riches_drone_shot:0",
+  "variant": "centroids+slope",
+  "mesh": "clean",
+  "held_out": 3,
+  "candidates": 18,
+  "psnr_median": 23.84,
+  "psnr_mean": 22.58,
+  "views_compared": 3,
+  "unseen_share": 0.013,
+  "coverage": 0.991
+ },
+ {
+  "model": "map_reichstag_berlin_in_4k_stunning_drone_vi:0",
+  "variant": "centroids+slope",
+  "mesh": "raw",
+  "held_out": 3,
+  "candidates": 25,
+  "psnr_median": 12.13,
+  "psnr_mean": 13.47,
+  "views_compared": 3,
+  "unseen_share": 0.0511,
+  "coverage": 0.973
+ },
+ {
+  "model": "map_reichstag_berlin_in_4k_stunning_drone_vi:0",
+  "variant": "centroids+slope",
+  "mesh": "clean",
+  "held_out": 3,
+  "candidates": 25,
+  "psnr_median": 12.22,
+  "psnr_mean": 13.44,
+  "views_compared": 3,
+  "unseen_share": 0.0713,
+  "coverage": 0.993
+ }
+]

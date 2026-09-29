@@ -169,7 +169,7 @@ class ExportConfig:
     max_triangles: int = 600_000  # viewable copies (GLB, textured, FBX); mesh.ply keeps full density
     # the viewable copies are the clean model: the ground as a terrain surface, the objects on it smoothed (edge-
     # preserving), fragments dropped (drone3d.export.terrain); held out on five videos the texture reproduced the
-    # photos as well (-0.23..+0.12 dB) and covered 1-7 points more of them. mesh.ply stays the fused mesh.
+    # photos as well (-0.26..+0.09 dB, experiments/texture_holdout.py --clean) and covered 1-6 points more of them. mesh.ply stays the fused mesh.
     clean_mesh: bool = True
     splats: bool = True  # convert trained Gaussian splats (splat stage) for the web viewer
     max_splats: int = 1_500_000  # the most important splats kept in the web file (32 bytes each)

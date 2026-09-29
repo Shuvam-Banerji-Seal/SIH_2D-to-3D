@@ -67,10 +67,13 @@ flowchart LR
    camera centres to GPS leaves the roll about it undetermined; the model is
    levelled on its RANSAC ground plane and only yaw, scale and translation are
    fitted. LAS and GeoTIFF are written in UTM with the EPSG code.
-7. **Export.** Full-density PLY; a viewable copy (≤ 600k triangles) as GLB,
-   textured OBJ/GLB (atlas baked on the GPU from the 1920 px keyframes: each
-   triangle from the view that sees it best, unoccluded) and FBX; LAS; DSM and
-   orthophoto GeoTIFFs; a self-contained three.js viewer.
+7. **Export.** Full-density PLY (the fused mesh: the measurement); a viewable
+   copy (≤ 600k triangles) that is a **clean model** — the ground as a terrain
+   surface (a morphological ground filter, holes inpainted), the buildings on it
+   smoothed edge-preserving (bilateral normal filtering, on the GPU), floaters
+   dropped — as GLB, textured OBJ/GLB (atlas baked on the GPU from the 1920 px
+   keyframes: each triangle from the view that sees it best, unoccluded) and
+   FBX; LAS; DSM and orthophoto GeoTIFFs; a self-contained three.js viewer.
 
 ## Measured
 
@@ -167,14 +170,15 @@ outputs/<run>/
 ├── export/
 │   ├── index.html, scene.json, vendor/   web viewer (drone3d view <run>)
 │   └── model_N/
-│       ├── mesh.ply                      full-density mesh, vertex colours
-│       ├── mesh.glb                      viewable copy (<= 600k triangles)
+│       ├── mesh.ply                      full-density fused mesh, vertex colours (the measurement)
+│       ├── mesh.glb                      viewable clean model: terrain + smoothed objects (<= 600k triangles)
 │       ├── mesh_textured.{glb,obj,mtl}   textured from the keyframes (+ _albedo.jpg)
 │       ├── mesh.fbx                      textured, via assimp
 │       ├── points.{ply,las}              dense point cloud (LAS in UTM + EPSG when georeferenced)
 │       ├── splats.splat                  Gaussian splats for the web (with the splat stage)
 │       └── dsm.tif, ortho.tif            GeoTIFF surface model and orthophoto
-│   └── generated/object.glb              generated object (TRELLIS.2, on request; not a measurement)
+│   ├── generated/object.glb              generated object (TRELLIS.2, on request; not a measurement)
+│   └── complete/                         complete model: subject.{glb,obj,fbx,stl}, scene.glb, splats_360.splat
 ├── dense/model_N/depth/*.jpg             fused depth per keyframe (turbo; black = no depth / sky)
 ├── dataset/images/pass_NN/*.jpg          keyframes (1920 px)
 ├── dataset/sparse/N/                     COLMAP models, one per pass
@@ -202,6 +206,37 @@ Conditioning TRELLIS.2 on several keyframes from different sides (averaged per f
 several rings on each other -- it generates in a frame tied to the input view -- so it uses one. It runs
 in its own environment (`tools/setup_trellis2.sh`): about 2.5 min to load, 80 s to generate at 1024^3
 and 80 s to bake the GLB on the A100, 8 GB of GPU memory at most.
+
+## Complete model (360°)
+
+A flight that circles its subject part of the way measures part of it: the highrise orbit
+(`_USyVhn1awE`, 37 s) flies 110° of heading, so its fused model is two walls and a corner, and from
+the far side the splats smear. After **Generate object** has placed TRELLIS.2's whole object,
+`drone3d complete outputs/<run> [--splats]` (run automatically after placement) makes it the model:
+
+- **flat facades** -- the object's large planes (≥ 4 % of its area) are snapped flat: the generator's
+  window recesses are not the real facade's, and photographs projected onto them smear;
+- **carving** -- faces the keyframes saw *through* (nearer than the measured surface behind them, or
+  on the sky, in two keyframes) are removed: an invented canopy and the crown above the real roof line
+  went; what no keyframe looked at is never carved;
+- **one closed solid** -- voxelised in the building's own heading (walls on voxel planes), inside =
+  flood fill, or enclosed along two of three axes where carving opened a hole; marching cubes; one
+  watertight body (the highrise: 365k triangles, 42 cubic units, not a hollow shell);
+- **texture** -- the keyframes projected straight onto the solid's atlas (occlusion by a depth map of
+  the whole scene, the export's exposure gains, Depth Anything's sky never used), the generated
+  texture colour-matched elsewhere (highrise: 36 % of the subject's texels photographed);
+- **scene** -- the measured shell inside the solid and the fused debris on its roof give way; the
+  ground the flight never saw round it is filled at the terrain's height with inpainted colours;
+- **360° splats** (`--splats`) -- views of the complete scene rendered every 7.5° round the headings
+  the flight missed (two rings), supervised only where the complete model is and in the sky, trained
+  with the keyframes.
+
+`export/complete/`: `subject.{glb,obj,fbx,stl}` (upright, y-up, pivot at the centre of its base; the
+STL watertight), `scene.glb` (nodes `measured_scene`, `subject`, `ground_fill`), `splats_360.splat`,
+`result.json` (how much is photographed, generated, carved). The explorer's **Complete model (360°)**
+layer shows it, with the 360° splats in the splat layer. What the flight did not see is generated, not
+measured: it is never part of the metrics. `tools/orbit_views.py RUN` renders any model from N headings
+round the subject, flown or not.
 
 [Fire3D](https://github.com/xiahongchi/Fire3D) (MIT) completes every object of a posed RGB-D video
 from all its frames at once; `tools/fire3d_export.py` writes a run's model in its input format

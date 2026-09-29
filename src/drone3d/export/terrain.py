@@ -40,7 +40,7 @@ def _fill(grid: np.ndarray, valid: np.ndarray, *, iters: int = 400) -> np.ndarra
 
 
 def terrain_surface(points: np.ndarray, cell: float, window: float, *, rise: float | None = None, low: float = 15.0,
-                    smooth_cells: float = 1.5) -> tuple[np.ndarray, np.ndarray, tuple[float, float]]:  # fmt: skip
+                    smooth_cells: float = 1.5, fill_iters: int = 400) -> tuple[np.ndarray, np.ndarray, tuple[float, float]]:  # fmt: skip
     """Ground height grid from surface points -> ``(z [H, W], data [H, W] bool, (x0, y0))``, cell centres at
     ``x0 + (j + .5) cell``.
 
@@ -69,13 +69,19 @@ def terrain_surface(points: np.ndarray, cell: float, window: float, *, rise: flo
     filled = _fill(z, data, iters=0)  # nearest values: enough for the opening, and 2 s cheaper on a 1M-cell grid
     k = max(3, int(round(window / cell)) | 1)
     opened = ndimage.grey_dilation(ndimage.grey_erosion(filled, size=(k, k)), size=(k, k))
-    ground = _fill(filled, data & (filled - opened <= rise))
+    ground = _fill(filled, data & (filled - opened <= rise), iters=fill_iters)
     ground = ndimage.gaussian_filter(ground, smooth_cells)
     return ground, data, (float(x0), float(y0))
 
 
-def _face_adjacency(f: np.ndarray, n_v: int):  # type: ignore[no-untyped-def]
-    """Sparse face-face matrix: faces sharing a vertex."""
+def _face_adjacency(f: np.ndarray, n_v: int, neighbours: str = "vertex"):  # type: ignore[no-untyped-def]
+    """Face-face pairs, both directions: faces sharing a vertex (``"vertex"``, a sparse incidence product, ~12
+    per face) or an edge (``"edge"``, three per face, from sorted edges)."""
+    if neighbours == "edge":
+        import trimesh
+
+        adj = trimesh.graph.face_adjacency(faces=np.asarray(f))
+        return np.concatenate([adj[:, 0], adj[:, 1]]), np.concatenate([adj[:, 1], adj[:, 0]])
     from scipy import sparse
 
     rows = np.repeat(np.arange(len(f)), 3)
@@ -86,7 +92,7 @@ def _face_adjacency(f: np.ndarray, n_v: int):  # type: ignore[no-untyped-def]
 
 
 def bilateral_smooth(v: np.ndarray, f: np.ndarray, *, normal_iters: int = 6, vertex_iters: int = 10,
-                     sigma_r: float = 0.35) -> np.ndarray:  # fmt: skip
+                     sigma_r: float = 0.35, neighbours: str = "vertex") -> np.ndarray:  # fmt: skip
     """Bilateral normal filtering (Zheng et al. 2011) then the vertex update of Sun et al. 2007 -> new vertices.
 
     On the GPU when there is one: Colosseum's 431k object triangles, 5 M neighbour pairs, took 24 s in numpy
@@ -96,7 +102,8 @@ def bilateral_smooth(v: np.ndarray, f: np.ndarray, *, normal_iters: int = 6, ver
         import torch
 
         if torch.cuda.is_available():
-            return _bilateral_torch(v, f, normal_iters=normal_iters, vertex_iters=vertex_iters, sigma_r=sigma_r)
+            return _bilateral_torch(v, f, normal_iters=normal_iters, vertex_iters=vertex_iters, sigma_r=sigma_r,
+                                    neighbours=neighbours)
     except ImportError:
         pass
     except RuntimeError as exc:  # torch.cuda.OutOfMemoryError is one
@@ -104,14 +111,16 @@ def bilateral_smooth(v: np.ndarray, f: np.ndarray, *, normal_iters: int = 6, ver
 
         logging.getLogger(__name__).warning("bilateral smoothing on the CPU: %s", str(exc)[:120])
         torch.cuda.empty_cache()
-    return _bilateral_numpy(v, f, normal_iters=normal_iters, vertex_iters=vertex_iters, sigma_r=sigma_r)
+    return _bilateral_numpy(v, f, normal_iters=normal_iters, vertex_iters=vertex_iters, sigma_r=sigma_r,
+                            neighbours=neighbours)
 
 
-def _bilateral_torch(v: np.ndarray, f: np.ndarray, *, normal_iters: int, vertex_iters: int, sigma_r: float) -> np.ndarray:
+def _bilateral_torch(v: np.ndarray, f: np.ndarray, *, normal_iters: int, vertex_iters: int, sigma_r: float,
+                     neighbours: str = "vertex") -> np.ndarray:  # fmt: skip
     import torch
 
     dev = "cuda"
-    a_, b_ = _face_adjacency(np.asarray(f, np.int64), len(v))
+    a_, b_ = _face_adjacency(np.asarray(f, np.int64), len(v), neighbours)
     fa = torch.as_tensor(np.asarray(f, np.int64), device=dev)
     A, B = torch.as_tensor(a_, device=dev, dtype=torch.long), torch.as_tensor(b_, device=dev, dtype=torch.long)
     x = torch.as_tensor(np.asarray(v, np.float64), device=dev)
@@ -144,10 +153,11 @@ def _bilateral_torch(v: np.ndarray, f: np.ndarray, *, normal_iters: int, vertex_
     return out
 
 
-def _bilateral_numpy(v: np.ndarray, f: np.ndarray, *, normal_iters: int, vertex_iters: int, sigma_r: float) -> np.ndarray:
+def _bilateral_numpy(v: np.ndarray, f: np.ndarray, *, normal_iters: int, vertex_iters: int, sigma_r: float,
+                     neighbours: str = "vertex") -> np.ndarray:  # fmt: skip
     v = np.asarray(v, np.float64).copy()
     f = np.asarray(f, np.int64)
-    a_, b_ = _face_adjacency(f, len(v))
+    a_, b_ = _face_adjacency(f, len(v), neighbours)
     for _ in range(max(1, vertex_iters // 5)):
         tri = v[f]
         cen = tri.mean(1)
@@ -176,12 +186,15 @@ def _bilateral_numpy(v: np.ndarray, f: np.ndarray, *, normal_iters: int, vertex_
 
 
 def clean_model(v: np.ndarray, f: np.ndarray, *, voxel: float, window: float, keep: float = 0.002,
-                height: float | None = None, grid_cells: int = 1_000_000) -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
+                height: float | None = None, grid_cells: int = 1_000_000, fill_iters: int = 60,
+                neighbours: str = "edge") -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
     """Terrain + smoothed objects from a fused mesh (z up) -> ``(vertices, faces, info)``.
 
     ``window``: wider than the widest building (the opening removes what is narrower); ``height``: how far above
     the terrain a surface must stand to be an object (default 3 voxels); ``keep``: object fragments with fewer
-    than this share of the object triangles are dropped (floaters).
+    than this share of the object triangles are dropped (floaters). ``fill_iters`` (60) and ``neighbours``
+    (``"edge"``) against 400 and ``"vertex"``: 0.8 s instead of 3.7 on rural's model, the result a median 0.00
+    to 0.02 voxels from it (p95 0.19-0.27) on rural and Angkor Wat.
     """
     import trimesh
 
@@ -190,7 +203,7 @@ def clean_model(v: np.ndarray, f: np.ndarray, *, voxel: float, window: float, ke
     ext = np.ptp(v[:, :2], axis=0)
     cell = max(2.0 * voxel, float(np.sqrt(ext[0] * ext[1] / grid_cells)))
     height = 3.0 * voxel if height is None else height
-    ground, data, (x0, y0) = terrain_surface(v, cell, window, rise=height)
+    ground, data, (x0, y0) = terrain_surface(v, cell, window, rise=height, fill_iters=fill_iters)
     gh, gw = ground.shape
 
     def ground_at(xy: np.ndarray) -> np.ndarray:
@@ -211,7 +224,7 @@ def clean_model(v: np.ndarray, f: np.ndarray, *, voxel: float, window: float, ke
     big = [c for c in comps if len(c) >= keep * len(of)]
     of = of[np.concatenate(big)] if big else of[:0]
     used, inv = np.unique(of, return_inverse=True)
-    ov = bilateral_smooth(v[used], inv.reshape(-1, 3)) if len(of) else np.zeros((0, 3))
+    ov = bilateral_smooth(v[used], inv.reshape(-1, 3), neighbours=neighbours) if len(of) else np.zeros((0, 3))
     of = inv.reshape(-1, 3)
     # terrain grid, only where there were points (dilated a little, so holes between them are closed)
     from scipy import ndimage

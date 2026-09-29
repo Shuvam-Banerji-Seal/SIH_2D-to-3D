@@ -144,7 +144,7 @@ def _subject_view(points: np.ndarray, cams: np.ndarray, axes: np.ndarray) -> np.
 
 
 def _clean_mesh(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, geo: dict | None, points: np.ndarray, cams: np.ndarray,
-                cam_rots: np.ndarray, *, voxel: float, subject) -> tuple:  # type: ignore[no-untyped-def]  # fmt: skip
+                cam_rots: np.ndarray, *, voxel: float, subject, level: np.ndarray | None = None) -> tuple:  # type: ignore[no-untyped-def]  # fmt: skip
     """The clean model (drone3d.export.terrain) of a fused mesh, in the SfM frame the texture is baked in.
 
     Cleaning needs z up: the export's own frame (the georeference, or the levelling), and back. The opening
@@ -158,8 +158,8 @@ def _clean_mesh(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, geo: dict |
     if geo is not None:
         tr = geo["transform"]
         s_, r_, t_ = float(tr["scale"]), np.asarray(tr["rotation"]), np.asarray(tr["translation"])
-    else:
-        s_, r_, t_ = 1.0, _level(points, cams, np.transpose(cam_rots, (0, 2, 1))), np.zeros(3)
+    else:  # the export's levelling, when it has it (1.7 s for rural's model when recomputed)
+        s_, r_, t_ = 1.0, level if level is not None else _level(points, cams, np.transpose(cam_rots, (0, 2, 1))), np.zeros(3)
     up = s_ * v @ r_.T + t_
     extent = float(np.linalg.norm(np.percentile(up[:, :2], 95, 0) - np.percentile(up[:, :2], 5, 0)))
     window = 0.6 * s_ * subject[1] if subject is not None else 0.1 * extent
@@ -393,11 +393,16 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         # smoothed, fragments dropped -- the fused mesh's crumpled walls and holed ground read as broken triangles.
         src_v, src_f, src_vc, src_mesh = v, f, vc, mesh
         clean_info = None
+        rot = None  # the levelling (a model without a georeference): computed once, for the clean model and the export
+        if geo_by_model.get(m["model"]) is None:
+            with clock("level"):
+                rot = _level(p, cams, np.transpose(cam_rots, (0, 2, 1)))  # world-to-camera, as estimate_up takes them
         if clean_mesh:
             with clock("clean"):
                 try:
                     src_v, src_f, src_vc, clean_info = _clean_mesh(v, f, vc, geo_by_model.get(m["model"]), p, cams, cam_rots,
-                                                                   voxel=float(m.get("voxel") or 0.0), subject=subject)  # fmt: skip
+                                                                   voxel=float(m.get("voxel") or 0.0), subject=subject,
+                                                                   level=rot)  # fmt: skip
                     src_mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(src_v), o3d.utility.Vector3iVector(src_f))
                     if src_vc is not None:
                         src_mesh.vertex_colors = o3d.utility.Vector3dVector(src_vc[:, :3] / 255.0)
@@ -433,8 +438,6 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             units, frame = "m", "ENU"
             to_export = {"scale": float(t.scale), "rotation": np.asarray(t.rotation).tolist(), "translation": np.asarray(t.translation).tolist()}
         else:
-            with clock("level"):
-                rot = _level(p, cams, np.transpose(cam_rots, (0, 2, 1)))  # world-to-camera, as estimate_up takes them
             v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
             cam_rots = rot @ cam_rots
             dv = dv @ rot.T

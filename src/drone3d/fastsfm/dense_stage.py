@@ -423,7 +423,7 @@ def run_dense(
             torch.cuda.empty_cache()
     del raft, mono
     if fusion is not None:
-        fusion.close()
+        fusion.close(wait=False)
     torch.cuda.empty_cache()
     return {"models": results, "seconds": round(time.perf_counter() - started, 2),
             "fusion_restarts": fusion.restarts if fusion is not None else None}  # fmt: skip

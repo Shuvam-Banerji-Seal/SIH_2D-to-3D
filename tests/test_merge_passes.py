@@ -47,3 +47,25 @@ def test_groups_chain_transforms_to_the_largest_model() -> None:
     x = np.array([1.0, 2.0, 3.0])
     apply = lambda t, v: t[0] * t[1] @ v + t[2]  # noqa: E731
     assert np.allclose(apply(groups[0]["members"]["c"], x), apply(t_ab, apply(t_bc, x)))  # c -> b -> a
+
+
+def test_groups_viewed_from_very_different_distances_stay_apart() -> None:
+    near = (0.5, np.eye(3), np.zeros(3))  # b -> a: b's units are twice a's
+    edges = [{"a": "a", "b": "b", "sim3": near, "inliers": 900, "candidates": 4000},
+             {"a": "a", "b": "c", "sim3": (1.0, np.eye(3), np.zeros(3)), "inliers": 800, "candidates": 4000}]
+    # b is seen from 40 of its units = 20 of a's (ratio 2): merged; c from 100 (ratio 10): its own model
+    groups = groups_from_links(["a", "b", "c"], edges, depths={"a": 10.0, "b": 40.0, "c": 100.0})
+    assert [sorted(g["members"]) for g in groups] == [["a", "b"], ["c"]]
+    assert edges[1]["rejected"].startswith("depth ratio 10")
+    assert [sorted(g["members"]) for g in groups_from_links(["a", "b", "c"], edges)] == [["a", "b", "c"]]
+
+
+def test_a_larger_model_joining_later_roots_the_group() -> None:
+    t = (2.0, _rot(np.array([0, 0, 1.0]), 30), np.array([1.0, 2.0, 0]))
+    edges = [{"a": "c", "b": "b", "sim3": t, "inliers": 900, "candidates": 4000},  # b -> c, before a joins
+             {"a": "a", "b": "c", "sim3": t, "inliers": 800, "candidates": 4000}]  # c -> a
+    (g,) = groups_from_links(["a", "b", "c"], edges)
+    x = np.array([0.5, -1.0, 2.0])
+    apply = lambda s, v: s[0] * s[1] @ v + s[2]  # noqa: E731
+    assert g["root"] == "a" and np.allclose(apply(g["members"]["a"], x), x)
+    assert np.allclose(apply(g["members"]["b"], x), apply(t, apply(t, x)))  # b -> c -> a

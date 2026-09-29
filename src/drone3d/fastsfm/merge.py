@@ -22,7 +22,7 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["compose", "invert", "merge_models", "ransac_sim3", "umeyama"]
+__all__ = ["compose", "invert", "merge_models", "model_depth", "ransac_sim3", "umeyama"]
 
 log = get_logger(__name__)
 
@@ -293,45 +293,77 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
     return edges, timing
 
 
-def groups_from_links(names: list[str], edges: list[dict], *, min_inliers: int = 300,
-                      min_share: float = 0.2) -> list[dict]:  # fmt: skip
+def model_depth(rec) -> float:  # type: ignore[no-untyped-def]
+    """A model's viewing distance in its own units: the median over its images (50 of them at most, spread
+    over the model: 2.3 s for Iceland's 603 otherwise) of the median depth of the SfM points each one observes
+    (nan if none has any)."""
+    ims = sorted((im for im in rec.images.values() if im.has_pose), key=lambda im: im.name)
+    per = []
+    for im in [ims[int(i)] for i in np.linspace(0, len(ims) - 1, min(50, len(ims)))] if ims else []:
+        ids = [p.point3D_id for p in im.points2D if p.has_point3D()]
+        if len(ids) < 5:
+            continue
+        pose = im.cam_from_world()
+        xyz = np.array([rec.points3D[i].xyz for i in ids])
+        z = xyz @ np.asarray(pose.rotation.matrix())[2] + float(pose.translation[2])
+        if (z > 0).any():
+            per.append(float(np.median(z[z > 0])))
+    return float(np.median(per)) if per else float("nan")
+
+
+def _weighted_median(x: np.ndarray, w: np.ndarray) -> float:
+    o = np.argsort(x)
+    c = np.cumsum(w[o])
+    return float(x[o][np.searchsorted(c, 0.5 * c[-1])])
+
+
+def groups_from_links(names: list[str], edges: list[dict], *, min_inliers: int = 300, min_share: float = 0.2,
+                      depths: dict[str, float] | None = None, weights: dict[str, float] | None = None,
+                      max_depth_ratio: float = 8.0) -> list[dict]:  # fmt: skip
     # Colosseum, 4000 lifted matches per model pair: true links 24-33 % inliers (scales consistent around
     # loops: 0.176 x 0.441 = 0.078 against 0.084 measured), everything else under 15 %.
-    """Maximum spanning forest over confident edges -> groups ``{"root", "members": {name: Sim3 to root}}``."""
+    """Maximum spanning forest over confident edges -> groups ``{"root", "members": {name: Sim3 to root}}``.
+
+    ``names`` largest first: each group's root is its largest model. With ``depths`` (each model's viewing
+    distance, ``model_depth``) two groups whose distances in one frame differ by more than ``max_depth_ratio``
+    stay apart: one TSDF voxel (three pixel footprints) cannot serve both. Cristo Redentor's merged model held
+    a shot 62 times farther than the rest; fused at the others' voxel, its views' completeness fell from 0.50
+    to 0.40 (legitimate spreads: 6.6 at Colosseum, the others 1.1-1.8). Such an edge gets ``"rejected"``.
+    """
     good = sorted((e for e in edges if e["inliers"] >= min_inliers and e["inliers"] >= min_share * e["candidates"]),
                   key=lambda e: -e["inliers"])  # fmt: skip
-    parent = {n: n for n in names}
+    order = {n: i for i, n in enumerate(names)}
+    ident: Sim3 = (1.0, np.eye(3), np.zeros(3))
+    comp: dict[str, dict[str, Sim3]] = {n: {n: ident} for n in names}  # root -> {member: Sim3 member -> root}
+    root_of = {n: n for n in names}
 
-    def find(n: str) -> str:
-        while parent[n] != n:
-            parent[n] = parent[parent[n]]
-            n = parent[n]
-        return n
+    def distance(members: dict[str, Sim3], to: Sim3 = ident) -> float:
+        ms = [m for m in members if depths is not None and np.isfinite(depths.get(m, np.nan))]
+        if not ms:
+            return float("nan")
+        d = np.array([to[0] * members[m][0] * depths[m] for m in ms])  # type: ignore[index]
+        return _weighted_median(d, np.array([(weights or {}).get(m, 1.0) for m in ms]))
 
-    tree: dict[str, list[tuple[str, Sim3]]] = {n: [] for n in names}
     for e in good:
-        ra, rb = find(e["a"]), find(e["b"])
+        ra, rb = root_of[e["a"]], root_of[e["b"]]
         if ra == rb:
             continue
-        parent[rb] = ra
-        tree[e["a"]].append((e["b"], e["sim3"]))  # b -> a
-        tree[e["b"]].append((e["a"], invert(e["sim3"])))  # a -> b
-    out, seen = [], set()
-    for root in names:  # largest first: each group's root is its largest model
-        if root in seen:
-            continue
-        members, stack = {root: (1.0, np.eye(3), np.zeros(3))}, [root]
-        seen.add(root)
-        while stack:
-            cur = stack.pop()
-            for nxt, t_cur_from_nxt in tree[cur]:
-                if nxt in seen:
-                    continue
-                members[nxt] = compose(members[cur], t_cur_from_nxt)
-                seen.add(nxt)
-                stack.append(nxt)
-        out.append({"root": root, "members": members})
-    return out
+        t = compose(comp[ra][e["a"]], compose(e["sim3"], invert(comp[rb][e["b"]])))  # rb's frame -> ra's
+        if depths is not None:
+            da, db = distance(comp[ra]), distance(comp[rb], t)
+            if np.isfinite(da) and np.isfinite(db) and max(da, db) > max_depth_ratio * min(da, db):
+                e["rejected"] = f"depth ratio {max(da, db) / min(da, db):.1f}"
+                continue
+        merged = comp[ra] | {m: compose(t, x) for m, x in comp.pop(rb).items()}
+        del comp[ra]
+        root = min(ra, rb, key=order.__getitem__)
+        if root != ra:  # the larger model roots the group
+            back = invert(merged[root])
+            merged = {m: compose(back, x) for m, x in merged.items()}
+        comp[root] = merged
+        for m in merged:
+            root_of[m] = root
+    return [{"root": r, "members": comp[r]} for r in names if r in comp]
 
 
 def write_merged(recs: dict[str, Any], members: dict[str, Sim3], out_dir: Path) -> None:
@@ -393,7 +425,9 @@ def merge_models(model_dirs: list[Path], images: Path, out_root: Path, **kw: Any
     recs = {p.name: pycolmap.Reconstruction(str(p)) for p in model_dirs}
     names = sorted(recs, key=lambda k: -recs[k].num_reg_images())
     edges, timing = find_links(recs, images, **{k: v for k, v in kw.items() if k in ("pairs_per_model_pair", "setting")})
-    groups = groups_from_links(names, edges, **{k: v for k, v in kw.items() if k in ("min_inliers", "min_share")})
+    groups = groups_from_links(names, edges, depths={n: model_depth(r) for n, r in recs.items()},
+                               weights={n: float(r.num_reg_images()) for n, r in recs.items()},
+                               **{k: v for k, v in kw.items() if k in ("min_inliers", "min_share", "max_depth_ratio")})  # fmt: skip
     t0 = time.perf_counter()
     out = []
     for k, g in enumerate(sorted(groups, key=lambda g: -sum(recs[n].num_reg_images() for n in g["members"]))):

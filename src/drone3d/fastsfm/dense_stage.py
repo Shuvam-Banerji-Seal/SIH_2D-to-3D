@@ -75,11 +75,15 @@ def _model_frames(model_dir: Path, images: Path, long_side: int, stride: int = 1
     from drone3d.fastsfm.stage import load_frames
 
     rec = pycolmap.Reconstruction(str(model_dir))
-    ims = sorted((im for im in rec.images.values() if im.has_pose), key=lambda im: im.name)
-    if len(ims) >= 40:  # short passes need every view (14 keyframes at stride 2 lost 90 % of the mesh)
-        ims = ims[::stride]
-    else:
-        stride = 1
+    posed = sorted((im for im in rec.images.values() if im.has_pose), key=lambda im: im.name)
+    # Short passes need every view (14 keyframes at stride 2 lost 90 % of the mesh), so the stride is per shot:
+    # a merged model holds several, and striding them together halved its short members' views.
+    ims, strides = [], []
+    for shot in dict.fromkeys(im.name.split("/")[0] for im in posed):
+        of = [im for im in posed if im.name.split("/")[0] == shot]
+        st = stride if len(of) >= 40 else 1
+        ims += of[::st]
+        strides += [st] * len(of[::st])
     frames, full = load_frames([images / im.name for im in ims], long_side)
     s = frames.shape[2] / full[0]
     cams = []
@@ -87,7 +91,7 @@ def _model_frames(model_dir: Path, images: Path, long_side: int, stride: int = 1
         c = Camera.from_colmap(im, rec.cameras[im.camera_id])
         cams.append(Camera(c.f * s, c.cx * s, c.cy * s, c.k1, c.rotation, c.translation))
     ties = tie_depths(rec, ims, s, (frames.shape[2], frames.shape[1]))
-    return ims, cams, frames, stride, ties
+    return ims, cams, frames, strides, ties
 
 
 def tie_depths(rec, ims, scale: float, size: tuple[int, int]) -> list[np.ndarray]:  # type: ignore[no-untyped-def]
@@ -199,14 +203,16 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
     t0 = time.perf_counter()
     # Depth references: every ``keyframe_stride``-th keyframe; gaps are in original keyframes.
     # Each surface is in ~4 keyframes' views, so the TSDF loses little and every step halves.
-    ims, cams, frames, used_stride, ties = _model_frames(model_dir, images, long_side, keyframe_stride)
-    step_gaps = sorted({max(1, round(g / used_stride)) for g in gaps})
+    ims, cams, frames, strides, ties = _model_frames(model_dir, images, long_side, keyframe_stride)
+    used_stride = max(strides)
+    step_gaps = {st: {max(1, round(g / st)) for g in gaps} for st in set(strides)}
     n, h, w, _ = frames.shape
     timing["load"] = time.perf_counter() - t0
     t0 = time.perf_counter()
     # neighbours within one pass: a merged model holds several shots, and flow between them is meaningless
     shot = [im.name.split("/")[0] for im in ims]
-    pairs = [(i, i + d) for d in step_gaps for i in range(n - d) if shot[i] == shot[i + d]]
+    pairs = [(i, i + d) for d in sorted(set().union(*step_gaps.values())) for i in range(n - d)
+             if shot[i] == shot[i + d] and d in step_gaps[strides[i]]]  # fmt: skip
     cand: list[list[tuple[torch.Tensor, torch.Tensor]]] = [[] for _ in range(n)]
     for s in range(0, len(pairs), 32):
         chunk = pairs[s : s + 32]

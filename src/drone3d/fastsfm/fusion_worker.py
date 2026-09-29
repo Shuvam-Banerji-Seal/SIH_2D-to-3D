@@ -88,15 +88,24 @@ class FusionWorker:
         child.close()
         self._conn = parent
 
-    def _stop(self) -> None:
+    def _stop(self, wait: bool = True) -> None:
         if self._conn is not None:
             with contextlib.suppress(OSError, BrokenPipeError):
                 self._conn.send(None)
             self._conn.close()
-        if self._proc is not None:
-            self._proc.join(timeout=10)
-            if self._proc.is_alive():
-                self._proc.kill()
+        proc = self._proc
+        if proc is not None:
+            def reap() -> None:
+                proc.join(timeout=10)
+                if proc.is_alive():
+                    proc.kill()
+
+            if wait:
+                reap()
+            else:  # the worker tears Open3D's CUDA context down on its own; nothing downstream waits for that
+                import threading
+
+                threading.Thread(target=reap, name="drone3d-fusion-reap", daemon=True).start()
         self._proc = self._conn = None
 
     def fuse(self, frames: list, **kw: Any) -> dict:
@@ -123,8 +132,9 @@ class FusionWorker:
             self._stop()
         raise FusionError("; ".join(errors))
 
-    def close(self) -> None:
-        self._stop()
+    def close(self, wait: bool = True) -> None:
+        """Stop the worker; ``wait=False`` returns at once (its exit took rural's dense stage 6 s)."""
+        self._stop(wait=wait)
 
     def __enter__(self) -> FusionWorker:
         return self

@@ -114,6 +114,14 @@ def build_parser() -> argparse.ArgumentParser:
     gen_parser.add_argument("--seed", type=int, default=0)
     gen_parser.set_defaults(func=cmd_generate)
 
+    comp_parser = subparsers.add_parser(
+        "complete", help="Complete model of a run's subject (after `generate`): whole on every side, GLB/OBJ/FBX/STL"
+    )
+    comp_parser.add_argument("run_dir", type=Path)
+    comp_parser.add_argument("--model", type=int, default=0)
+    comp_parser.add_argument("--splats", action="store_true", help="also train Gaussian splats that are whole from every heading")
+    comp_parser.set_defaults(func=cmd_complete)
+
     subparsers.add_parser("version", help="Print the version").set_defaults(func=cmd_version)
     return parser
 
@@ -289,6 +297,19 @@ def cmd_generate(args: argparse.Namespace) -> int:
     if rec["status"] != "ok":
         print("\n".join(rec.get("log") or []))
     return 0 if rec["status"] == "ok" else 1
+
+
+def cmd_complete(args: argparse.Namespace) -> int:
+    import json
+
+    from drone3d.complete import complete_model, splats_360
+
+    rec = complete_model(args.run_dir, model=args.model)
+    print(json.dumps({k: v for k, v in rec.items() if k not in ("texture", "planes_snapped")}, indent=1))
+    if args.splats:
+        sp = splats_360(args.run_dir, model=args.model)
+        print(json.dumps({k: sp.get(k) for k in ("status", "views", "num_splats", "web", "seconds")}, indent=1, default=str))
+    return 0
 
 
 def cmd_version(args: argparse.Namespace) -> int:

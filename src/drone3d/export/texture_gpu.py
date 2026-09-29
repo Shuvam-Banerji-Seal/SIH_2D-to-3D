@@ -104,6 +104,59 @@ def _view_gains(views: list[View], cen: torch.Tensor, scores: torch.Tensor, *, s
 
 
 @torch.inference_mode()
+def soup_layout(n_f: int, size: int, device) -> tuple[torch.Tensor, torch.Tensor]:  # type: ignore[no-untyped-def]
+    """Two triangles per square cell of a ``size``^2 atlas -> (corner pixels [F, 3, 2], corner UVs [F, 3, 2], v up)."""
+    cells = math.ceil(n_f / 2)
+    per_side = math.ceil(math.sqrt(cells))
+    cs = size // per_side
+    if cs < 3:
+        raise ValueError(f"{n_f} triangles do not fit a {size}^2 atlas")
+    tid = torch.arange(n_f, device=device)
+    cell_id, half = tid // 2, tid % 2
+    ox = (cell_id % per_side).float() * cs
+    oy = (cell_id // per_side).float() * cs
+    m = 1.0  # texel margin kept free inside each cell
+    lo, hi = m, cs - m
+    # half 0: corners (lo,lo) (hi-1,lo) (lo,hi-1); half 1: (hi,hi) (lo+1,hi) (hi,lo+1) -- a 1-texel gap between them
+    c0 = torch.tensor([[lo, lo], [hi - 1, lo], [lo, hi - 1]], device=device)
+    c1 = torch.tensor([[hi, hi], [lo + 1, hi], [hi, lo + 1]], device=device)
+    corners = torch.where(half[:, None, None] == 0, c0[None], c1[None]) + torch.stack([ox, oy], -1)[:, None]  # [F, 3, 2] px
+    uv = corners / size
+    return corners, torch.stack([uv[..., 0], 1.0 - uv[..., 1]], -1)  # OBJ/trimesh: v up
+
+
+def soup_texels(corners: torch.Tensor, tri: torch.Tensor, size: int):  # type: ignore[no-untyped-def]
+    """Every texel of the used cells of a ``soup_layout`` -> (flat index, triangle, in-use mask, barycentric
+    weights (a, b, c), point on the triangle). Margin texels take the nearest point of their triangle, so
+    bilinear filtering in a viewer does not bleed neighbouring cells into each other."""
+    n_f = len(corners)
+    cells = math.ceil(n_f / 2)
+    per_side = math.ceil(math.sqrt(cells))
+    cs = size // per_side
+    dev = corners.device
+    rows_used = math.ceil(cells / per_side) * cs
+    ys, xs = torch.meshgrid(torch.arange(rows_used, device=dev), torch.arange(per_side * cs, device=dev), indexing="ij")
+    px, py = xs.flatten().float() + 0.5, ys.flatten().float() + 0.5
+    cid = (py.long() // cs) * per_side + (px.long() // cs)
+    lx, ly = px - (px.long() // cs).float() * cs, py - (py.long() // cs).float() * cs
+    t_of = cid * 2 + (lx + ly > cs).long()  # which half of the cell
+    ok = t_of < n_f
+    t_of = t_of.clamp(max=n_f - 1)
+    a, b, c = corners[t_of, 0], corners[t_of, 1], corners[t_of, 2]
+    p2 = torch.stack([px, py], -1)
+    v0, v1, v2 = b - a, c - a, p2 - a
+    d00, d01, d11 = (v0 * v0).sum(-1), (v0 * v1).sum(-1), (v1 * v1).sum(-1)
+    d20, d21 = (v2 * v0).sum(-1), (v2 * v1).sum(-1)
+    den = (d00 * d11 - d01 * d01).clamp_min(1e-9)
+    wb = ((d11 * d20 - d01 * d21) / den).clamp(0, 1)
+    wc = ((d00 * d21 - d01 * d20) / den).clamp(0, 1)
+    over = (wb + wc).clamp_min(1.0)  # margin texels: nearest point of the triangle
+    wb, wc = wb / over, wc / over
+    wa = 1 - wb - wc
+    pts = wa[:, None] * tri[t_of, 0] + wb[:, None] * tri[t_of, 1] + wc[:, None] * tri[t_of, 2]
+    return py.long() * size + px.long(), t_of, ok, (wa, wb, wc), pts
+
+
 def bake_soup_texture(
     vertices: np.ndarray,
     faces: np.ndarray,
@@ -183,49 +236,11 @@ def bake_soup_texture(
     top_w = top_w / top_w.sum(0, keepdim=True).clamp_min(1e-12)
     gains, gain_stats = _view_gains(views, cen, scores) if gain and len(views) > 1 else (None, None)
 
-    # ---- layout: two triangles per square cell
-    cells = math.ceil(n_f / 2)
-    per_side = math.ceil(math.sqrt(cells))
-    cs = size // per_side
-    if cs < 3:
-        raise ValueError(f"{n_f} triangles do not fit a {size}^2 atlas")
-    tid = torch.arange(n_f, device=dev)
-    cell_id, half = tid // 2, tid % 2
-    ox = (cell_id % per_side).float() * cs
-    oy = (cell_id // per_side).float() * cs
-    m = 1.0  # texel margin kept free inside each cell
-    lo, hi = m, cs - m
-    # half 0: corners (lo,lo) (hi-1,lo) (lo,hi-1); half 1: (hi,hi) (lo+1,hi) (hi,lo+1) -- a 1-texel gap between them
-    c0 = torch.tensor([[lo, lo], [hi - 1, lo], [lo, hi - 1]], device=dev)
-    c1 = torch.tensor([[hi, hi], [lo + 1, hi], [hi, lo + 1]], device=dev)
-    corners = torch.where(half[:, None, None] == 0, c0[None], c1[None]) + torch.stack([ox, oy], -1)[:, None]  # [F, 3, 2] px
-    uv = corners / size
-    uv_obj = torch.stack([uv[..., 0], 1.0 - uv[..., 1]], -1)  # OBJ/trimesh: v up
-
-    # ---- colour every texel of every used cell
+    # ---- layout: two triangles per square cell; every texel of every used cell, as a point on its triangle
+    corners, uv_obj = soup_layout(n_f, size, dev)
+    flat_idx, t_of, ok, (wa, wb, wc), pts = soup_texels(corners, tri, size)
     albedo = torch.zeros(size * size, 3, dtype=torch.uint8, device=dev)
-    rows_used = math.ceil(cells / per_side) * cs
-    ys, xs = torch.meshgrid(torch.arange(rows_used, device=dev), torch.arange(per_side * cs, device=dev), indexing="ij")
-    px, py = xs.flatten().float() + 0.5, ys.flatten().float() + 0.5
-    cid = (py.long() // cs) * per_side + (px.long() // cs)
-    lx, ly = px - (px.long() // cs).float() * cs, py - (py.long() // cs).float() * cs
-    t_of = cid * 2 + (lx + ly > cs).long()  # which half of the cell
-    ok = t_of < n_f
-    t_of = t_of.clamp(max=n_f - 1)
-    a, b, c = corners[t_of, 0], corners[t_of, 1], corners[t_of, 2]
-    p2 = torch.stack([px, py], -1)
-    v0, v1, v2 = b - a, c - a, p2 - a
-    d00, d01, d11 = (v0 * v0).sum(-1), (v0 * v1).sum(-1), (v1 * v1).sum(-1)
-    d20, d21 = (v2 * v0).sum(-1), (v2 * v1).sum(-1)
-    den = (d00 * d11 - d01 * d01).clamp_min(1e-9)
-    wb = ((d11 * d20 - d01 * d21) / den).clamp(0, 1)
-    wc = ((d00 * d21 - d01 * d20) / den).clamp(0, 1)
-    over = (wb + wc).clamp_min(1.0)  # margin texels: nearest point of the triangle
-    wb, wc = wb / over, wc / over
-    wa = 1 - wb - wc
-    pts = wa[:, None] * tri[t_of, 0] + wb[:, None] * tri[t_of, 1] + wc[:, None] * tri[t_of, 2]
     view_of = best_view[t_of]
-    flat_idx = (py.long() * size + px.long())
     col = torch.zeros(len(pts), 3, device=dev)
     for rank in range(top_v.shape[0]):
         v_r, w_r = top_v[rank][t_of], top_w[rank][t_of]
@@ -249,6 +264,6 @@ def bake_soup_texture(
         col[unseen] = (wa[unseen, None] * fb[ft[t_of[unseen], 0]] + wb[unseen, None] * fb[ft[t_of[unseen], 1]]
                        + wc[unseen, None] * fb[ft[t_of[unseen], 2]])  # fmt: skip
     albedo[flat_idx[ok]] = col[ok].round().clamp(0, 255).to(torch.uint8)
-    info = {"triangles": int(n_f), "cell_px": int(cs), "views": len(views),
+    info = {"triangles": int(n_f), "cell_px": int(size // math.ceil(math.sqrt(math.ceil(n_f / 2)))), "views": len(views),
             "unseen_triangles": int((best_view < 0).sum()), "gain": gain_stats}  # fmt: skip
     return uv_obj.cpu().numpy(), albedo.view(size, size, 3).cpu().numpy(), info

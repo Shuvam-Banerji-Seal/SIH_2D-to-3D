@@ -1,0 +1,390 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>How It Works</title>
+<style>
+  html,body{margin:0;background:#0e1013;display:grid;place-items:center;height:100vh}
+  canvas{width:min(100vw,177.78vh);height:auto;max-height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// "How it works": the pipeline explained, every example from our own runs. Every frame is drawn here in code;
+// FACTS (promo/explainer_build.py) carries the numbers, read from the runs' JSON; real renders are composited
+// into window.SLOTS afterwards. draw(frame) is a pure function of the frame number (no Math.random, no Date).
+const FACTS = /*FACTS*/{}/*END*/;
+const F = (k, d) => (FACTS[k] !== undefined && FACTS[k] !== null ? FACTS[k] : d);
+
+const W = 1920, H = 1080, FPS = 30;
+const cv = document.getElementById('c');
+let ctx = cv.getContext('2d');
+
+// LOOK: a technical poster on charcoal. Teal = measured, violet = generated, amber = numbers.
+const INK = '#121417', INK2 = '#1b1f24', LINE = 'rgba(238,241,244,0.10)', WHITE = '#eef1f4', GREY = '#8d96a1',
+      TEAL = '#2ec4a8', VIOLET = '#a98bff', AMBER = '#f5b700', RED = '#ff6b6b';
+const FONT = (s, w = 600) => `${w} ${s}px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif`;
+const MONO = (s, w = 500) => `${w} ${s}px "JetBrains Mono", "DejaVu Sans Mono", Menlo, monospace`;
+
+// ---------- math ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => { t = clamp(t); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+const easeOut = t => 1 - Math.pow(1 - clamp(t), 3);
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+function hash2(a, b) { let n = Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263); n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967295; }
+function rng(seed) { let a = seed | 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// ---------- beat grid & storyboard ----------
+const BPM = 90, BEAT = 60 / BPM, BAR = 4 * BEAT, b = n => n * BEAT, bar = n => n * BAR;
+const SHOT_BARS = [0, 4, 7, 11, 15, 19, 23, 27, 31, 37, 41, 44, 47, 48, 55, 57];
+const SHOTS = SHOT_BARS.slice(0, -1).map((a, i) => ({ id: i + 1, from: bar(a), to: bar(SHOT_BARS[i + 1]) }));
+const T = id => SHOTS[id - 1];
+const DUR = bar(57), FRAMES = Math.round(FPS * DUR);
+const SECTIONS = [
+  [0, 2, ['padSoft', 'pluck']], [2, 4, ['padSoft', 'pluck', 'hat8']], [4, 6, ['pad', 'pluck', 'hat8', 'kick2']],
+  [6, 7, ['pad', 'pluck', 'hat8', 'kick2', 'bassHalf']], [7, 15, ['pad', 'hat8', 'kick4', 'bass8', 'pluck']],
+  [15, 23, ['pad', 'hat16', 'kick4', 'bass8', 'pluck', 'clap']], [23, 31, ['pad', 'hat16', 'kick4', 'bass8', 'lead']],
+  [31, 37, ['pad', 'hat8', 'kick4', 'bass8', 'pluck', 'lead']], [37, 44, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'lead']],
+  [44, 47, ['pad', 'hat16', 'kick4', 'bass8', 'pluck']], [47, 48, []],
+  [48, 55, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'lead', 'crash']], [55, 57, ['padSoft', 'pluck']],
+];
+const EVENTS = [
+  [T(2).from + b(1), 'pop'], [T(2).from + b(3), 'pop'], [T(2).from + b(5), 'pop'], [T(2).from + b(7), 'pop'],
+  ...[0, 1, 2, 3, 4, 5].map(k => [T(3).from + b(2 + k), 'click']),
+  ...[0, 1, 2, 3].map(k => [T(4).from + b(3 + 2 * k), 'tick']),
+  [T(9).from + b(4), 'whoosh'], ...[0, 1, 2, 3, 4].map(k => [T(9).from + b(8 + 2 * k), 'pop']),
+  [T(12).from + b(2), 'whooshIn'], [T(14).from + b(0.5), 'notify'],
+];
+const STAGES = ['decode', 'poses', 'one model', 'depth', 'clean', 'texture', 'complete', 'splats', 'deliver'];
+const STAGE_AT = [3, 4, 5, 6, 7, 8, 9, 10, 11].map(i => T(i).from);
+
+// Real-output slots (screen pixels, even sizes for yuv420p); explainer_build.py composites the named sources.
+const R = { x: 760, y: 250, w: 1040, h: 586 };
+const SLOTS = [
+  { id: 'source', t0: T(1).from + b(4), t1: T(1).to, x: 900, y: 200, w: 900, h: 506 },
+  { id: 'timeline', t0: T(3).from + b(6), t1: T(3).to, ...R },
+  { id: 'merge', t0: T(5).from + b(1), t1: T(5).to, ...R },
+  { id: 'depth', t0: T(6).from + b(1), t1: T(6).to, ...R },
+  { id: 'clean', t0: T(7).from + b(1), t1: T(7).to, ...R },
+  { id: 'texture', t0: T(8).from + b(1), t1: T(8).to, ...R },
+  { id: 'complete', t0: T(9).from + b(13), t1: T(9).to, ...R },
+  { id: 'splats', t0: T(10).from + b(1), t1: T(10).to, ...R },
+  { id: 'console', t0: T(11).from + b(2), t1: T(11).to, ...R },
+  { id: 'show_notre_dame', t0: T(14).from, t1: T(14).from + b(8), x: 0, y: 0, w: 1920, h: 960 },
+  { id: 'show_reichstag', t0: T(14).from + b(8), t1: T(14).from + b(14), x: 0, y: 0, w: 1920, h: 960 },
+  { id: 'show_rural', t0: T(14).from + b(14), t1: T(14).from + b(20), x: 0, y: 0, w: 1920, h: 960 },
+  { id: 'show_complete', t0: T(14).from + b(20), t1: T(14).to, x: 0, y: 0, w: 1920, h: 960 },
+];
+const S = id => SLOTS.find(s => s.id === id);
+
+// ---------- layout registry (scripts/layout-check.mjs) ----------
+let LAYOUT = [];
+function claim(id, kind, x, y, w, h) { LAYOUT.push({ id, kind, x, y, w, h }); }
+
+// ---------- primitives ----------
+function ground(alpha = 1) {
+  ctx.fillStyle = INK; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(46,196,168,0.05)'); g.addColorStop(1, 'rgba(0,0,0,0.25)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = LINE;
+  for (let x = 40; x < W; x += 40) for (let y = 40; y < H; y += 40) ctx.fillRect(x - 1, y - 1, 2, 2);
+  ctx.restore();
+}
+function text(s, x, y, o = {}) {
+  const { size = 40, col = WHITE, align = 'left', weight = 600, alpha = 1, p = 1, id, mono = false } = o;
+  if (p <= 0 || alpha <= 0) return;
+  const shown = s.slice(0, Math.round(s.length * clamp(p)));
+  ctx.save(); ctx.globalAlpha = alpha; ctx.font = mono ? MONO(size, weight) : FONT(size, weight); ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'middle';
+  ctx.fillText(shown, x, y);
+  const w = ctx.measureText(s).width, x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+  ctx.restore();
+  if (id) claim(id, 'text', x0, y - size * .6, w, size * 1.2);
+}
+function kicker(s, t, t0, n) {
+  const a = prog(t, t0, t0 + .4);
+  if (n) { ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = TEAL; ctx.beginPath(); ctx.arc(136, 96, 16, 0, 7); ctx.fill(); ctx.restore();
+    text(String(n), 136, 97, { size: 18, col: INK, align: 'center', weight: 800, alpha: a }); }
+  text(s.toUpperCase(), n ? 166 : 120, 96, { size: 22, col: TEAL, weight: 700, alpha: a, id: 'kicker' });
+}
+function headline(s, t, t0, o = {}) { text(s, 120, o.y || 172, { size: o.size || 54, weight: 800, p: prog(t, t0, t0 + .9), id: o.id || 'headline', col: o.col || WHITE }); }
+function bullet(s, t, t0, y, o = {}) {
+  const a = prog(t, t0, t0 + .35);
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = o.col || TEAL; ctx.fillRect(120, y - 3, 14, 6); ctx.restore();
+  text(s, 150, y, { size: o.size || 26, col: o.tcol || WHITE, weight: o.weight || 500, p: prog(t, t0, t0 + .7), id: o.id });
+}
+function caption(s, t, t0, o = {}) {
+  const p = prog(t, t0, t0 + .9), y = o.y || 880;
+  if (p <= 0) return;
+  ctx.save(); ctx.fillStyle = AMBER; ctx.globalAlpha = .9; ctx.fillRect(120, y + 30, 70 * easeOut(p * 2), 3); ctx.restore();
+  text(s, 120, y, { size: o.size || 34, p, id: o.id || 'caption', weight: 500 });
+}
+function bezel(r, t, t0, label) {
+  const a = easeOut(prog(t, t0 - .4, t0));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = INK2; ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = 'rgba(238,241,244,.35)'; ctx.lineWidth = 2; ctx.strokeRect(r.x - 5, r.y - 5, r.w + 10, r.h + 10);
+  ctx.fillStyle = TEAL; ctx.fillRect(r.x - 5, r.y - 5, 44, 4); ctx.fillRect(r.x - 5, r.y - 5, 4, 44);
+  ctx.fillRect(r.x + r.w + 1, r.y + r.h - 39, 4, 44); ctx.fillRect(r.x + r.w - 39, r.y + r.h + 1, 44, 4);
+  ctx.restore();
+  if (label) text(label, r.x, r.y - 26, { size: 19, col: GREY, weight: 700, alpha: a, id: 'bezel-' + label, mono: true });
+  claim('slot', 'keep', r.x - 8, r.y - 8, r.w + 16, r.h + 16);
+}
+function chip(x, y, s, t, a = 1) {   // a pill label
+  ctx.save(); ctx.globalAlpha = a; ctx.font = MONO(22, 600); const w = ctx.measureText(s).width + 36;
+  ctx.fillStyle = 'rgba(46,196,168,.14)'; ctx.strokeStyle = TEAL; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x, y - 22, w, 44, 22); ctx.fill(); ctx.stroke(); ctx.restore();
+  text(s, x + 18, y, { size: 22, col: WHITE, alpha: a, mono: true, weight: 600 });
+  claim('chip-' + s, 'text', x, y - 22, w, 44);
+  return w;
+}
+function rail(t) {
+  const x0 = 200, x1 = W - 200, y = 1010, n = STAGES.length;
+  ctx.save(); ctx.strokeStyle = 'rgba(238,241,244,.15)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.restore();
+  let lit = -1; STAGE_AT.forEach((s, i) => { if (t >= s) lit = i; });
+  for (let i = 0; i < n; i++) {
+    const x = lerp(x0, x1, i / (n - 1)), on = i <= lit, cur = i === lit;
+    ctx.save(); ctx.fillStyle = cur ? AMBER : on ? TEAL : 'rgba(238,241,244,.2)'; ctx.beginPath(); ctx.arc(x, y, cur ? 8 : 5, 0, 7); ctx.fill(); ctx.restore();
+    text(STAGES[i], x, y + 26, { size: 16, col: on ? WHITE : 'rgba(238,241,244,.35)', align: 'center', weight: cur ? 700 : 500 });
+  }
+  if (lit >= 0) { const x = lerp(x0, x1, lit / (n - 1)); ctx.save(); ctx.strokeStyle = TEAL; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x, y); ctx.stroke(); ctx.restore(); }
+  claim('rail', 'keep', x0 - 40, y - 12, x1 - x0 + 80, 52);
+}
+
+// ---------- a small 3D world: a tower on a ground plane, as points ----------
+const WORLD = (() => {
+  const r = rng(7), pts = [];
+  for (let i = 0; i < 3000; i++) { const x = (r() - .5) * 22, z = (r() - .5) * 22; pts.push([x, 0, z, 0]); }
+  for (let i = 0; i < 3200; i++) { const side = Math.floor(r() * 4), u = (r() - .5) * 3, y = r() * 7;
+    const [x, z] = side === 0 ? [u, 1.5] : side === 1 ? [u, -1.5] : side === 2 ? [1.5, u] : [-1.5, u]; pts.push([x, y, z, side < 2 ? 1 : 2]); }
+  for (let i = 0; i < 600; i++) pts.push([(r() - .5) * 3, 7, (r() - .5) * 3, 3]);
+  return pts;
+})();
+const WORLD_COL = ['#3b6b5f', '#d9cfb8', '#bfb49b', '#e8e2d2'];
+function project(p, cam) {
+  const [x, y, z] = p, cy_ = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const X = cy_ * x - sy * z, Z0 = sy * x + cy_ * z, Y = cp * (y - 3) - sp * Z0, Z = sp * (y - 3) + cp * Z0 + cam.dist;
+  if (Z < .3) return null; const f = cam.fov / Z; return [cam.cx + X * f, cam.cy - Y * f, Z];
+}
+function cloud(cam, share, o = {}) {
+  const { size = 2.4, alpha = 1, gen = null } = o, n = Math.floor(WORLD.length * clamp(share));
+  ctx.save(); ctx.globalAlpha = alpha;
+  for (let i = 0; i < n; i++) { const p = WORLD[(i * 7919) % WORLD.length], q = project(p, cam); if (!q) continue;
+    const seen = gen === null || Math.atan2(p[2], p[0]) > gen; ctx.fillStyle = seen ? WORLD_COL[p[3]] : VIOLET; ctx.fillRect(q[0], q[1], size, size); }
+  ctx.restore();
+}
+function frustum(cam, pos, look, s, col, alpha) {
+  const a = project(pos, cam); if (!a) return;
+  const d0 = [look[0] - pos[0], look[1] - pos[1], look[2] - pos[2]], L = Math.hypot(...d0), d = d0.map(v => v / L * s);
+  const sx = [d[2], 0, -d[0]].map(v => v * .6), su = [0, s * .35, 0];
+  const cs = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([u, v]) => project([pos[0] + d[0] + u * sx[0], pos[1] + d[1] + v * su[1], pos[2] + d[2] + u * sx[2]], cam));
+  ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+  for (const c of cs) if (c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); }
+  if (cs.every(Boolean)) { ctx.moveTo(cs[0][0], cs[0][1]); for (const c of [...cs.slice(1), cs[0]]) ctx.lineTo(c[0], c[1]); }
+  ctx.stroke(); ctx.restore();
+}
+function arcDiagram(cx, cy, rad, t, t0, o = {}) {   // top view: the flight's arc round the subject, measured vs generated
+  const flown = (F('hr_flown_deg', 110)) * Math.PI / 180, a0 = -Math.PI / 2, grow = easeOut(prog(t, t0, t0 + 1.6));
+  const genA = prog(t, t0 + (o.genAt || 2.2), t0 + (o.genAt || 2.2) + 1.4);
+  ctx.save(); ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(238,241,244,.12)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, rad, 0, 7); ctx.stroke();
+  if (genA > 0) { ctx.strokeStyle = VIOLET; ctx.lineWidth = 10; ctx.globalAlpha = .85; ctx.beginPath(); ctx.arc(cx, cy, rad, a0 + flown, a0 + flown + (2 * Math.PI - flown) * easeOut(genA)); ctx.stroke(); }
+  ctx.globalAlpha = 1; ctx.strokeStyle = TEAL; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(cx, cy, rad, a0, a0 + flown * grow); ctx.stroke();
+  ctx.fillStyle = '#d9cfb8'; ctx.fillRect(cx - rad * .22, cy - rad * .22, rad * .44, rad * .44);   // the tower, from above
+  const da = a0 + flown * grow; ctx.fillStyle = AMBER; ctx.beginPath(); ctx.arc(cx + rad * Math.cos(da), cy + rad * Math.sin(da), 11, 0, 7); ctx.fill();
+  ctx.restore();
+  text(`${F('hr_flown_deg', 110)}° flown`, cx + rad + 30, cy - rad * .55, { size: 28, col: TEAL, weight: 700, alpha: grow, id: 'arc-flown' });
+  text(`${360 - F('hr_flown_deg', 110)}° never seen`, cx - rad - 30, cy + rad * .6, { size: 28, col: VIOLET, weight: 700, align: 'right', alpha: genA, id: 'arc-gen' });
+  claim('arc', 'keep', cx - rad - 14, cy - rad - 14, 2 * rad + 28, 2 * rad + 28);
+}
+
+// ---------- shots ----------
+const SCENES = {
+  1(t, lt) {   // title: the question, the source footage
+    ground();
+    text('HOW IT WORKS', 120, 150, { size: 24, col: TEAL, weight: 800, alpha: prog(lt, .2, .6), id: 'k' });
+    text('One drone video.', 120, 300, { size: 84, weight: 800, p: prog(lt, .4, 1.3), id: 't1' });
+    text('One complete', 120, 400, { size: 84, weight: 800, p: prog(lt, 1.4, 2.1), id: 't2' });
+    text('3D world.', 120, 500, { size: 84, weight: 800, col: AMBER, p: prog(lt, 2.1, 2.7), id: 't3' });
+    text(`e.g. a ${F('hr_video_s', 37)} s orbit of a highrise, filmed once`, 120, 610, { size: 28, col: GREY, alpha: prog(lt, b(4), b(5)), id: 't4' });
+    bezel(S('source'), t, S('source').t0, 'SOURCE FOOTAGE · ONE DRONE PASS');
+    text('SIH 2026 · PS 26158 · NTRO', 120, 900, { size: 22, col: GREY, mono: true, alpha: prog(lt, 1, 2), id: 'sih' });
+  },
+  2(t, lt) {   // the brief
+    ground(); kicker('The brief', t, T(2).from);
+    headline('What the problem statement asks', t, T(2).from + .2);
+    const cards = [['≤ 1.5 × the video', 'processing time', AMBER], ['≤ 1 m', 'accuracy', TEAL], ['complete', 'coverage of the scene', TEAL],
+                   ['OBJ · PLY · LAS · GeoTIFF', 'GLB · FBX · a viewer', TEAL]];
+    cards.forEach(([big, small, col], k) => {
+      const a = easeOut(prog(lt, b(1 + 2 * k) - .2, b(1 + 2 * k) + .3)), x = 120 + k * 430, y = 330;
+      if (a <= 0) return;
+      ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = INK2; ctx.beginPath(); ctx.roundRect(x, y + 30 * (1 - a), 400, 260, 16); ctx.fill();
+      ctx.fillStyle = col; ctx.fillRect(x, y + 30 * (1 - a), 400, 6); ctx.restore();
+      text(big, x + 30, y + 110, { size: k === 3 ? 30 : 48, weight: 800, col, alpha: a, id: 'card' + k });
+      text(small, x + 30, y + 190, { size: 26, col: WHITE, alpha: a, id: 'cards' + k });
+    });
+    caption('One pass of footage, no second chance to fly.', t, T(2).from + b(9));
+  },
+  3(t, lt) {   // decode + keyframes
+    ground(); kicker('Decode & keyframes', t, T(3).from, 1);
+    headline('Every frame decoded once, on the GPU', t, T(3).from + .2, { size: 44 });
+    if (t < S('timeline').t0 - .4) {
+      const cx = 1280, cy = 470;
+      ctx.save(); ctx.fillStyle = INK2; ctx.strokeStyle = TEAL; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(cx - 120, cy - 120, 240, 240, 18); ctx.fill(); ctx.stroke(); ctx.restore();
+      text('NVDEC', cx, cy - 12, { size: 40, col: WHITE, align: 'center', weight: 800 }); text(`${F('decode_fps', '—')} fps`, cx, cy + 36, { size: 24, col: AMBER, align: 'center', mono: true });
+      claim('gpu', 'keep', cx - 130, cy - 130, 260, 260);
+      for (let k = 0; k < 6; k++) { const p = prog(lt, b(2 + k) - .4, b(2 + k) + .4); if (p <= 0) continue;
+        const x = lerp(820, cx - 60, easeOut(p)), a = 1 - prog(p, .8, 1);
+        ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#2b3a44'; ctx.fillRect(x - 60, cy - 34 + (k % 3 - 1) * 90, 120, 68); ctx.strokeStyle = GREY; ctx.strokeRect(x - 60, cy - 34 + (k % 3 - 1) * 90, 120, 68); ctx.restore(); }
+    }
+    bullet('RAFT optical flow measures overlap', t, T(3).from + b(2), 330);
+    bullet('a keyframe when overlap falls to 0.75', t, T(3).from + b(3), 390);
+    bullet('a parallax test: is this pass really 3D?', t, T(3).from + b(4), 450);
+    bezel(S('timeline'), t, S('timeline').t0, 'REAL RUN · FLOW, PASSES AND KEYFRAMES');
+    caption(`${F('hr_keyframes', '—')} keyframes from ${F('hr_video_s', '—')} s of 4K video.`, t, T(3).from + b(6));
+  },
+  4(t, lt) {   // poses from flow
+    ground(); kicker('Camera poses from optical flow', t, T(4).from, 2);
+    headline('Where was each camera?', t, T(4).from + .2, { size: 44 });
+    const cam = { yaw: .6 + lt * .05, pitch: .5, dist: 22, fov: 1100, cx: 1280, cy: 520 };
+    cloud(cam, prog(lt, .3, 7), { size: 2.4 });
+    const n = 12;
+    for (let k = 0; k < n; k++) { const a = -1.9 + (F('hr_flown_deg', 110) * Math.PI / 180) * k / (n - 1), pos = [8 * Math.cos(a), 4.2, 8 * Math.sin(a)];
+      frustum(cam, pos, [0, 3.5, 0], 1.3, k % 3 ? TEAL : AMBER, prog(lt, .2 * k, .2 * k + .4)); }
+    claim('cloud', 'keep', 760, 200, 1060, 640);
+    bullet('flow tracks every pixel between keyframes', t, T(4).from + b(2), 330);
+    bullet('a global mapper (GLOMAP) solves the poses', t, T(4).from + b(3), 390);
+    bullet('no feature matching needed', t, T(4).from + b(4), 450);
+    text(`${F('hr_registered', '—')} keyframes placed`, 120, 560, { size: 40, col: AMBER, weight: 800, p: prog(lt, b(6), b(7)), id: 'reg' });
+    caption('The flow already knows where every pixel went.', t, T(4).from + b(8));
+  },
+  5(t, lt) {   // merge
+    ground(); kicker('Many shots, one model', t, T(5).from, 3);
+    headline('An edited video is many flights', t, T(5).from + .2, { size: 44 });
+    bezel(S('merge'), t, S('merge').t0, 'REAL RUN · COLOSSEUM · EACH COLOUR IS ONE SHOT');
+    bullet('dense matches between shots (RoMa v2)', t, T(5).from + b(2), 330);
+    bullet('one similarity each, checked round loops', t, T(5).from + b(3), 390);
+    bullet('views far apart in scale stay apart', t, T(5).from + b(4), 450);
+    text(`${F('col_before', '—')} shots → ${F('col_after', '—')} models`, 120, 570, { size: 48, col: AMBER, weight: 800, p: prog(lt, b(6), b(7)), id: 'm' });
+    caption('The back of a building often comes from another shot.', t, T(5).from + b(8));
+  },
+  6(t, lt) {   // depth
+    ground(); kicker('Depth for every keyframe', t, T(6).from, 4);
+    headline('Parallax first, a prior for the rest', t, T(6).from + .2, { size: 44 });
+    bezel(S('depth'), t, S('depth').t0, 'REAL RUN · KEYFRAME | TRIANGULATED | COMPLETED | MESH');
+    bullet('flow triangulated across wide baselines', t, T(6).from + b(2), 330);
+    bullet('Depth Anything V2 fills the gaps, calibrated', t, T(6).from + b(3), 390);
+    bullet('the sky is never filled', t, T(6).from + b(4), 450);
+    caption('Measured where the geometry allows; predicted only where it does not.', t, T(6).from + b(8));
+  },
+  7(t, lt) {   // fusion + clean model
+    ground(); kicker('Fused, then made clean', t, T(7).from, 5);
+    headline('From broken triangles to surfaces', t, T(7).from + .2, { size: 44 });
+    bezel(S('clean'), t, S('clean').t0, 'REAL RUN · FUSED MESH  |  CLEAN MODEL');
+    bullet('GPU TSDF fusion of every depth map', t, T(7).from + b(2), 330);
+    bullet('the ground becomes a terrain surface', t, T(7).from + b(3), 390);
+    bullet('buildings smoothed, edges kept sharp', t, T(7).from + b(4), 450);
+    bullet('floaters and fragments dropped', t, T(7).from + b(5), 510);
+    caption('The fused mesh stays the measurement; the clean model is what you view.', t, T(7).from + b(8));
+  },
+  8(t, lt) {   // texture
+    ground(); kicker('Photographic texture', t, T(8).from, 6);
+    headline('Every triangle from its best photograph', t, T(8).from + .2, { size: 44 });
+    bezel(S('texture'), t, S('texture').t0, 'REAL RUN · COLOSSEUM · TEXTURED CLEAN MODEL');
+    bullet(`up to ${F('col_texture_views', 48)} keyframes, baked on the GPU`, t, T(8).from + b(2), 330);
+    bullet('occlusion-tested, lens distortion corrected', t, T(8).from + b(3), 390);
+    bullet('exposure equalised across views', t, T(8).from + b(4), 450);
+    caption('Flown along the drone\'s own path: full terrain.', t, T(8).from + b(8));
+  },
+  9(t, lt) {   // complete the unseen
+    ground(); kicker('Completing what was never filmed', t, T(9).from, 7);
+    headline('A 110° flight, a 360° object', t, T(9).from + .2, { size: 44 });
+    if (t < S('complete').t0 - .4) {
+      arcDiagram(1300, 500, 230, t, T(9).from + b(1));
+      const steps = ['generate the whole object (TRELLIS.2)', 'place it on the measured model', 'carve what the cameras saw through',
+                     'one closed, watertight solid', 'photographs projected where seen'];
+      steps.forEach((s, k) => bullet(s, t, T(9).from + b(8 + 2 * k), 330 + 60 * k, { col: k === 0 ? VIOLET : TEAL }));
+    } else {
+      bezel(S('complete'), t, S('complete').t0, 'REAL RUN · HIGHRISE · THE COMPLETE MODEL, 360°');
+      text('photographed', 120, 380, { size: 34, col: TEAL, weight: 800, alpha: prog(t, S('complete').t0, S('complete').t0 + .6), id: 'ph' });
+      text(`${F('hr_photo_share', '—')} of the surface`, 120, 426, { size: 26, alpha: prog(t, S('complete').t0, S('complete').t0 + .6), id: 'ph2' });
+      text('generated', 120, 510, { size: 34, col: VIOLET, weight: 800, alpha: prog(t, S('complete').t0 + .5, S('complete').t0 + 1.1), id: 'ge' });
+      text('the sides never flown', 120, 556, { size: 26, alpha: prog(t, S('complete').t0 + .5, S('complete').t0 + 1.1), id: 'ge2' });
+      text(`${F('hr_triangles', '—')} triangles · watertight`, 120, 650, { size: 26, col: AMBER, mono: true, alpha: prog(t, S('complete').t0 + 1, S('complete').t0 + 1.6), id: 'tri' });
+    }
+    caption('GLB · OBJ · FBX · STL: the whole building, from any side.', t, T(9).from + b(17));
+  },
+  10(t, lt) {   // 360 splats
+    ground(); kicker('Gaussian splats, all the way round', t, T(10).from, 8);
+    headline('Photoreal from every heading', t, T(10).from + .2, { size: 44 });
+    bezel(S('splats'), t, S('splats').t0, 'REAL RUN · HIGHRISE · 360° GAUSSIAN SPLATS');
+    bullet(`${F('hr_views', '—')} views rendered from the complete model`, t, T(10).from + b(2), 330);
+    bullet('supervised only where the model is', t, T(10).from + b(3), 390);
+    bullet('trained with the real keyframes', t, T(10).from + b(4), 450);
+    text(`${F('hr_splats', '—')} splats`, 120, 560, { size: 44, col: AMBER, weight: 800, p: prog(lt, b(6), b(7)), id: 'sp' });
+    caption('Where the drone flew: photographs. Everywhere else: the complete model.', t, T(10).from + b(8));
+  },
+  11(t, lt) {   // deliverables + console
+    ground(); kicker('Deliverables & the console', t, T(11).from, 9);
+    headline('Every format, one browser tab', t, T(11).from + .2, { size: 44 });
+    bezel(S('console'), t, S('console').t0, 'REAL CONSOLE · THE EXPLORER, COMPLETE-MODEL LAYER');
+    let x = 120;
+    ['OBJ', 'PLY', 'LAS', 'GeoTIFF', 'GLB', 'FBX', 'STL'].forEach((f, k) => { if (lt > b(1) + k * .25) x += chip(x, 330 + Math.floor(k / 4) * 70, f, t, prog(lt, b(1) + k * .25, b(1) + k * .25 + .3)) + 12; if (k === 3) x = 120; });
+    bullet('georeferenced to UTM when GPS is logged', t, T(11).from + b(5), 520);
+    bullet('a warm GPU engine, live streams', t, T(11).from + b(6), 580);
+    caption('Upload, build, explore every layer, download.', t, T(11).from + b(8));
+  },
+  12(t, lt) {   // speed
+    ground(); kicker('Speed', t, T(12).from);
+    headline(`${F('bench_within', '—')} sample videos inside the time budget`, t, T(12).from + .2, { size: 44 });
+    const rows = F('bench_rows', []), x0 = 160, y0 = 300, bh = 26, gap = 10, maxv = Math.max(1, ...rows.map(r => Math.max(r.fast, r.budget)));
+    rows.forEach((r, k) => { const y = y0 + k * (bh + gap), g = easeOut(prog(lt, b(1) + k * .1, b(1) + k * .1 + .8)), sx = 1200 / maxv;
+      ctx.save(); ctx.fillStyle = r.fast <= r.budget ? TEAL : RED; ctx.fillRect(x0 + 300, y, r.fast * sx * g, bh);
+      ctx.fillStyle = AMBER; ctx.fillRect(x0 + 300 + r.budget * sx - 2, y - 4, 4, bh + 8); ctx.restore();
+      text(r.name, x0 + 290, y + bh / 2, { size: 18, col: GREY, align: 'right' }); });
+    claim('chart', 'keep', x0, y0 - 10, 1520, rows.length * (bh + gap) + 20);
+    text('bar: mesh + point cloud time · amber: 1.5 × the video length', 160, 860, { size: 22, col: GREY, alpha: prog(lt, b(4), b(5)), id: 'legend' });
+  },
+  13() { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); },
+  14(t, lt) {   // the showcase: full-frame renders, a caption band below
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); claim('show', 'keep', 0, 0, W, 960);
+    const caps = [['show_notre_dame', 'Notre-Dame, Paris · textured clean model, flown along the drone\'s path'], ['show_reichstag', 'Reichstag, Berlin · the city block around it, one pass'],
+                  ['show_rural', 'Rice fields · full terrain from a single survey pass'], ['show_complete', 'The highrise · complete from every side']];
+    for (const [id, s] of caps) { const sl = S(id); if (t >= sl.t0 && t < sl.t1) text(s, 120, 1015, { size: 30, col: WHITE, alpha: prog(t, sl.t0 + .3, sl.t0 + .9) * (1 - prog(t, sl.t1 - .4, sl.t1)), id: 'cap-' + id }); }
+  },
+  15(t, lt) {   // recap
+    ground();
+    text('video  →  keyframes  →  poses  →  one model  →  depth  →  clean surfaces  →  texture  →  complete  →  splats', W / 2, 400, { size: 30, align: 'center', weight: 600, p: prog(lt, 0, 1.5), id: 'recap' });
+    text('One pass. A complete 3D world.', W / 2, 510, { size: 64, align: 'center', weight: 800, col: AMBER, p: prog(lt, .8, 1.8), id: 'tag' });
+    text('Smart India Hackathon 2026 · Problem Statement 26158 · NTRO', W / 2, 630, { size: 26, align: 'center', col: TEAL, alpha: prog(lt, 1.4, 2), id: 'sih' });
+  },
+};
+
+function draw(frame) {
+  const t = frame / FPS; LAYOUT = [];
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none';
+  const shot = SHOTS.find(s => t >= s.from && t < s.to) || SHOTS[SHOTS.length - 1];
+  SCENES[shot.id](t, t - shot.from);
+  if (shot.id >= 3 && shot.id <= 11) rail(t);
+  const inT = prog(t, shot.from, shot.from + .2), outT = shot.id === 13 ? 0 : prog(t, shot.to - .15, shot.to);
+  const a = Math.max(1 - inT, outT) * .55; if (a > 0 && shot.id !== 14) { ctx.fillStyle = `rgba(14,16,19,${a})`; ctx.fillRect(0, 0, W, H); }
+  if (t > DUR - 1.2) { ctx.fillStyle = `rgba(0,0,0,${prog(t, DUR - 1.2, DUR)})`; ctx.fillRect(0, 0, W, H); }
+  window.LAYOUT = LAYOUT;
+}
+window.draw = draw; window.FRAMES = FRAMES; window.FPS = FPS; window.SLOTS = SLOTS;
+window.CUES = SHOTS.slice(1).map(s => s.from);
+
+/*GROOVE*/
+
+window.SCORE = ac => buildGroove(ac, { dur: DUR, bpm: BPM, sections: SECTIONS, events: EVENTS, kit: 'keys', harmony: 'dreamy', key: 0, sfxGain: .5 });
+
+if (!new URLSearchParams(location.search).has('render')) {
+  let start = performance.now();
+  const loop = () => { draw(Math.floor((performance.now() - start) / 1000 * FPS) % FRAMES); requestAnimationFrame(loop); };
+  loop();
+  addEventListener('click', () => { const ac = new AudioContext(); window.SCORE(ac); start = performance.now() + 50; }, { once: true });
+}
+</script>
+</body>
+</html>

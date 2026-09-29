@@ -193,7 +193,7 @@ def orbit_completed(run: Path, out: Path, *, seconds: float = 4.0, size=(1920, 1
         ts = np.stack([x["t_hit"].numpy() for x in ans])
         best = np.argmin(np.where(np.isfinite(ts), ts, np.inf), 0)
         img = np.tile(np.array([11, 29, 51], np.uint8), (h * w, 1))
-        for j, (x, (_, _, uv, alb)) in enumerate(zip(ans, (meas, gen))):
+        for j, (x, (_, _, uv, alb)) in enumerate(zip(ans, (meas, gen), strict=True)):
             hit = np.isfinite(ts[j]) & (best == j)
             p = x["primitive_ids"].numpy()[hit]
             b = x["primitive_uvs"].numpy()[hit]
@@ -249,7 +249,7 @@ def merge_assembly(single_run: Path, out: Path, *, seconds: float = 6.5, size=(9
         allv = np.concatenate([p[1] for p in parts])
         c, r = np.median(allv, 0), float(np.linalg.norm(np.percentile(allv, 90, 0) - np.percentile(allv, 10, 0))) / 3
     kept = []
-    for i, (k, v, f) in enumerate(parts):
+    for i, (_k, v, f) in enumerate(parts):
         cen = v[f].mean(1)
         sel = (np.abs(cen[:, 0] - c[0]) < keep * r) & (np.abs(cen[:, 1] - c[1]) < keep * r)
         if sel.sum() > 500:

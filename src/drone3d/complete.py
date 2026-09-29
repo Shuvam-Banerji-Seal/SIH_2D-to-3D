@@ -530,7 +530,8 @@ def fill_ground(v: np.ndarray, f: np.ndarray, colours: np.ndarray, centre: np.nd
     side, the complete subject stands at the edge of a hole. The fill is a grid at the terrain's height
     (``export.terrain.terrain_surface``: the lowest surfaces, opened, inpainted), 1 % of a cell under it so
     it never covers a measured surface, coloured by inpainting the colours of the lowest surface in the cells
-    around it. ``colours``: per face; ``subject``: its vertices and faces, whose footprint is not filled.
+    around it, blurred and settling into their median with the distance from them (inpainting alone streaked).
+    ``colours``: per face; ``subject``: its vertices and faces, whose footprint is not filled.
     """
     from scipy import ndimage
 
@@ -563,6 +564,14 @@ def fill_ground(v: np.ndarray, f: np.ndarray, colours: np.ndarray, centre: np.nd
     col[flat[first]] = sc[first]
     seen = covered.reshape(n, n)  # cells with a colour
     col = np.stack([_fill(col[:, c].reshape(n, n), seen, iters=200) for c in range(3)], -1)
+    # far from any seen ground the colour settles into the seen ground's median: inpainting between a car park
+    # and a roof streaked the fill; blurred, and weighted by distance to the nearest seen cell
+    if seen.any():
+        med = np.median(col[seen], axis=0)
+        dist = ndimage.distance_transform_edt(~seen)
+        soft = np.stack([ndimage.gaussian_filter(col[..., c], 6) for c in range(3)], -1)
+        w_far = (dist / (dist + 8.0))[..., None]
+        col = np.where(seen[..., None], col, (1 - w_far) * soft + w_far * med)
     covered = ndimage.binary_closing(seen, iterations=1)  # pinholes between samples are not holes
     hole = ~covered & (np.hypot(xs - centre[0], ys - centre[1]) < radius)
     if subject is not None:  # the subject stands there

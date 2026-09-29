@@ -38,17 +38,17 @@ function rng(seed) { let a = seed | 0; return () => { a = a + 0x6D2B79F5 | 0; le
 
 // ---------- beat grid & storyboard ----------
 const BPM = 90, BEAT = 60 / BPM, BAR = 4 * BEAT, b = n => n * BEAT, bar = n => n * BAR;
-const SHOT_BARS = [0, 4, 7, 11, 15, 19, 23, 27, 31, 37, 41, 44, 47, 48, 55, 57];
+const SHOT_BARS = [0, 4, 7, 11, 15, 19, 23, 27, 34, 40, 44, 47, 50, 51, 58, 60];
 const SHOTS = SHOT_BARS.slice(0, -1).map((a, i) => ({ id: i + 1, from: bar(a), to: bar(SHOT_BARS[i + 1]) }));
 const T = id => SHOTS[id - 1];
-const DUR = bar(57), FRAMES = Math.round(FPS * DUR);
+const DUR = bar(60), FRAMES = Math.round(FPS * DUR);
 const SECTIONS = [
   [0, 2, ['padSoft', 'pluck']], [2, 4, ['padSoft', 'pluck', 'hat8']], [4, 6, ['pad', 'pluck', 'hat8', 'kick2']],
   [6, 7, ['pad', 'pluck', 'hat8', 'kick2', 'bassHalf']], [7, 15, ['pad', 'hat8', 'kick4', 'bass8', 'pluck']],
-  [15, 23, ['pad', 'hat16', 'kick4', 'bass8', 'pluck', 'clap']], [23, 31, ['pad', 'hat16', 'kick4', 'bass8', 'lead']],
-  [31, 37, ['pad', 'hat8', 'kick4', 'bass8', 'pluck', 'lead']], [37, 44, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'lead']],
-  [44, 47, ['pad', 'hat16', 'kick4', 'bass8', 'pluck']], [47, 48, []],
-  [48, 55, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'lead', 'crash']], [55, 57, ['padSoft', 'pluck']],
+  [15, 23, ['pad', 'hat16', 'kick4', 'bass8', 'pluck', 'clap']], [23, 34, ['pad', 'hat16', 'kick4', 'bass8', 'lead']],
+  [34, 40, ['pad', 'hat8', 'kick4', 'bass8', 'pluck', 'lead']], [40, 47, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'lead']],
+  [47, 50, ['pad', 'hat16', 'kick4', 'bass8', 'pluck']], [50, 51, []],
+  [51, 58, ['pad', 'hat16', 'kick4', 'bass8', 'clap', 'lead', 'crash']], [58, 60, ['padSoft', 'pluck']],
 ];
 const EVENTS = [
   [T(2).from + b(1), 'pop'], [T(2).from + b(3), 'pop'], [T(2).from + b(5), 'pop'], [T(2).from + b(7), 'pop'],
@@ -64,11 +64,11 @@ const STAGE_AT = [3, 4, 5, 6, 7, 8, 9, 10, 11].map(i => T(i).from);
 const R = { x: 760, y: 250, w: 1040, h: 586 };
 const SLOTS = [
   { id: 'source', t0: T(1).from + b(4), t1: T(1).to, x: 900, y: 200, w: 900, h: 506 },
-  { id: 'timeline', t0: T(3).from + b(6), t1: T(3).to, ...R },
   { id: 'merge', t0: T(5).from + b(1), t1: T(5).to, ...R },
   { id: 'depth', t0: T(6).from + b(1), t1: T(6).to, ...R },
   { id: 'clean', t0: T(7).from + b(1), t1: T(7).to, ...R },
-  { id: 'texture', t0: T(8).from + b(1), t1: T(8).to, ...R },
+  { id: 'texture', t0: T(8).from, t1: T(8).from + bar(3), x: 0, y: 0, w: 1920, h: 930 },
+  { id: 'photo_model', t0: T(8).from + bar(3), t1: T(8).to, x: 0, y: 0, w: 1920, h: 930 },
   { id: 'complete', t0: T(9).from + b(13), t1: T(9).to, ...R },
   { id: 'splats', t0: T(10).from + b(1), t1: T(10).to, ...R },
   { id: 'console', t0: T(11).from + b(2), t1: T(11).to, ...R },
@@ -152,38 +152,6 @@ function rail(t) {
   claim('rail', 'keep', x0 - 40, y - 12, x1 - x0 + 80, 52);
 }
 
-// ---------- a small 3D world: a tower on a ground plane, as points ----------
-const WORLD = (() => {
-  const r = rng(7), pts = [];
-  for (let i = 0; i < 3000; i++) { const x = (r() - .5) * 22, z = (r() - .5) * 22; pts.push([x, 0, z, 0]); }
-  for (let i = 0; i < 3200; i++) { const side = Math.floor(r() * 4), u = (r() - .5) * 3, y = r() * 7;
-    const [x, z] = side === 0 ? [u, 1.5] : side === 1 ? [u, -1.5] : side === 2 ? [1.5, u] : [-1.5, u]; pts.push([x, y, z, side < 2 ? 1 : 2]); }
-  for (let i = 0; i < 600; i++) pts.push([(r() - .5) * 3, 7, (r() - .5) * 3, 3]);
-  return pts;
-})();
-const WORLD_COL = ['#3b6b5f', '#d9cfb8', '#bfb49b', '#e8e2d2'];
-function project(p, cam) {
-  const [x, y, z] = p, cy_ = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-  const X = cy_ * x - sy * z, Z0 = sy * x + cy_ * z, Y = cp * (y - 3) - sp * Z0, Z = sp * (y - 3) + cp * Z0 + cam.dist;
-  if (Z < .3) return null; const f = cam.fov / Z; return [cam.cx + X * f, cam.cy - Y * f, Z];
-}
-function cloud(cam, share, o = {}) {
-  const { size = 2.4, alpha = 1, gen = null } = o, n = Math.floor(WORLD.length * clamp(share));
-  ctx.save(); ctx.globalAlpha = alpha;
-  for (let i = 0; i < n; i++) { const p = WORLD[(i * 7919) % WORLD.length], q = project(p, cam); if (!q) continue;
-    const seen = gen === null || Math.atan2(p[2], p[0]) > gen; ctx.fillStyle = seen ? WORLD_COL[p[3]] : VIOLET; ctx.fillRect(q[0], q[1], size, size); }
-  ctx.restore();
-}
-function frustum(cam, pos, look, s, col, alpha) {
-  const a = project(pos, cam); if (!a) return;
-  const d0 = [look[0] - pos[0], look[1] - pos[1], look[2] - pos[2]], L = Math.hypot(...d0), d = d0.map(v => v / L * s);
-  const sx = [d[2], 0, -d[0]].map(v => v * .6), su = [0, s * .35, 0];
-  const cs = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([u, v]) => project([pos[0] + d[0] + u * sx[0], pos[1] + d[1] + v * su[1], pos[2] + d[2] + u * sx[2]], cam));
-  ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
-  for (const c of cs) if (c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); }
-  if (cs.every(Boolean)) { ctx.moveTo(cs[0][0], cs[0][1]); for (const c of [...cs.slice(1), cs[0]]) ctx.lineTo(c[0], c[1]); }
-  ctx.stroke(); ctx.restore();
-}
 function arcDiagram(cx, cy, rad, t, t0, o = {}) {   // top view: the flight's arc round the subject, measured vs generated
   const flown = (F('hr_flown_deg', 110)) * Math.PI / 180, a0 = -Math.PI / 2, grow = easeOut(prog(t, t0, t0 + 1.6));
   const genA = prog(t, t0 + (o.genAt || 2.2), t0 + (o.genAt || 2.2) + 1.4);
@@ -226,34 +194,64 @@ const SCENES = {
     });
     caption('One pass of footage, no second chance to fly.', t, T(2).from + b(9));
   },
-  3(t, lt) {   // decode + keyframes
+  3(t, lt) {   // decode + keyframes: the run's own selection, drawn
     ground(); kicker('Decode & keyframes', t, T(3).from, 1);
     headline('Every frame decoded once, on the GPU', t, T(3).from + .2, { size: 44 });
-    if (t < S('timeline').t0 - .4) {
-      const cx = 1280, cy = 470;
-      ctx.save(); ctx.fillStyle = INK2; ctx.strokeStyle = TEAL; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(cx - 120, cy - 120, 240, 240, 18); ctx.fill(); ctx.stroke(); ctx.restore();
-      text('NVDEC', cx, cy - 12, { size: 40, col: WHITE, align: 'center', weight: 800 }); text(`${F('decode_fps', '—')} fps`, cx, cy + 36, { size: 24, col: AMBER, align: 'center', mono: true });
-      claim('gpu', 'keep', cx - 130, cy - 130, 260, 260);
-      for (let k = 0; k < 6; k++) { const p = prog(lt, b(2 + k) - .4, b(2 + k) + .4); if (p <= 0) continue;
-        const x = lerp(820, cx - 60, easeOut(p)), a = 1 - prog(p, .8, 1);
-        ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#2b3a44'; ctx.fillRect(x - 60, cy - 34 + (k % 3 - 1) * 90, 120, 68); ctx.strokeStyle = GREY; ctx.strokeRect(x - 60, cy - 34 + (k % 3 - 1) * 90, 120, 68); ctx.restore(); }
+    bullet(`NVDEC decode, ${F('decode_fps', '—')} frames a second`, t, T(3).from + b(1), 330);
+    bullet('RAFT optical flow between frames', t, T(3).from + b(2), 390);
+    bullet('a keyframe when overlap falls to ~0.8', t, T(3).from + b(3), 450);
+    bullet('a parallax test: is this pass 3D?', t, T(3).from + b(4), 510);
+    const K = F('kf_series', null), x0 = 800, x1 = 1780, y0 = 290, dur = K ? K.dur : 37, X = s => lerp(x0, x1, s / dur);
+    const a = easeOut(prog(lt, .3, 1)), cur = lerp(0, dur, prog(lt, b(2), b(11)));
+    text('REAL RUN · HIGHRISE · FLOW CONSISTENCY, OVERLAP, KEYFRAMES', x0, 240, { size: 18, col: GREY, mono: true, weight: 700, alpha: a, id: 'kfl' });
+    claim('kfchart', 'keep', x0 - 20, y0 - 2, x1 - x0 + 40, 507);
+    ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = 'rgba(238,241,244,.18)'; ctx.lineWidth = 1;
+    for (const yy of [y0, y0 + 200, y0 + 260, y0 + 460]) { ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x1, yy); ctx.stroke(); }
+    const V = v => clamp((v - .5) / .5);   // both plots zoomed to 0.5 .. 1
+    ctx.fillStyle = 'rgba(245,183,0,.16)'; ctx.fillRect(x0, y0 + 460 - 200 * V(.85), x1 - x0, 200 * (V(.85) - V(.75)));   // the selection band
+    ctx.restore();
+    text('flow consistency', x0, y0 - 14, { size: 18, col: TEAL, alpha: a }); text('overlap with the last keyframe', x0, y0 + 246, { size: 18, col: AMBER, alpha: a });
+    for (const s_ of [0, 10, 20, 30]) text(`${s_} s`, X(s_), y0 + 486, { size: 16, col: GREY, align: 'center', alpha: a });
+    if (K) {
+      ctx.save(); ctx.strokeStyle = TEAL; ctx.lineWidth = 2.5; ctx.beginPath(); let started = false;
+      K.t.forEach((tt, i) => { if (tt > cur) return; const yy = y0 + 200 - 190 * V(K.c[i]); if (!started) { ctx.moveTo(X(tt), yy); started = true; } else ctx.lineTo(X(tt), yy); });
+      ctx.stroke(); ctx.restore();
+      let n = 0;
+      for (const [tt, ov] of K.kf) { if (tt > cur) continue; n++;
+        ctx.save(); ctx.strokeStyle = 'rgba(245,183,0,.35)'; ctx.beginPath(); ctx.moveTo(X(tt), y0 + 210); ctx.lineTo(X(tt), y0 + 250); ctx.stroke();
+        if (ov !== null) { ctx.fillStyle = AMBER; ctx.beginPath(); ctx.arc(X(tt), y0 + 460 - 200 * V(ov), 5, 0, 7); ctx.fill(); }
+        ctx.restore(); }
+      ctx.save(); ctx.strokeStyle = 'rgba(238,241,244,.5)'; ctx.setLineDash([4, 6]); ctx.beginPath(); ctx.moveTo(X(cur), y0); ctx.lineTo(X(cur), y0 + 460); ctx.stroke(); ctx.restore();
+      text(`${n} keyframes`, x1, y0 + 540, { size: 30, col: AMBER, weight: 800, align: 'right', alpha: a, id: 'kfn' });
     }
-    bullet('RAFT optical flow measures overlap', t, T(3).from + b(2), 330);
-    bullet('a keyframe when overlap falls to 0.75', t, T(3).from + b(3), 390);
-    bullet('a parallax test: is this pass really 3D?', t, T(3).from + b(4), 450);
-    bezel(S('timeline'), t, S('timeline').t0, 'REAL RUN · FLOW, PASSES AND KEYFRAMES');
-    caption(`${F('hr_keyframes', '—')} keyframes from ${F('hr_video_s', '—')} s of 4K video.`, t, T(3).from + b(6));
+    caption(`${F('hr_keyframes', '—')} keyframes from ${F('hr_video_s', '—')} s of 4K video.`, t, T(3).from + b(12));
   },
-  4(t, lt) {   // poses from flow
+  4(t, lt) {   // poses from flow: the run's own cameras and cloud
     ground(); kicker('Camera poses from optical flow', t, T(4).from, 2);
     headline('Where was each camera?', t, T(4).from + .2, { size: 44 });
-    const cam = { yaw: .6 + lt * .05, pitch: .5, dist: 22, fov: 1100, cx: 1280, cy: 520 };
-    cloud(cam, prog(lt, .3, 7), { size: 2.4 });
-    const n = 12;
-    for (let k = 0; k < n; k++) { const a = -1.9 + (F('hr_flown_deg', 110) * Math.PI / 180) * k / (n - 1), pos = [8 * Math.cos(a), 4.2, 8 * Math.sin(a)];
-      frustum(cam, pos, [0, 3.5, 0], 1.3, k % 3 ? TEAL : AMBER, prog(lt, .2 * k, .2 * k + .4)); }
-    claim('cloud', 'keep', 760, 200, 1060, 640);
-    bullet('flow tracks every pixel between keyframes', t, T(4).from + b(2), 330);
+    const D = F('hr_sfm', null), cam = { yaw: -1.2 + lt * .07, pitch: .3, dist: 2.7, fov: 1050, cx: 1300, cy: 520 };
+    const P = q => { const cy_ = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const x = cy_ * q[0] - sy * q[1], y0_ = sy * q[0] + cy_ * q[1], z = q[2];
+      const Y = cp * z - sp * y0_, Zd = sp * z + cp * y0_ + cam.dist;   // looking along +y, tilted down by pitch
+      return Zd > .2 ? [cam.cx + x * cam.fov / Zd, cam.cy - Y * cam.fov / Zd, Zd] : null; };
+    claim('sfm', 'keep', 760, 200, 1060, 640);
+    if (D) {
+      const shown = Math.floor(D.pts.length * prog(lt, .4, 6));
+      ctx.save(); ctx.beginPath(); ctx.rect(760, 200, 1060, 640); ctx.clip();
+      for (let i = 0; i < shown; i++) { const q = P(D.pts[i]); if (!q) continue; const c = D.col[i];
+        ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.fillRect(q[0], q[1], 2.6, 2.6); }
+      ctx.restore();
+      const nc = D.cams.length;
+      for (let k = 0; k < nc; k++) { const al = prog(lt, .3 + 5 * k / nc, .6 + 5 * k / nc); if (al <= 0) continue;
+        const c = D.cams[k], ax = D.axes[k], a0 = P(c), tip = P([c[0] + .12 * ax[0], c[1] + .12 * ax[1], c[2] + .12 * ax[2]]);
+        if (!a0 || !tip) continue;
+        ctx.save(); ctx.globalAlpha = al; ctx.strokeStyle = k % 5 ? TEAL : AMBER; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(a0[0], a0[1]); ctx.lineTo(tip[0], tip[1]); ctx.stroke();
+        ctx.fillStyle = k % 5 ? TEAL : AMBER; ctx.beginPath(); ctx.arc(a0[0], a0[1], 4, 0, 7); ctx.fill(); ctx.restore();
+        if (k > 0) { const pr = P(D.cams[k - 1]); if (pr) { ctx.save(); ctx.globalAlpha = al * .6; ctx.strokeStyle = AMBER; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(pr[0], pr[1]); ctx.lineTo(a0[0], a0[1]); ctx.stroke(); ctx.restore(); } } }
+    }
+    text('REAL RUN · HIGHRISE · THE CAMERAS AND THE CLOUD', 800, 232, { size: 18, col: GREY, mono: true, weight: 700, alpha: prog(lt, .2, .6), id: 'sfml' });
+    bullet('flow tracks pixels across keyframes', t, T(4).from + b(2), 330);
     bullet('a global mapper (GLOMAP) solves the poses', t, T(4).from + b(3), 390);
     bullet('no feature matching needed', t, T(4).from + b(4), 450);
     text(`${F('hr_registered', '—')} keyframes placed`, 120, 560, { size: 40, col: AMBER, weight: 800, p: prog(lt, b(6), b(7)), id: 'reg' });
@@ -288,14 +286,13 @@ const SCENES = {
     bullet('floaters and fragments dropped', t, T(7).from + b(5), 510);
     caption('The fused mesh stays the measurement; the clean model is what you view.', t, T(7).from + b(8));
   },
-  8(t, lt) {   // texture
-    ground(); kicker('Photographic texture', t, T(8).from, 6);
-    headline('Every triangle from its best photograph', t, T(8).from + .2, { size: 44 });
-    bezel(S('texture'), t, S('texture').t0, 'REAL RUN · COLOSSEUM · TEXTURED CLEAN MODEL');
-    bullet(`up to ${F('col_texture_views', 48)} keyframes, baked on the GPU`, t, T(8).from + b(2), 330);
-    bullet('occlusion-tested, lens distortion corrected', t, T(8).from + b(3), 390);
-    bullet('exposure equalised across views', t, T(8).from + b(4), 450);
-    caption('Flown along the drone\'s own path: full terrain.', t, T(8).from + b(8));
+  8(t, lt) {   // texture, then the model against the photographs: full width, a band below
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); claim('full8', 'keep', 0, 0, W, 930);
+    const second = t >= S('photo_model').t0;
+    const band = second ? 'Rendered from the drone\'s own camera: the photograph, then the model' : 'Every triangle from its best photograph: the Colosseum, flown along the drone\'s path';
+    const t0 = second ? S('photo_model').t0 : T(8).from;
+    text(second ? '6 · THE MODEL AGAINST THE FOOTAGE' : '6 · PHOTOGRAPHIC TEXTURE', 120, 962, { size: 20, col: TEAL, weight: 800, alpha: prog(t, t0, t0 + .4), id: 'k8' });
+    text(band, 520, 962, { size: 26, col: WHITE, weight: 500, p: prog(t, t0 + .2, t0 + 1.2), id: 'c8' });
   },
   9(t, lt) {   // complete the unseen
     ground(); kicker('Completing what was never filmed', t, T(9).from, 7);

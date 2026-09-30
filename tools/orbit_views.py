@@ -133,10 +133,14 @@ def main() -> None:
             vms.append(vm)
         K = torch.tensor([[fpx, 0, w / 2], [0, fpx, h / 2], [0, 0, 1]], dtype=torch.float32, device="cuda")
         with torch.no_grad():
-            img, _, _ = gsplat.rasterization(spl["means"], spl["quats"], spl["scales"], spl["opacities"], spl["sh"],
-                                             torch.tensor(np.array(vms), dtype=torch.float32, device="cuda"),
-                                             K[None].expand(len(vms), 3, 3), w, h, sh_degree=spl["sh_degree"],
-                                             render_mode="RGB", near_plane=0.01)  # fmt: skip
+            img, alpha, _ = gsplat.rasterization(spl["means"], spl["quats"], spl["scales"], spl["opacities"], spl["sh"],
+                                                 torch.tensor(np.array(vms), dtype=torch.float32, device="cuda"),
+                                                 K[None].expand(len(vms), 3, 3), w, h, sh_degree=spl["sh_degree"],
+                                                 render_mode="RGB", near_plane=0.01)  # fmt: skip
+        # over the background the splats were trained against (the 360-degree splats': the sky's colour)
+        cfg = run_dir / "config.json"
+        bg = json.loads(cfg.read_text()).get("background_color", [0.0, 0.0, 0.0]) if cfg.is_file() else [0.0, 0.0, 0.0]
+        img = img.clamp(0, 1) + (1 - alpha) * torch.tensor(bg, dtype=torch.float32, device="cuda")
         rows.append(list((img.clamp(0, 1) * 255).round().to(torch.uint8).cpu().numpy()))
     sheet = Image.new("RGB", (w * len(views), h * len(rows)))
     for i, row in enumerate(rows):

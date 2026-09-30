@@ -221,15 +221,25 @@ the far side the splats smear. After **Generate object** has placed TRELLIS.2's 
   went; what no keyframe looked at is never carved;
 - **one closed solid** -- voxelised in the building's own heading (walls on voxel planes), inside =
   flood fill, or enclosed along two of three axes where carving opened a hole; marching cubes; one
-  watertight body (the highrise: 365k triangles, 42 cubic units, not a hollow shell);
+  watertight body (the highrise: 367k triangles, 42 cubic units, not a hollow shell);
 - **texture** -- the keyframes projected straight onto the solid's atlas (occlusion by a depth map of
   the whole scene, the export's exposure gains, Depth Anything's sky never used), the generated
-  texture colour-matched elsewhere (highrise: 36 % of the subject's texels photographed);
+  texture colour-matched elsewhere (highrise: 34 % of the subject's texels photographed);
 - **scene** -- the measured shell inside the solid and the fused debris on its roof give way; the
   ground the flight never saw round it is filled at the terrain's height with inpainted colours;
 - **360° splats** (`--splats`) -- views of the complete scene rendered every 7.5° round the headings
   the flight missed (two rings), supervised only where the complete model is and in the sky, trained
-  with the keyframes.
+  with the keyframes against the photographs' sky colour: on the default black every sky pixel had to be
+  painted by splats and a veil hung over the tower (opacity 0.97 over the sky, 0.20 now; the explorer
+  draws the sky colour behind them). A skybox took the tower's colours, and an empty sky erased its
+  parapet (`experiments/splat_sky.py`).
+
+**From three keyframes.** The console's *Generate from 3 keyframes* (`drone3d.generate.generate_views`)
+runs TRELLIS.2 on the subject keyframe and on keyframes at 10 % and 90 % of the flight, places each on
+the measurement, and keeps the best-placed. The solid is their voxel vote only if a majority agrees
+(pairwise IoU ≥ 0.75). The highrise's three did not agree: their scales were 13 % apart and one had no
+crown, so the IoUs were 0.69–0.71, and their vote grew a ledge none of them had. It keeps the
+best-placed alone (89 % of the measured surface on it), and the record says so.
 
 `export/complete/`: `subject.{glb,obj,fbx,stl}` (upright, y-up, pivot at the centre of its base; the
 STL watertight), `scene.glb` (nodes `measured_scene`, `subject`, `ground_fill`), `splats_360.splat`,

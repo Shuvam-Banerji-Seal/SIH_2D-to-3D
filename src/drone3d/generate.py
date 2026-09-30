@@ -266,12 +266,14 @@ def _upright_icp(gp: np.ndarray, bp: np.ndarray, yaw: float, scale: float, t: np
                  iters: int = 40) -> tuple[float, float, np.ndarray]:  # fmt: skip
     """ICP for heading, scale and translation only: the object stays upright, as generated and as the levelled
     model is. Each measured point pairs with its nearest generated point within ``thr`` (the measurement is the
-    partial side); the 4-DoF similarity then has a closed form -- the heading from the horizontal covariance."""
+    partial side); the 4-DoF similarity then has a closed form -- the heading from the horizontal covariance.
+    The pairs are searched within ``thr`` only: an unbounded search from a heading that puts the object far
+    from the measurement took 3 s a step (a Jal Mahal generation: 35 min to place), bounded 0.02 s."""
     from scipy.spatial import cKDTree
 
     for _ in range(iters):
         moved = scale * gp @ _rz(yaw).T + t
-        d, j = cKDTree(moved).query(bp)
+        d, j = cKDTree(moved).query(bp, distance_upper_bound=thr)
         ok = d < thr
         if ok.sum() < 20:
             break
@@ -322,8 +324,8 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     base = np.array([np.median(gp[:, 0]), np.median(gp[:, 1]), gp[:, 2].min()])
 
     def cover(yaw: float, scale: float, t: np.ndarray) -> tuple[float, float]:
-        d, _ = cKDTree(scale * gp @ _rz(yaw).T + t).query(bp)
-        return float((d < thr).mean()), float(np.median(d))
+        d, _ = cKDTree(scale * gp @ _rz(yaw).T + t).query(bp, distance_upper_bound=r)  # a gap past r is r
+        return float((d < thr).mean()), float(np.median(np.minimum(d, r)))
 
     best = None
     for k in range(yaws):
@@ -341,7 +343,7 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     y2, _, t2 = _upright_icp(gp, bp, yaw, s_h, t + (sc - s_h) * _rz(yaw) @ base, thr, iters=1)  # one step: t at s_h
     for _ in range(20):  # translation and heading only, at the height's scale
         moved = s_h * gp @ _rz(y2).T + t2
-        d, j = cKDTree(moved).query(bp)
+        d, j = cKDTree(moved).query(bp, distance_upper_bound=thr)
         ok = d < thr
         if ok.sum() < 20:
             break

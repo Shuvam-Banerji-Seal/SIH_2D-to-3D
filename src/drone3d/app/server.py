@@ -116,7 +116,7 @@ def complete_object(run: Path) -> dict:
     return {"status": "running" if job == "complete" else rec.get("status") or "none",
             "splats": "running" if job == "splats" else ("ok" if (out / "splats_360.splat").is_file() else "none"),
             "watertight": rec.get("watertight"), "photographed": round(1 - rec["generated_share"], 3) if "generated_share" in rec else None,
-            "triangles": rec.get("subject_triangles"), "consensus_of": rec.get("consensus_of"),
+            "triangles": rec.get("subject_triangles"), "consensus_of": rec.get("consensus_of"), "generations": rec.get("generations"),
             "splat_views": sp.get("views"), "num_splats": sp.get("num_splats"),
             "thumb": f"{base}/thumb.jpg" if (out / "thumb.jpg").is_file() else None,
             "files": [{"name": f, "url": f"{base}/{f}"} for f in files], "note": rec.get("note")}  # fmt: skip

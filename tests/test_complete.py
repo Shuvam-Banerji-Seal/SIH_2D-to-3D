@@ -153,7 +153,22 @@ def test_what_one_generation_alone_invents_is_voted_out() -> None:
     with_wing = (np.concatenate([tower[0], wing_v]), np.concatenate([tower[1], wing_f + len(tower[0])]))
     sv, sf, info = solidify_consensus([tower, tower, with_wing], resolution=96)
     m = trimesh.Trimesh(sv, sf, process=False)
-    assert info["consensus"] == {"of": 3, "votes": 2} and m.is_watertight
+    assert info["consensus"]["agreed"] and info["consensus"]["votes"] == 2 and m.is_watertight
     assert m.volume == pytest.approx(24.0, rel=0.1)  # the tower's 2 x 2 x 6; the wing (12 more) is gone
     union, _, _ = solidify_consensus([tower, tower, with_wing], resolution=96, votes=1)
     assert union[:, 0].max() > 4.5  # voted with one, the wing would stay
+
+
+def test_generations_that_disagree_do_not_vote() -> None:
+    """Three towers of different proportions (pairwise IoU 0.59-0.71): no majority agrees, so the first alone --
+    their vote would be a 2 x 2 x 5.4 tower none of them is."""
+    import trimesh
+
+    from drone3d.complete import solidify_consensus
+
+    first = _box([0, 0, 0], [2, 2, 6], n=12)
+    wide, deep = _box([0, 0, 0], [2.6, 2, 5], n=12), _box([0, 0, 0], [2, 2.6, 5.4], n=12)
+    sv, sf, info = solidify_consensus([first, wide, deep], resolution=96)
+    m = trimesh.Trimesh(sv, sf, process=False)
+    assert not info["consensus"]["agreed"] and max(info["consensus"]["iou"]) < 0.75 and m.is_watertight
+    assert np.ptp(sv[:, 2]) == pytest.approx(6.0, rel=0.03) and np.ptp(sv[:, 0]) < 2.3  # the first: 6 high, 2 wide

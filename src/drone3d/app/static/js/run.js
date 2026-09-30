@@ -146,7 +146,7 @@ export async function viewRun(main, name) {
          ${c.status === 'ok' ? `<button class="btn tiny" id="cmpSplats">${c.splats === 'ok' ? 'Retrain' : 'Train'} 360° splats</button>` : ''}
          ${c.status === 'ok' ? `<button class="btn tiny" id="cmpView">${icon.eye}view 360°</button>` : ''}`;
     return `<div class="mcard generated" style="grid-column:span 2">
-        <div class="mthumb gen" style="${c.thumb ? `background-image:url('${encodeURI(c.thumb)}');background-size:cover` : ''}"><span class="pill">complete · 360°</span></div>
+        <div class="mthumb gen" style="${c.thumb ? `background-image:url('${encodeURI(c.thumb)}')` : ''}"><span class="pill">complete · 360°</span></div>
         <div style="padding:9px 11px"><b>Complete model</b> <span class="muted" style="font-size:12px">${c.consensus_of ? `consensus of ${c.consensus_of} generations` : c.generations > 1 ? `the best fit of ${c.generations} generations` : 'from the generated object'} · the measurement, completed</span>
           ${c.status === 'ok' ? `<div class="kv" style="margin-top:6px"><span>photographed</span><b>${pct(c.photographed)}</b><span>watertight</span><b>${c.watertight ? 'yes' : 'no'}</b>
             <span>triangles</span><b>${c.triangles ? fmtN(c.triangles) : '—'}</b><span>360° splats</span><b>${c.splats === 'ok' ? (c.num_splats ? fmtN(c.num_splats) : 'yes') : '—'}</b></div>` : ''}

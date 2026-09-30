@@ -1007,12 +1007,23 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
     COLMAP dataset: the keyframes, ``virtual/``, ``sparse/0``, ``masks/``: a view is supervised where the
     complete model is and in the sky above its horizon, never on the unmodelled ground below it) and
     ``splats/model_<N>_360``.
+
+    The trainer's background is the photographs' median sky colour (``background`` in the record; the
+    explorer draws it behind these splats): with the default black, every sky pixel of a keyframe had to be
+    painted by splats, and it painted them near the subject -- a veil of opacity 0.97 over the sky seen from
+    the flight, 0.94 from the unflown headings, fog over the city from above. Against the sky colour it is
+    0.20 and 0.10, the subject from the unflown headings as good (24.4 dB), the held-out keyframes better
+    drawn on it (22.5 dB against 21.1; on black 2.5 dB worse: the hazy distance is left to the sky colour
+    too) -- experiments/splat_sky.py. A skybox (``--background-mode sh``) took the tower's own colours into
+    it; an empty sky (``--apply-loss-for-mask``, every pixel either kept or empty) cleared the veil but
+    erased the parapet: an opacity conflict between views that view-dependent colour cannot settle.
     """
     import shutil
     import tempfile
 
     import pycolmap
     import torch
+    import torch.nn.functional as F
     import trimesh
     from PIL import Image
 
@@ -1076,6 +1087,10 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
 
     skies = _sky_masks([_V(i) for i in imgs])
     grad = _sky_gradient([i.cpu().numpy() for i in imgs], skies)
+    sky_px = [F.interpolate(i.permute(2, 0, 1)[None].float(), size=m.shape, mode="area")[0].permute(1, 2, 0).cpu().numpy()[m]
+              for i, m in zip(imgs, skies, strict=True) if m.any()]  # fmt: skip
+    # the trainer's background: the sky's median colour, so that the sky is left empty rather than painted
+    sky_rgb = tuple(round(float(x) / 255, 4) for x in np.median(np.concatenate(sky_px), 0)) if sky_px else None
     del imgs
     torch.cuda.empty_cache()
     parts = load_parts(out / "scene.glb")
@@ -1177,7 +1192,7 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
                        iterations=iterations or cfg.iterations, quality=cfg.quality, depth_weight=0.0,
                        eval_interval=cfg.eval_interval,
                        flags={"train_resolution_divisor": cfg.resolution_divisor, "cache_images": cfg.cache_images,
-                              "load_depths": 0, **cfg.flags})  # fmt: skip
+                              "load_depths": 0, **({"background_color": sky_rgb} if sky_rgb else {}), **cfg.flags})  # fmt: skip
         result.update(status="ok", **{k_: v_ for k_, v_ in tr.to_dict().items() if k_ not in ("config", "seconds")})
         result["seconds"]["train"] = round(tr.seconds, 1)
         if tr.splat_ply is not None:  # for the web viewer, in the model's export frame
@@ -1185,9 +1200,11 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
 
             tf = compose((fs, fr, ft), train_from_world(tr.run_dir / "scene_transform.json"))
             result["web"] = export_splat(tr.splat_ply, out / "splats_360.splat", transform=tf)
-            link_scene(run_dir, model)
+        result["background"] = list(sky_rgb) if sky_rgb else None
     result["seconds"]["total"] = round(time.perf_counter() - t_start, 1)
     (out / "splats_360.json").write_text(json.dumps(result, indent=1, default=str))
+    if (out / "splats_360.splat").is_file():
+        link_scene(run_dir, model)
     return result
 
 
@@ -1198,8 +1215,10 @@ def link_scene(run_dir: Path, model: int = 0) -> dict | None:
     path = run_dir / "export" / "scene.json"
     if not (out / "scene.glb").is_file() or not path.is_file():
         return None
+    trained = json.loads((out / "splats_360.json").read_text()) if (out / "splats_360.json").is_file() else {}
     entry = {"scene": "complete/scene.glb", "subject": "complete/subject.glb",
-             "splat": "complete/splats_360.splat" if (out / "splats_360.splat").is_file() else None, "note": NOTE}  # fmt: skip
+             "splat": "complete/splats_360.splat" if (out / "splats_360.splat").is_file() else None,
+             "splat_background": trained.get("background"), "note": NOTE}  # fmt: skip
     scene = json.loads(path.read_text())
     scene["models"][model]["complete"] = entry
     path.write_text(json.dumps(scene, indent=1))

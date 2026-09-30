@@ -27,6 +27,9 @@ ENGINE = "http://127.0.0.1:8770"
 STAGES = ["ingest", "keyframes", "sfm", "dense", "georef", "splat", "export", "metrics", "report"]
 SPLAT = {"models": "all", "quality": "medium", "iterations": 7000, "depth_weight": 0, "parallel": 1}
 FOREIGN_GB = 3.0
+# a crowd of small jobs passes the memory test: eight 1.4 GB diffraction solvers of another project held
+# 90 % of the SMs together while the largest held 1.4 GB
+FOREIGN_SM = 10
 QUIET_S = 120
 
 
@@ -64,6 +67,20 @@ def foreign_gb(engine_pid: int) -> float:
     return max(used, default=0.0)
 
 
+def foreign_sm(engine_pid: int) -> float:
+    """Percent of the SMs that processes other than the engine and its children used, over three samples."""
+    q = subprocess.run(["nvidia-smi", "pmon", "-c", "3", "-s", "u"], capture_output=True, text=True, check=True).stdout
+    ours = _tree(engine_pid)
+    total = 0
+    for line in q.splitlines():
+        f = line.split()
+        if line.startswith("#") or len(f) < 4 or not f[1].isdigit() or not f[3].isdigit():
+            continue
+        if int(f[1]) not in ours:
+            total += int(f[3])
+    return total / 3
+
+
 def wait_quiet() -> None:
     quiet_since = None
     while True:
@@ -72,11 +89,11 @@ def wait_quiet() -> None:
         except OSError:
             time.sleep(15)
             continue
-        busy = foreign_gb(engine_pid)
+        busy, sm = foreign_gb(engine_pid), foreign_sm(engine_pid)
         now = time.time()
-        if busy > FOREIGN_GB:
+        if busy > FOREIGN_GB or sm > FOREIGN_SM:
             if quiet_since is not None or not hasattr(wait_quiet, "said"):
-                print(f"{time.strftime('%H:%M:%S')} another process holds {busy:.1f} GB of the GPU; waiting", flush=True)
+                print(f"{time.strftime('%H:%M:%S')} other processes hold {busy:.1f} GB (largest) and {sm:.0f} % of the SMs; waiting", flush=True)
                 wait_quiet.said = True  # type: ignore[attr-defined]
             quiet_since = None
         elif quiet_since is None:

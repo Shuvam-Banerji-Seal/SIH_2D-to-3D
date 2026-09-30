@@ -102,6 +102,7 @@ def main() -> None:
         wait_quiet()
     base = yaml.safe_load((ROOT / "configs" / "fast.yaml").read_text())
     names = []
+    since = time.time()  # the engine keeps its history: a run of the same name before this one is not ours
     for v in videos:
         name = f"map_{slug(v.name)}"
         cfg = json.loads(json.dumps(base))
@@ -111,7 +112,7 @@ def main() -> None:
         names.append(name)
         print("queued", name, flush=True)
     while True:
-        hist = {j["name"]: j for j in call("/status")["history"]}
+        hist = {j["name"]: j for j in call("/status")["history"] if j.get("submitted", 0) >= since}
         if all(n in hist and hist[n]["status"] in ("done", "failed", "stopped") for n in names):
             break
         time.sleep(30)

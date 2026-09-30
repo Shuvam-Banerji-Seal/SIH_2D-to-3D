@@ -29,6 +29,7 @@ export class Explorer extends EventTarget {
     this.renderer.domElement.classList.add('x3d-canvas');
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(background);
+    this._bg = background;
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1e7);
     this.camera.up.set(0, 0, 1);
     this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
@@ -310,6 +311,7 @@ export class Explorer extends EventTarget {
     const whole360 = L.complete && !!entry.splat360Obj;
     if (entry.splatObj) entry.splatObj.visible = L.splats && !whole360;
     if (entry.splat360Obj) entry.splat360Obj.visible = L.splats && whole360;
+    this._skyBackground();
     if (entry.camObj) entry.camObj.visible = L.cameras;
     if (entry.photoObj) entry.photoObj.visible = L.photos;
     if (entry.depthObj) entry.depthObj.visible = L.depth;
@@ -335,12 +337,19 @@ export class Explorer extends EventTarget {
 
   setRenderScale(s) { this.wake(); this.renderScale = s; this.resize(); }
 
-  setBackground(hex) { this.wake(); this.scene.background = new THREE.Color(hex); }
+  setBackground(hex) { this._bg = hex; this._skyBackground(); }
+  // the 360-degree splats were trained against the photographs' sky colour, their sky left empty: behind them, that colour
+  _skyBackground() {
+    this.wake();
+    const m = this.models.find((e) => e.visible && e.splat360Obj?.visible && e.spec.complete?.splat_background);
+    this.scene.background = m ? new THREE.Color().setRGB(...m.spec.complete.splat_background, THREE.SRGBColorSpace) : new THREE.Color(this._bg);
+  }
 
   showModel(i, on) { this.wake();
     const m = this.models[i]; if (!m) return;
     m.visible = m.group.visible = on;
     if (on) { if (this.layers.points) this._loadPoints(m).then(() => this._apply(m)); if (this.layers.splats) this._loadSplat(m).then(() => this._apply(m)); }
+    this._skyBackground();
     this.dispatchEvent(new CustomEvent('models'));
   }
 

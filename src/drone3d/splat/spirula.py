@@ -297,8 +297,9 @@ def run_train(
     ]  # fmt: skip
     if recon_dir:
         cmd += ["--colmap-recon-dir", recon_dir]
-    for key, value in (flags or {}).items():
-        cmd += [f"--{key.replace('_', '-')}", str(int(value) if isinstance(value, bool) else value)]
+    for key, value in (flags or {}).items():  # a tuple is one flag of several values (--background-color R G B)
+        values = value if isinstance(value, (tuple, list)) else (value,)
+        cmd += [f"--{key.replace('_', '-')}", *(str(int(v) if isinstance(v, bool) else v) for v in values)]
     log_path = out_dir.parent / f"{out_dir.name}.log"
     for attempt in (1, 2):  # a stalled trainer is retried once in a fresh process
         code, text, seconds = _run(cmd, log_path, stall_s=stall_s)

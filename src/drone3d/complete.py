@@ -40,7 +40,7 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["carve", "complete_model", "drop_base_slab", "solidify_consensus", "link_scene", "retexture", "snap_planes", "solidify", "splats_360", "transfer_texture"]
+__all__ = ["carve", "complete_model", "drop_base_slab", "link_scene", "ray_elevation", "retexture", "sky_to_edges", "snap_planes", "solidify", "solidify_consensus", "splats_360", "transfer_texture"]
 
 log = get_logger(__name__)
 
@@ -142,6 +142,53 @@ def _sky_masks(views, width: int = 640, model: str = "depth-anything/Depth-Anyth
     del mono
     torch.cuda.empty_cache()
     return out
+
+
+def ray_elevation(cam, world_to_cam: np.ndarray, size: tuple[int, int]) -> np.ndarray:  # type: ignore[no-untyped-def]
+    """Per pixel of a (w, h) image of COLMAP camera ``cam``, how far its ray rises above the horizon, in degrees,
+    for ``world_to_cam`` a rotation from a z-up frame (the export frame) -> float32 [h, w]. Pinhole: the
+    distortion moves a ray a fraction of a degree."""
+    w, h = size
+    sx = w / cam.width
+    f, cx, cy = cam.focal_length_x * sx, cam.principal_point_x * sx, cam.principal_point_y * sx
+    u, v = np.meshgrid((np.arange(w) + 0.5 - cx) / f, (np.arange(h) + 0.5 - cy) / f)
+    d = np.stack([u, v, np.ones_like(u)], -1) @ np.asarray(world_to_cam)  # rows: R^T applied to camera rays
+    return np.degrees(np.arcsin(d[..., 2] / np.linalg.norm(d, axis=-1))).astype(np.float32)
+
+
+def sky_to_edges(image: np.ndarray, sky: np.ndarray, elevation: np.ndarray, *, width: int = 960, band: int = 8,
+                 tol: float = 0.06, sigma: float = 12.0, above_deg: float = 2.0) -> np.ndarray:  # fmt: skip
+    """``sky`` (bool, from ``_sky_masks``: 640 px wide, eroded 3 px) at ``image``'s resolution (uint8 [H, W, 3]),
+    grown up to the skyline -> bool [H, W].
+
+    Depth Anything's sky, at 640 px and cut at 0.5 % of the image's disparity, stops 5-15 px short of a
+    roofline; where the splats were told the sky is empty, that sliver was trained as sky colour and drew a
+    light rim round every roof. The sky grows (at ``width`` px, reconstruction by dilation) into the pixels
+    within ``band`` px of it whose colour is within ``tol`` (0..1 RGB) of the sky nearby (Gaussian ``sigma``)
+    and whose ray rises ``above_deg`` or more above the horizon (``elevation``: degrees, per pixel of the
+    image, from :func:`ray_elevation`): across a roofline the colour changes, and the growing stops there;
+    by colour alone it went on into the sea and the hazy distance below the horizon in 5 of the 15 sample
+    videos. ``band`` (8 px at 960, the highrise's sliver 3-8) bounds what a pose levelled a few degrees off lets
+    through: Cristo's took a strip of the bay. A guided filter did not move the edge: the sliver is flat sky,
+    with no edge in it to follow.
+    """
+    import cv2
+    from scipy import ndimage
+
+    h0, w0 = image.shape[:2]
+    h = max(1, round(h0 * width / w0))
+    img = cv2.resize(np.ascontiguousarray(image), (width, h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
+    raw = ndimage.binary_dilation(sky, iterations=3)  # the erosion undone
+    s0 = cv2.resize(raw.astype(np.uint8), (width, h), interpolation=cv2.INTER_NEAREST) > 0
+    if not s0.any():
+        return np.zeros((h0, w0), bool)
+    wgt = ndimage.gaussian_filter(s0.astype(np.float32), sigma)
+    near_sky = np.stack([ndimage.gaussian_filter(img[..., c] * s0, sigma) for c in range(3)], -1) / np.maximum(wgt, 1e-6)[..., None]
+    up = cv2.resize(np.ascontiguousarray(elevation, dtype=np.float32), (width, h), interpolation=cv2.INTER_LINEAR) >= above_deg
+    like = (np.linalg.norm(img - near_sky, axis=-1) < tol) & (wgt > 0.02) & up
+    reach = ndimage.binary_dilation(s0, iterations=band)
+    grown = ndimage.binary_propagation(s0, mask=s0 | (like & reach))
+    return cv2.resize(grown.astype(np.uint8), (w0, h0), interpolation=cv2.INTER_NEAREST) > 0
 
 
 def drop_base_slab(v: np.ndarray, f: np.ndarray, *, band: float = 0.02, min_share: float = 0.15) -> np.ndarray:
@@ -499,12 +546,18 @@ def solidify(v: np.ndarray, f: np.ndarray, *, resolution: int = 224, yaw: float 
 
 
 def solidify_consensus(meshes: list[tuple[np.ndarray, np.ndarray]], *, resolution: int = 224, yaw: float = 0.0,
-                       votes: int | None = None) -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
+                       votes: int | None = None, min_iou: float = 0.75) -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
     """The closed surface of what at least ``votes`` of ``meshes`` (default: most of them) enclose, on one grid.
 
     Several generations of the object, each from its own keyframe, invent differently where the flight saw
-    nothing; what most of them agree on is kept, what one alone invents goes.
+    nothing; what most of them agree on is kept, what one alone invents goes. A vote needs a majority that
+    agrees -- ``votes`` members pairwise within ``min_iou`` (intersection over union of what they enclose):
+    the highrise's three generations, placed at scales 13 % apart and one without the crown, met at 0.59-0.68,
+    and their vote was a tower with a ledge none of them had. Without one, the first mesh (the caller's
+    best-placed) alone. Default votes only.
     """
+    from itertools import combinations
+
     rz = _heading(yaw)
     rot = [(v @ rz.T, f) for v, f in meshes]
     lo = np.min([v.min(0) for v, _ in rot], axis=0)
@@ -512,16 +565,23 @@ def solidify_consensus(meshes: list[tuple[np.ndarray, np.ndarray]], *, resolutio
     vox = float((hi - lo).max()) / resolution
     lo = lo - 3 * vox
     shape = np.ceil((hi - lo + 3 * vox) / vox).astype(int) + 1
-    count = np.zeros(shape, np.int16)
-    rules = []
+    occs, rules = [], []
     for v, f in rot:
         occ, rule = _occupancy(v, f, lo, vox, shape)
-        count += occ
+        occs.append(occ)
         rules.append(rule)
-    need = votes if votes is not None else len(meshes) // 2 + 1
-    sv, sf, closed, volume = _surface(count >= need, lo, vox, rz)
-    info = {"voxel": round(vox, 5), "fill": rules[0] if len(rules) == 1 else rules, "watertight": closed,
-            "volume": round(volume, 4), "consensus": {"of": len(meshes), "votes": need} if len(meshes) > 1 else None}  # fmt: skip
+    n = len(meshes)
+    iou = np.ones((n, n))
+    for a, b in combinations(range(n), 2):
+        iou[a, b] = iou[b, a] = (occs[a] & occs[b]).sum() / max(int((occs[a] | occs[b]).sum()), 1)
+    need = votes if votes is not None else n // 2 + 1
+    agreed = votes is not None or any(all(iou[a, b] >= min_iou for a, b in combinations(c, 2))
+                                      for c in combinations(range(n), need))  # fmt: skip
+    solid = np.sum(occs, axis=0, dtype=np.int16) >= need if agreed else occs[0]
+    sv, sf, closed, volume = _surface(solid, lo, vox, rz)
+    info = {"voxel": round(vox, 5), "fill": rules[0] if len(rules) == 1 else rules, "watertight": closed, "volume": round(volume, 4),
+            "consensus": {"of": n, "votes": need if agreed else 1, "agreed": bool(agreed),
+                          "iou": [round(float(iou[a, b]), 3) for a, b in combinations(range(n), 2)]} if n > 1 else None}  # fmt: skip
     return sv, sf, info
 
 
@@ -879,14 +939,17 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
         "status": "ok", "model": model, "frame": frame.get("frame"), "units": frame.get("units"),
         "pivot_export_frame": fp_centre.round(5).tolist(), "height": round(height, 4),
         "generated_triangles": n_generated, "base_slab_triangles": slab_faces, "planes_snapped": planes,
-        "consensus_of": 1 + len(others) if len(others) >= 2 else None,
+        "generations": 1 + len(others),
+        "consensus_of": 1 + len(others) if (solid_info.get("consensus") or {}).get("agreed") else None,
         "carved_triangles": carved,
         "subject_triangles": int(len(solid_f)), "solid": solid_info, "watertight": bool(solid.is_watertight),
         "scene_triangles": int(len(keep_f)), "shell_triangles_replaced": int(shell.sum()),
         "ground_fill_triangles": int(len(gff)),
         "texture": tex_info, "generated_share": round(1 - tex_info["photo_texels"], 4),
         "note": "photographed where the keyframes see the object; elsewhere generated by TRELLIS.2 "
-        + (f"from {1 + len(others)} keyframes (the shape they agree on)" if len(others) >= 2 else "from one keyframe")
+        + (f"from {1 + len(others)} keyframes (the shape most of them agree on)" if (solid_info.get("consensus") or {}).get("agreed")
+           else f"from the keyframe whose generation fits the measurement best (of {1 + len(others)}, which disagreed)" if others
+           else "from one keyframe")
         + ", not measured",
         "files": [str(p.relative_to(run_dir / "export")) for p in files],
         "seconds": {"carve": round(t_carve, 1), "texture": round(t_tex, 1), "solid": round(t_solid, 1), "total": round(time.perf_counter() - t_start, 1)},

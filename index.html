@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drone3D: single-pass drone video to a 3D model</title>
+<meta name="description" content="Hadez Labs, SIH 2026, PS 26158 (NTRO): one drone flight in, a georeferenced textured 3D model out. Open source.">
+<style>
+  :root { --bg: #0e1116; --panel: #161b22; --text: #e8edf3; --muted: #9aa7b4; --accent: #f5a623; --green: #2ea44f; --blue: #3b8eea; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 16px 48px; }
+  .tag { display: inline-block; font: 600 12px/1 ui-monospace, monospace; letter-spacing: .06em; color: var(--accent); border: 1px solid #3a3020; border-radius: 99px; padding: 6px 10px; }
+  h1 { font-size: clamp(26px, 5vw, 44px); line-height: 1.12; margin: 14px 0 6px; }
+  h1 b { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  video { width: 100%; border-radius: 12px; background: #000; display: block; box-shadow: 0 10px 40px #0008; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 26px; }
+  a.btn { text-decoration: none; color: var(--text); background: var(--panel); border: 1px solid #2a323c; border-radius: 10px; padding: 11px 16px; font-weight: 600; }
+  a.btn.primary { background: var(--accent); color: #111; border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 8px 0 26px; }
+  .stat { background: var(--panel); border: 1px solid #222a33; border-radius: 12px; padding: 14px; }
+  .stat b { display: block; font-size: 26px; color: var(--accent); }
+  .stat span { color: var(--muted); font-size: 14px; }
+  pre { background: var(--panel); border: 1px solid #222a33; border-radius: 12px; padding: 14px; overflow-x: auto; font-size: 13.5px; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">SIH 2026 · PS 26158 · NTRO · HADEZ LABS</span>
+  <h1>One drone pass in.<br><b>A complete 3D model</b> out.</h1>
+  <p class="sub">Georeferenced, textured meshes, point clouds and 360° Gaussian splats from a single-pass drone video. Open source: not a hosted service, it runs on your own GPU machine.</p>
+  <video controls playsinline preload="metadata" poster="poster.jpg" src="explainer.mp4"></video>
+  <div class="row">
+    <a class="btn primary" href="https://github.com/Shuvam-Banerji-Seal/SIH_2D-to-3D">Source code on GitHub</a>
+    <a class="btn" href="explainer.mp4" download>Download the film (30 MB)</a>
+  </div>
+  <div class="grid">
+    <div class="stat"><b>15 / 15</b><span>real drone videos reconstructed end to end</span></div>
+    <div class="stat"><b>87 %</b><span>median coverage of what the camera saw</span></div>
+    <div class="stat"><b>&lt; 1 m</b><span>error within 100 m of the track (simulated GPS)</span></div>
+    <div class="stat"><b>6 / 6</b><span>formats: OBJ · PLY · LAS · GeoTIFF · GLB · FBX</span></div>
+  </div>
+  <h2>Run it yourself</h2>
+  <pre>git clone --recurse-submodules https://github.com/Shuvam-Banerji-Seal/SIH_2D-to-3D
+cd SIH_2D-to-3D
+uv sync --all-extras
+uv run drone3d ui        # console + 3D explorer at http://127.0.0.1:8080</pre>
+  <footer>Needs an NVIDIA GPU and <code>uv</code>. The film shows our own runs on public sample footage.</footer>
+</main>
+</body>
+</html>

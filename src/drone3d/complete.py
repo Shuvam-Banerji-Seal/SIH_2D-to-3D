@@ -1012,9 +1012,9 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
     explorer draws it behind these splats): with the default black, every sky pixel of a keyframe had to be
     painted by splats, and it painted them near the subject -- a veil of opacity 0.97 over the sky seen from
     the flight, 0.94 from the unflown headings, fog over the city from above. Against the sky colour it is
-    0.20 and 0.10, the subject from the unflown headings as good (24.4 dB), the held-out keyframes better
-    drawn on it (22.5 dB against 21.1; on black 2.5 dB worse: the hazy distance is left to the sky colour
-    too) -- experiments/splat_sky.py. A skybox (``--background-mode sh``) took the tower's own colours into
+    0.20 and 0.10, the subject from the unflown headings as good (24.4 dB), the trainer's held-out views
+    (6 keyframes, 10 rendered) 22.5 dB against 21.1 drawn on it; the keyframes' ground on black 2.5 dB worse
+    (the hazy distance is left to the sky colour too) -- experiments/splat_sky.py. A skybox (``--background-mode sh``) took the tower's own colours into
     it; an empty sky (``--apply-loss-for-mask``, every pixel either kept or empty) cleared the veil but
     erased the parapet: an opacity conflict between views that view-dependent colour cannot settle.
     """

@@ -64,6 +64,11 @@ def main() -> None:
             "warm": job.get("warm"), "others_gpu_gb": round(max(others), 1) if others else None,
             "clean": bool(others) and max(others) < 3.0,
         })  # fmt: skip
+        # benchmark.py --sequential sampled the other processes' SM use too: a crowd of small jobs passes the memory test
+        seq = (load(OUT / ".benchmark_load.json") or {}).get(run.name)
+        took = (job["finished"] - job["started"]) if job.get("finished") and job.get("started") else None
+        if seq and seq.get("seconds") is not None and took is not None and abs(took - seq["seconds"]) < 1.0:  # this run's
+            rows[-1].update(clean=bool(seq["clean"]), others_sm_mean=seq["foreign_sm_mean"])
     (FIG / "all_maps.json").write_text(json.dumps(rows, indent=1))
 
     # analysis rate / overlap comparisons (same engine, one job at a time)

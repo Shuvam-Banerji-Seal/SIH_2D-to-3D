@@ -1,12 +1,17 @@
 """The all-videos benchmark: every sample video, fast profile + Gaussian splats, on the warm one-slot engine.
 
-    uv run python experiments/benchmark.py [--no-wait] [--only KEYWORD ...]
+    uv run python experiments/benchmark.py [--no-wait] [--only KEYWORD ...] [--sequential [--tries N]]
     uv run python experiments/collect_system.py          (afterwards: paper/figures/all_maps.json)
 
 Runs are written as ``outputs/map_<video slug>`` (replacing an earlier benchmark's). Timings are only
 worth reporting on a GPU nobody else is computing on, so by default this waits until no other process
 has held more than 3 GB of the card for two minutes (the host's idle 1.7 GB search server is ignored);
 it never touches other processes. The engine at :8770 must run with one slot.
+
+``--sequential`` submits one video at a time, each after the GPU has been quiet, samples the other
+processes' load while it runs, and runs it again (up to ``--tries``) if the load was not quiet throughout:
+another project's solvers came and went in bursts of an hour, and a batch submitted at once was timed
+under them. Each video's load goes to ``outputs/.benchmark_load.json`` (``collect_system`` reads it).
 """
 
 from __future__ import annotations
@@ -104,10 +109,42 @@ def wait_quiet() -> None:
         time.sleep(15)
 
 
+LOAD = ROOT / "outputs" / ".benchmark_load.json"
+
+
+def run_alone(name: str, cfg: dict, tries: int) -> dict:
+    """One video on a quiet GPU -> its record: status, seconds and the other processes' load while it ran."""
+    rec: dict = {}
+    for attempt in range(1, tries + 1):
+        wait_quiet()
+        since = time.time()
+        call("/jobs", {"name": name, "config": cfg, "run_dir": str(ROOT / "outputs" / name)})
+        gb, sm = [], []
+        while True:
+            st = call("/status")
+            job = next((j for j in st["history"] if j["name"] == name and j.get("submitted", 0) >= since), None)
+            if job is not None and job["status"] in ("done", "failed", "stopped"):
+                break
+            gb.append(foreign_gb(st["pid"]))
+            sm.append(foreign_sm(st["pid"]))
+            time.sleep(20)
+        rec = {"status": job["status"], "seconds": job.get("seconds"), "attempt": attempt, "samples": len(sm),
+               "foreign_gb_peak": round(max(gb, default=0.0), 2), "foreign_sm_mean": round(sum(sm) / max(len(sm), 1), 1),
+               "foreign_sm_peak": round(max(sm, default=0.0), 1)}  # fmt: skip
+        rec["clean"] = rec["foreign_gb_peak"] <= FOREIGN_GB and rec["foreign_sm_mean"] <= FOREIGN_SM / 2
+        print(f"{time.strftime('%H:%M:%S')} {name} {rec['status']} {rec['seconds']} s  others: {rec['foreign_sm_mean']} % SM "
+              f"(peak {rec['foreign_sm_peak']}), {rec['foreign_gb_peak']} GB{'' if rec['clean'] else '  -- shared, again'}", flush=True)
+        if rec["clean"] or rec["status"] != "done":
+            break
+    return rec
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-wait", action="store_true", help="submit at once (timings may then be shared)")
     ap.add_argument("--only", nargs="*", default=None, help="videos whose file name contains one of these")
+    ap.add_argument("--sequential", action="store_true", help="one video at a time, each re-run if the GPU was shared")
+    ap.add_argument("--tries", type=int, default=3)
     args = ap.parse_args()
     status = call("/status")
     if status["slots"] != 1:
@@ -115,7 +152,7 @@ def main() -> None:
     videos = sorted((p for p in (ROOT / "datasets").iterdir() if p.suffix == ".webm"), key=lambda p: p.name.lower())
     if args.only:
         videos = [v for v in videos if any(k.lower() in v.name.lower() for k in args.only)]
-    if not args.no_wait:
+    if not args.no_wait and not args.sequential:
         wait_quiet()
     base = yaml.safe_load((ROOT / "configs" / "fast.yaml").read_text())
     names = []
@@ -125,11 +162,17 @@ def main() -> None:
         cfg = json.loads(json.dumps(base))
         cfg.update(ingest={**(cfg.get("ingest") or {}), "video": str(v)}, run_name=name, stages=STAGES)
         cfg["splat"] = {**(cfg.get("splat") or {}), **SPLAT}
-        call("/jobs", {"name": name, "config": cfg, "run_dir": str(ROOT / "outputs" / name)})
+        if args.sequential:
+            rec = run_alone(name, cfg, args.tries)
+            load = json.loads(LOAD.read_text()) if LOAD.is_file() else {}
+            load[name] = {**rec, "measured": time.strftime("%Y-%m-%d %H:%M")}
+            LOAD.write_text(json.dumps(load, indent=1))
+        else:
+            call("/jobs", {"name": name, "config": cfg, "run_dir": str(ROOT / "outputs" / name)})
+            print("queued", name, flush=True)
         names.append(name)
-        print("queued", name, flush=True)
     while True:
-        hist = {j["name"]: j for j in call("/status")["history"] if j.get("submitted", 0) >= since}
+        hist = {j["name"]: j for j in reversed(call("/status")["history"]) if j.get("submitted", 0) >= since}  # newest wins
         if all(n in hist and hist[n]["status"] in ("done", "failed", "stopped") for n in names):
             break
         time.sleep(30)

@@ -61,7 +61,11 @@ STALLED = -1000  # _run's return code when the process stopped writing and was k
 
 
 def _run(
-    cmd: Sequence[str | Path], log_path: Path, cwd: Path | None = None, *, stall_s: float | None = None
+    cmd: Sequence[str | Path],
+    log_path: Path,
+    cwd: Path | None = None,
+    *,
+    stall_s: float | None = None,
 ) -> tuple[int, str, float]:
     """Run ``cmd`` streaming stdout+stderr to ``log_path``; return (code, text, seconds).
 
@@ -240,7 +244,9 @@ class TrainResult:
         }
 
 
-def dense_init_model(model_dir: Path, points_ply: Path, out_dir: Path, *, max_points: int = 400_000) -> Path:
+def dense_init_model(
+    model_dir: Path, points_ply: Path, out_dir: Path, *, max_points: int = 400_000
+) -> Path:
     """A copy of an SfM model whose 3D points are the dense cloud, as the splats' starting points.
 
     Flow SfM keeps ~12 tracks per image (Jal Mahal's largest pass: ~1000
@@ -256,7 +262,11 @@ def dense_init_model(model_dir: Path, points_ply: Path, out_dir: Path, *, max_po
         rec.delete_point3D(pid)
     cloud = o3d.io.read_point_cloud(str(points_ply))
     xyz = np.asarray(cloud.points, dtype=np.float64)
-    rgb = (np.asarray(cloud.colors) * 255).round().astype(np.uint8) if cloud.has_colors() else np.full((len(xyz), 3), 128, np.uint8)
+    rgb = (
+        (np.asarray(cloud.colors) * 255).round().astype(np.uint8)
+        if cloud.has_colors()
+        else np.full((len(xyz), 3), 128, np.uint8)
+    )
     if len(xyz) > max_points:
         keep = np.random.default_rng(0).choice(len(xyz), max_points, replace=False)
         xyz, rgb = xyz[keep], rgb[keep]
@@ -297,19 +307,31 @@ def run_train(
     ]  # fmt: skip
     if recon_dir:
         cmd += ["--colmap-recon-dir", recon_dir]
-    for key, value in (flags or {}).items():  # a tuple is one flag of several values (--background-color R G B)
+    for key, value in (
+        flags or {}
+    ).items():  # a tuple is one flag of several values (--background-color R G B)
         values = value if isinstance(value, (tuple, list)) else (value,)
-        cmd += [f"--{key.replace('_', '-')}", *(str(int(v) if isinstance(v, bool) else v) for v in values)]
+        cmd += [
+            f"--{key.replace('_', '-')}",
+            *(str(int(v) if isinstance(v, bool) else v) for v in values),
+        ]
     log_path = out_dir.parent / f"{out_dir.name}.log"
     for attempt in (1, 2):  # a stalled trainer is retried once in a fresh process
         code, text, seconds = _run(cmd, log_path, stall_s=stall_s)
         if code != STALLED:
             break
-        log.warning("spirula train %s stalled (attempt %d); %s", out_dir.name, attempt, "retrying" if attempt == 1 else "giving up")
+        log.warning(
+            "spirula train %s stalled (attempt %d); %s",
+            out_dir.name,
+            attempt,
+            "retrying" if attempt == 1 else "giving up",
+        )
         if out_dir.exists():
             shutil.rmtree(out_dir)
     if code == STALLED:
-        raise ReconstructionError(f"spirula train stalled twice (no output for {stall_s:.0f} s); see {log_path}")
+        raise ReconstructionError(
+            f"spirula train stalled twice (no output for {stall_s:.0f} s); see {log_path}"
+        )
     if code != 0:
         raise ReconstructionError(f"spirula train failed (exit {code}); see {log_path}")
     metrics_path = out_dir / "metrics.json"
@@ -350,12 +372,18 @@ class MeshResult:
 
 def _finished_mesh(run_dir: Path, log_path: Path, formats: Sequence[str]) -> MeshResult | None:
     """The mesh an earlier ``spirula mesh`` made from the current splat, if complete."""
-    done = re.search(r"\[meshing\] done:.*\(total ([\d.]+)s\)", log_path.read_text()) if log_path.is_file() else None
+    done = (
+        re.search(r"\[meshing\] done:.*\(total ([\d.]+)s\)", log_path.read_text())
+        if log_path.is_file()
+        else None
+    )
     splats = list(run_dir.rglob("splat.ply"))
     if done is None or not splats:
         return None
     newest_splat = max(p.stat().st_mtime for p in splats)
-    files = sorted(p for p in run_dir.rglob("mesh*") if p.is_file() and p.stat().st_mtime > newest_splat)
+    files = sorted(
+        p for p in run_dir.rglob("mesh*") if p.is_file() and p.stat().st_mtime > newest_splat
+    )
     if not files or any(not any(f.suffix == f".{fmt}" for f in files) for fmt in formats):
         return None
     return MeshResult(files=files, seconds=float(done.group(1)), log_path=log_path)

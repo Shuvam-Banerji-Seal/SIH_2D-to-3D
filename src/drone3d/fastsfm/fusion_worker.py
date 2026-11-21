@@ -95,6 +95,7 @@ class FusionWorker:
             self._conn.close()
         proc = self._proc
         if proc is not None:
+
             def reap() -> None:
                 proc.join(timeout=10)
                 if proc.is_alive():

@@ -64,7 +64,9 @@ def run_status(run_dir: Path) -> dict:
                 if current == m.group(2):
                     current = None
     manifest = _read(run_dir / "manifest.json") or {}
-    if not any("seconds" in v for v in stages.values()) and manifest:  # a log without INFO lines (older --quiet runs)
+    if (
+        not any("seconds" in v for v in stages.values()) and manifest
+    ):  # a log without INFO lines (older --quiet runs)
         planned = (manifest.get("config") or {}).get("stages") or []
         done = {r["name"]: r for r in (manifest.get("result") or {}).get("stages", [])}
         stages = {st: {"status": done[st]["status"], "seconds": round(done[st].get("duration_s", 0.0), 2),

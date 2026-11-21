@@ -144,7 +144,9 @@ def depth_panel(
         row[1].set_title(title, fontsize=7)
         z = obs.z
         row[2].scatter(z, d_aff, s=1, alpha=0.2, color="#9e9e9e", rasterized=True, label="affine")
-        row[2].scatter(z, d_mono, s=1, alpha=0.25, color="#1565c0", rasterized=True, label="monotone")
+        row[2].scatter(
+            z, d_mono, s=1, alpha=0.25, color="#1565c0", rasterized=True, label="monotone"
+        )
         hi = float(np.quantile(z, 0.99)) * 1.1
         row[2].plot([0, hi], [0, hi], color="#c62828", lw=0.8)
         row[2].set_xlim(0, hi)

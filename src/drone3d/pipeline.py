@@ -22,7 +22,7 @@ import json
 import shutil
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,7 @@ log = get_logger(__name__)
 
 def default_run_dir(config: PipelineConfig) -> Path:
     """Timestamped run directory under ``config.output_root``."""
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return Path(config.output_root) / f"{config.run_name}_{timestamp}"
 
 
@@ -72,7 +72,9 @@ class Pipeline:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.dataset = self.run_dir / "dataset"
         self._result = PipelineResult(run_dir=self.run_dir)
-        self.cancel: threading.Event | None = None  # set by the engine to stop before the next stage
+        self.cancel: threading.Event | None = (
+            None  # set by the engine to stop before the next stage
+        )
 
     # ------------------------------------------------------------------ public
 
@@ -194,7 +196,10 @@ class Pipeline:
         save_mask(self.dataset, mask if mask is not None and mask.any() else None)
         if mask is None or not mask.any():
             return None
-        log.info("overlay: a static logo / caption covers %.1f %% of the frame; masked", 100 * mask.mean())
+        log.info(
+            "overlay: a static logo / caption covers %.1f %% of the frame; masked",
+            100 * mask.mean(),
+        )
         return {"share": round(float(mask.mean()), 4), "mask": "dataset/overlay_mask.png"}
 
     def _stage_keyframes(self) -> StageReport:
@@ -242,7 +247,9 @@ class Pipeline:
         candidates = self.dataset / "candidates"
         if candidates.exists():
             shutil.rmtree(candidates)
-        chunks = stream_analysis_chunks(info, size, stride=stride, hwaccel=cfg.hwaccel, crop=crop, sidecar=side)
+        chunks = stream_analysis_chunks(
+            info, size, stride=stride, hwaccel=cfg.hwaccel, crop=crop, sidecar=side
+        )
         if side is not None:
             chunks = write_sidecar_jpegs(chunks, candidates, quality=cfg.jpeg_quality)
         capacity = -(-info.num_frames // stride)  # ceil: analysis frames expected
@@ -569,17 +576,31 @@ class Pipeline:
         if cfg.models == "largest":
             models = models[:1]
         have_depth = (self.dataset / "depths").is_dir()
-        dense = {m["model"]: m for m in (self._stage_result("dense") or {}).get("models", []) if m.get("status") == "ok"}
+        dense = {
+            m["model"]: m
+            for m in (self._stage_result("dense") or {}).get("models", [])
+            if m.get("status") == "ok"
+        }
+
         def train(model: dict) -> dict:
             try:
                 return train_one(model)
-            except ReconstructionError as exc:  # one model's trainer failing must not lose the others
+            except (
+                ReconstructionError
+            ) as exc:  # one model's trainer failing must not lose the others
                 log.warning("splat %s: %s", Path(model["path"]).name, exc)
-                return {"model": model["path"], "passes": model.get("passes"), "status": "failed", "error": str(exc)[:300]}
+                return {
+                    "model": model["path"],
+                    "passes": model.get("passes"),
+                    "status": "failed",
+                    "error": str(exc)[:300],
+                }
 
         def train_one(model: dict) -> dict:
             recon = Path(model["path"]).relative_to(self.dataset)
-            if cfg.init == "dense" and model["path"] in dense:  # start from the TSDF cloud, not ~1000 SfM points
+            if (
+                cfg.init == "dense" and model["path"] in dense
+            ):  # start from the TSDF cloud, not ~1000 SfM points
                 from drone3d.splat.spirula import dense_init_model
 
                 init_dir = self.dataset / "sparse_init" / Path(model["path"]).name
@@ -605,16 +626,27 @@ class Pipeline:
                 eval_interval=cfg.eval_interval,
                 flags=flags,
             )
-            return {"model": model["path"], "passes": model.get("passes"), "status": "ok", **result.to_dict()}
+            return {
+                "model": model["path"],
+                "passes": model.get("passes"),
+                "status": "ok",
+                **result.to_dict(),
+            }
 
-        if cfg.parallel > 1 and len(models) > 1:  # one trainer leaves the GPU idle between its small kernels
+        if (
+            cfg.parallel > 1 and len(models) > 1
+        ):  # one trainer leaves the GPU idle between its small kernels
             from concurrent.futures import ThreadPoolExecutor
 
-            with ThreadPoolExecutor(min(cfg.parallel, len(models)), thread_name_prefix="splat") as pool:
+            with ThreadPoolExecutor(
+                min(cfg.parallel, len(models)), thread_name_prefix="splat"
+            ) as pool:
                 trained = list(pool.map(train, models))  # model order kept
         else:
             trained = []
-            for m in models:  # a stop request is honoured between models, not only after the whole stage
+            for m in (
+                models
+            ):  # a stop request is honoured between models, not only after the whole stage
                 if self.cancel is not None and self.cancel.is_set():
                     log.info("splat: stopped after %d of %d models", len(trained), len(models))
                     break
@@ -626,7 +658,9 @@ class Pipeline:
             f"{Path(t['run_dir']).name}: PSNR {_mean_metric(t['eval_metrics'], 'psnr'):.2f} dB, "
             f"{t['num_splats']} splats"
             for t in ok
-        ) + "".join(f"; {Path(t['model']).name}: failed" for t in trained if t.get("status") == "failed")
+        ) + "".join(
+            f"; {Path(t['model']).name}: failed" for t in trained if t.get("status") == "failed"
+        )
         return StageReport("splat", "ok" if ok else "failed", summary, metrics=payload)
 
     def _stage_mesh(self) -> StageReport:
@@ -823,10 +857,16 @@ class Pipeline:
             ply = next((f for f in m.get("files", []) if f.endswith("points.ply")), None)
             if ply is None:
                 continue
-            p = np.asarray(o3d.io.read_point_cloud(str(self.run_dir / "export" / ply)).points, dtype=np.float64)
+            p = np.asarray(
+                o3d.io.read_point_cloud(str(self.run_dir / "export" / ply)).points, dtype=np.float64
+            )
             if not len(p):
                 continue
-            row: dict[str, Any] = {"model": m["model"], "units": m.get("units"), "epsg": m.get("epsg")}
+            row: dict[str, Any] = {
+                "model": m["model"],
+                "units": m.get("units"),
+                "epsg": m.get("epsg"),
+            }
             reference, epsg = None, m.get("epsg")
             if ref_path is not None:
                 if projected and not (epsg and origin):
@@ -872,7 +912,7 @@ class Pipeline:
                 "metrics": self._collect_metrics(),
                 "contact_sheet": contact,
                 "config": self.config.to_dict(),
-                "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
                 "version": __version__,
             },
             out_path=self.run_dir / "report.html",
@@ -927,7 +967,7 @@ class Pipeline:
             self.run_dir / "manifest.json",
             {
                 "generator": f"drone3d {__version__}",
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "run_dir": str(self.run_dir),
                 "config": self.config.to_dict(),
                 "result": {**self._result.to_dict(), "stages": stages},
@@ -969,7 +1009,11 @@ def _adapt_stride(info, size, stride, flow_model, crop, cfg, pairs=None):  # typ
         pairs = _probe_pairs(info, size, stride)
     if len(pairs) < 4:
         return stride, {"status": "too-few-samples"}
-    nv = torch.from_numpy(np.stack([f for p in pairs for f in p])).view(-1, height * 3 // 2, width).cuda()
+    nv = (
+        torch.from_numpy(np.stack([f for p in pairs for f in p]))
+        .view(-1, height * 3 // 2, width)
+        .cuda()
+    )
     rgb = nv12_to_rgb(nv, height, width, **_color_args(info))
     if crop is not None:
         x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), size, multiple=8)
@@ -1026,7 +1070,14 @@ def _mean_metric(metrics: dict, key: str) -> float:
 
 
 SPLAT_STAGES = ("splat", "depth", "mesh", "render")
-GPU_STAGES = ("keyframes", "dense", "splat", "depth", "mesh", "render")  # the 3DGS stages, timed apart from the budget
+GPU_STAGES = (
+    "keyframes",
+    "dense",
+    "splat",
+    "depth",
+    "mesh",
+    "render",
+)  # the 3DGS stages, timed apart from the budget
 
 
 def _summary_metrics(run_dir: Path) -> dict[str, Any]:
@@ -1080,7 +1131,9 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
         ]  # fmt: skip
         from drone3d.metrics.quality import scene_view_completeness
 
-        out["view_completeness"] = scene_view_completeness(_read_json(run_dir / "sfm" / "result.json") or {}, dense)
+        out["view_completeness"] = scene_view_completeness(
+            _read_json(run_dir / "sfm" / "result.json") or {}, dense
+        )
     export = _read_json(run_dir / "export" / "result.json")
     if export:
         out["export"] = {
@@ -1093,7 +1146,8 @@ def _summary_metrics(run_dir: Path) -> dict[str, Any]:
     stage_s = {
         st: r["duration_s"]
         for st in ALL_STAGES
-        if st not in ("metrics", "report") and (r := _read_json(run_dir / st / "result.json") or {}).get("duration_s")
+        if st not in ("metrics", "report")
+        and (r := _read_json(run_dir / st / "result.json") or {}).get("duration_s")
     }
     if stage_s:
         total = round(sum(stage_s.values()), 1)

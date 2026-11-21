@@ -10,6 +10,9 @@ import yaml
 
 from drone3d.exceptions import ConfigError
 
+# Not formatted: the console builds each option's help text (src/drone3d/app/schema.py) from the
+# comment on the same source line as the field, and the formatter would wrap that comment away.
+# fmt: off
 __all__ = [
     "ALL_STAGES",
     "DenseConfig",

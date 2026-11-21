@@ -66,7 +66,9 @@ def terrain_surface(points: np.ndarray, cell: float, window: float, *, rise: flo
     z[fs[pick]] = zs[pick]
     z = z.reshape(h, w)
     data = np.isfinite(z)
-    filled = _fill(z, data, iters=0)  # nearest values: enough for the opening, and 2 s cheaper on a 1M-cell grid
+    filled = _fill(
+        z, data, iters=0
+    )  # nearest values: enough for the opening, and 2 s cheaper on a 1M-cell grid
     k = max(3, int(round(window / cell)) | 1)
     opened = ndimage.grey_dilation(ndimage.grey_erosion(filled, size=(k, k)), size=(k, k))
     ground = _fill(filled, data & (filled - opened <= rise), iters=fill_iters)
@@ -85,7 +87,9 @@ def _face_adjacency(f: np.ndarray, n_v: int, neighbours: str = "vertex"):  # typ
     from scipy import sparse
 
     rows = np.repeat(np.arange(len(f)), 3)
-    inc = sparse.csr_matrix((np.ones(len(rows), np.float32), (rows, f.ravel())), shape=(len(f), n_v))
+    inc = sparse.csr_matrix(
+        (np.ones(len(rows), np.float32), (rows, f.ravel())), shape=(len(f), n_v)
+    )
     adj = (inc @ inc.T).tocoo()
     keep = adj.row != adj.col
     return adj.row[keep], adj.col[keep]
@@ -102,8 +106,14 @@ def bilateral_smooth(v: np.ndarray, f: np.ndarray, *, normal_iters: int = 6, ver
         import torch
 
         if torch.cuda.is_available():
-            return _bilateral_torch(v, f, normal_iters=normal_iters, vertex_iters=vertex_iters, sigma_r=sigma_r,
-                                    neighbours=neighbours)
+            return _bilateral_torch(
+                v,
+                f,
+                normal_iters=normal_iters,
+                vertex_iters=vertex_iters,
+                sigma_r=sigma_r,
+                neighbours=neighbours,
+            )
     except ImportError:
         pass
     except RuntimeError as exc:  # torch.cuda.OutOfMemoryError is one
@@ -111,8 +121,14 @@ def bilateral_smooth(v: np.ndarray, f: np.ndarray, *, normal_iters: int = 6, ver
 
         logging.getLogger(__name__).warning("bilateral smoothing on the CPU: %s", str(exc)[:120])
         torch.cuda.empty_cache()
-    return _bilateral_numpy(v, f, normal_iters=normal_iters, vertex_iters=vertex_iters, sigma_r=sigma_r,
-                            neighbours=neighbours)
+    return _bilateral_numpy(
+        v,
+        f,
+        normal_iters=normal_iters,
+        vertex_iters=vertex_iters,
+        sigma_r=sigma_r,
+        neighbours=neighbours,
+    )
 
 
 def _bilateral_torch(v: np.ndarray, f: np.ndarray, *, normal_iters: int, vertex_iters: int, sigma_r: float,
@@ -122,7 +138,10 @@ def _bilateral_torch(v: np.ndarray, f: np.ndarray, *, normal_iters: int, vertex_
     dev = "cuda"
     a_, b_ = _face_adjacency(np.asarray(f, np.int64), len(v), neighbours)
     fa = torch.as_tensor(np.asarray(f, np.int64), device=dev)
-    A, B = torch.as_tensor(a_, device=dev, dtype=torch.long), torch.as_tensor(b_, device=dev, dtype=torch.long)
+    A, B = (
+        torch.as_tensor(a_, device=dev, dtype=torch.long),
+        torch.as_tensor(b_, device=dev, dtype=torch.long),
+    )
     x = torch.as_tensor(np.asarray(v, np.float64), device=dev)
     for _ in range(max(1, vertex_iters // 5)):
         tri = x[fa]
@@ -209,22 +228,35 @@ def clean_model(v: np.ndarray, f: np.ndarray, *, voxel: float, window: float, ke
     def ground_at(xy: np.ndarray) -> np.ndarray:
         from scipy.ndimage import map_coordinates
 
-        return map_coordinates(ground, [(xy[:, 1] - y0) / cell - 0.5, (xy[:, 0] - x0) / cell - 0.5], order=1, mode="nearest")
+        return map_coordinates(
+            ground,
+            [(xy[:, 1] - y0) / cell - 0.5, (xy[:, 0] - x0) / cell - 0.5],
+            order=1,
+            mode="nearest",
+        )
 
     tri = v[f]
     cen = tri.mean(1)
     cr = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     nz = np.abs(cr[:, 2]) / np.maximum(np.linalg.norm(cr, axis=1), 1e-12)
     above = cen[:, 2] - ground_at(cen[:, :2])
-    obj = (above > height) | ((nz < 0.6) & (above > 0.3 * height))  # standing up, or a steep face off the ground
+    obj = (above > height) | (
+        (nz < 0.6) & (above > 0.3 * height)
+    )  # standing up, or a steep face off the ground
     of = f[obj]
     # object fragments: connected components below `keep` of the object triangles are dropped
     parts = trimesh.Trimesh(vertices=v, faces=of, process=False)
-    comps = trimesh.graph.connected_components(parts.face_adjacency, nodes=np.arange(len(of)), min_len=1)
+    comps = trimesh.graph.connected_components(
+        parts.face_adjacency, nodes=np.arange(len(of)), min_len=1
+    )
     big = [c for c in comps if len(c) >= keep * len(of)]
     of = of[np.concatenate(big)] if big else of[:0]
     used, inv = np.unique(of, return_inverse=True)
-    ov = bilateral_smooth(v[used], inv.reshape(-1, 3), neighbours=neighbours) if len(of) else np.zeros((0, 3))
+    ov = (
+        bilateral_smooth(v[used], inv.reshape(-1, 3), neighbours=neighbours)
+        if len(of)
+        else np.zeros((0, 3))
+    )
     of = inv.reshape(-1, 3)
     # terrain grid, only where there were points (dilated a little, so holes between them are closed)
     from scipy import ndimage
@@ -235,7 +267,12 @@ def clean_model(v: np.ndarray, f: np.ndarray, *, voxel: float, window: float, ke
     q = np.arange(gh * gw).reshape(gh, gw)
     a, b, c_, d = q[:-1, :-1], q[:-1, 1:], q[1:, :-1], q[1:, 1:]
     ok = (near[:-1, :-1] & near[:-1, 1:] & near[1:, :-1] & near[1:, 1:]).ravel()
-    tf = np.concatenate([np.stack([a.ravel(), b.ravel(), d.ravel()], 1)[ok], np.stack([a.ravel(), d.ravel(), c_.ravel()], 1)[ok]])
+    tf = np.concatenate(
+        [
+            np.stack([a.ravel(), b.ravel(), d.ravel()], 1)[ok],
+            np.stack([a.ravel(), d.ravel(), c_.ravel()], 1)[ok],
+        ]
+    )
     tused, tinv = np.unique(tf, return_inverse=True)
     tv, tf = tv[tused], tinv.reshape(-1, 3)
     out_v = np.concatenate([tv, ov])

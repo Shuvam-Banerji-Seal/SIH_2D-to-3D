@@ -9,9 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from drone3d.engine import models
-from drone3d.engine.live import LiveSession, recorder_command
-from drone3d.engine.service import fit_to_gpu, models_for
+pytest.importorskip("torch")
+
+from drone3d.engine import models  # noqa: E402
+from drone3d.engine.live import LiveSession, recorder_command  # noqa: E402
+from drone3d.engine.service import fit_to_gpu, models_for  # noqa: E402
 
 GiB = 2**30
 
@@ -104,7 +106,16 @@ def test_engine_cache_shares_one_network_across_wrappers(monkeypatch: pytest.Mon
     made = []
 
     class FakeRaft:
-        def __init__(self, model: str, *, batch: int, iters: int, device: str, net: object, cuda_graph: bool = True) -> None:
+        def __init__(
+            self,
+            model: str,
+            *,
+            batch: int,
+            iters: int,
+            device: str,
+            net: object,
+            cuda_graph: bool = True,
+        ) -> None:
             self.net, self.batch = net, batch
             made.append(batch)
 
@@ -266,7 +277,16 @@ def test_raft_wrappers_are_per_engine_slot(monkeypatch: pytest.MonkeyPatch) -> N
     cache = _fake_cache(monkeypatch, free_gb=40.0)
 
     class FakeRaft:
-        def __init__(self, model: str, *, batch: int, iters: int, device: str, net: object, cuda_graph: bool = True) -> None:
+        def __init__(
+            self,
+            model: str,
+            *,
+            batch: int,
+            iters: int,
+            device: str,
+            net: object,
+            cuda_graph: bool = True,
+        ) -> None:
             self.net = net
 
     monkeypatch.setattr("drone3d.keyframes.flow.RaftFlow", FakeRaft)
@@ -362,7 +382,14 @@ def test_front_jobs_go_ahead_of_work_but_keep_their_own_order(tmp_path: Path) ->
     for k in range(3):  # live segments close one after another
         engine.submit(f"seg_{k}", cfg, kind="segment", front=True)
     engine.submit("run_next", cfg, front=True)  # a console build with "run next"
-    assert [j.name for j in engine.queue] == ["seg_0", "seg_1", "seg_2", "run_next", "batch_a", "batch_b"]
+    assert [j.name for j in engine.queue] == [
+        "seg_0",
+        "seg_1",
+        "seg_2",
+        "run_next",
+        "batch_a",
+        "batch_b",
+    ]
 
 
 def test_raft_runs_eagerly_on_a_multi_slot_engine(tmp_path: Path) -> None:
@@ -372,7 +399,9 @@ def test_raft_runs_eagerly_on_a_multi_slot_engine(tmp_path: Path) -> None:
         engine = Engine(tmp_path, tmp_path / f"outputs{slots}", device="cpu", slots=slots)
         engine._stop.set()
         engine._wake.set()
-        assert engine.cache.cuda_graphs is graphs  # capturing while another slot runs kernels is unsafe
+        assert (
+            engine.cache.cuda_graphs is graphs
+        )  # capturing while another slot runs kernels is unsafe
 
 
 def test_gpu_work_is_serialised_only_on_a_multi_slot_engine() -> None:
@@ -400,5 +429,7 @@ def test_gpu_work_is_serialised_only_on_a_multi_slot_engine() -> None:
         models.activate(None)
         return most[0] > 1
 
-    assert overlap(models.ModelCache(device="cpu", concurrent=False))  # one slot: nothing to serialise
+    assert overlap(
+        models.ModelCache(device="cpu", concurrent=False)
+    )  # one slot: nothing to serialise
     assert not overlap(models.ModelCache(device="cpu", concurrent=True))

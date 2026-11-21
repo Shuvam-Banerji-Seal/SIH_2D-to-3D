@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytest.importorskip("open3d")
+
 import numpy as np
 
-from drone3d.export.render_mesh import MeshRenderer
+from drone3d.export.render_mesh import MeshRenderer  # noqa: E402
 
 
 def test_quad_texture_and_background() -> None:
     # A 2 x 2 square at z = 5 facing the camera, textured with a red->green ramp along u.
     v = np.array([[-1, -1, 5], [1, -1, 5], [1, 1, 5], [-1, 1, 5]], dtype=np.float64)
     f = np.array([[0, 1, 2], [0, 2, 3]])
-    corner_uv = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=np.float32)[f]  # OBJ convention (v up)
+    corner_uv = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=np.float32)[
+        f
+    ]  # OBJ convention (v up)
     size = 64
     ramp = np.linspace(0, 255, size).astype(np.uint8)
     albedo = np.zeros((size, size, 3), np.uint8)

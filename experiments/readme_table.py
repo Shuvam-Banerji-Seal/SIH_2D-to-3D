@@ -57,7 +57,7 @@ def section() -> str:
     thr = FIG / "engine_throughput.json"
     if thr.is_file():
         for t in json.loads(thr.read_text()):
-            if t["slots"] > 1 and t.get("one_slot_sum_s"):
+            if t["slots"] > 1 and t.get("one_slot_sum_s") and not t.get("failed"):  # a run with failed jobs timed nothing
                 out += ["", f"With {t['slots']} engine slots the same {t['videos']} videos took {t['wall_s']:.0f} s of wall time "
                         f"against {t['one_slot_sum_s']:.0f} s one at a time ({t['one_slot_sum_s'] / t['wall_s']:.2f}× the throughput): "
                         "one video's CPU phases (mapping, export) leave the GPU to another."]

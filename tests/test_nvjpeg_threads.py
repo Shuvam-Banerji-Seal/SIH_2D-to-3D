@@ -5,7 +5,8 @@ from __future__ import annotations
 import threading
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="nvJPEG needs a GPU")
 
@@ -19,9 +20,13 @@ def test_two_threads_encode_and_decode_on_the_gpu() -> None:
         try:
             g = torch.Generator(device="cuda").manual_seed(seed)
             for _ in range(20):
-                img = torch.randint(0, 255, (3, 360 + 8 * seed, 640), dtype=torch.uint8, device="cuda", generator=g)
+                img = torch.randint(
+                    0, 255, (3, 360 + 8 * seed, 640), dtype=torch.uint8, device="cuda", generator=g
+                )
                 data = encode_jpeg([img, img], quality=90)
-                blobs = [d.numpy().tobytes() for d in data]  # after the call, as the keyframe writer does
+                blobs = [
+                    d.numpy().tobytes() for d in data
+                ]  # after the call, as the keyframe writer does
                 for blob in blobs:  # every bitstream is a complete JPEG
                     assert blob[:2] == b"\xff\xd8" and blob[-2:] == b"\xff\xd9"
                 back = decode_jpeg(data[0], device="cuda")

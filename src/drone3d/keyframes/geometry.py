@@ -74,7 +74,9 @@ def _smallest_eigvec(rows: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
         import numpy as np
 
         finite = torch.isfinite(m).all(dim=-1).all(dim=-1)
-        m = torch.where(finite[:, None, None], m, torch.eye(m.shape[-1], dtype=m.dtype, device=m.device))
+        m = torch.where(
+            finite[:, None, None], m, torch.eye(m.shape[-1], dtype=m.dtype, device=m.device)
+        )
         vecs = torch.from_numpy(np.linalg.eigh(m.cpu().numpy())[1]).to(m.device)
     return vecs[..., 0].to(rows.dtype)
 

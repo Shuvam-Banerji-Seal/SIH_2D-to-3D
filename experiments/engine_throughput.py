@@ -11,27 +11,15 @@ against the one-slot benchmark's sum of per-video times (paper/figures/all_maps.
 from __future__ import annotations
 
 import json
-import re
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 import yaml
+from engine_api import call, slug
 
 ROOT = Path(__file__).resolve().parents[1]
-ENGINE = "http://127.0.0.1:8770"
 FAST = ["ingest", "keyframes", "sfm", "dense", "georef", "export", "metrics", "report"]
-
-
-def call(path: str, body: dict | None = None) -> dict:
-    req = urllib.request.Request(ENGINE + path, data=json.dumps(body).encode() if body is not None else None,
-                                 headers={"Content-Type": "application/json"}, method="POST" if body is not None else "GET")  # fmt: skip
-    return json.loads(urllib.request.urlopen(req, timeout=60).read())
-
-
-def slug(name: str, n: int = 36) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", re.sub(r"\s*\[[^\]]+\]\.\w+$", "", name).lower()).strip("_")[:n].strip("_")
 
 
 def main() -> None:
@@ -43,7 +31,7 @@ def main() -> None:
     videos = sorted((p for p in (ROOT / "datasets").iterdir() if p.suffix == ".webm"), key=lambda p: p.stat().st_size)
     names = []
     for v in videos:
-        name = f"thr{slots}_{slug(v.name)}"
+        name = f"thr{slots}_{slug(v.name, 36)}"
         cfg = json.loads(json.dumps(base))
         cfg.update(ingest={"video": str(v)}, run_name=name, stages=FAST)
         call("/jobs", {"name": name, "config": cfg, "run_dir": str(ROOT / "outputs" / "experiments" / name)})

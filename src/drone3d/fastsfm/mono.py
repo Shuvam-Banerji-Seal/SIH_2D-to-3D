@@ -12,11 +12,11 @@ the farthest calibrated depth (sky) stay empty.
 
 from __future__ import annotations
 
-import os
-
 import numpy as np
 import torch
 import torch.nn.functional as F
+
+from drone3d.utils.model_cache import use_weight_store
 
 __all__ = ["MoGeDepth", "MonoDepth", "calibrate_fill", "load_mono", "load_moge", "mono_depth"]
 
@@ -26,11 +26,13 @@ _MEAN = torch.tensor([0.485, 0.456, 0.406])
 _STD = torch.tensor([0.229, 0.224, 0.225])
 
 
-def load_mono(model: str = "depth-anything/Depth-Anything-V2-Large-hf", device: str = "cuda") -> torch.nn.Module:
-    """A transformers depth model in fp16, eval mode, on ``device`` (weights from ``/store/huggingface``)."""
+def load_mono(
+    model: str = "depth-anything/Depth-Anything-V2-Large-hf", device: str = "cuda"
+) -> torch.nn.Module:
+    """A transformers depth model in fp16, eval mode, on ``device`` (weights from the weight store, see :mod:`drone3d.utils.model_cache`)."""
     from transformers import AutoModelForDepthEstimation
 
-    os.environ.setdefault("HF_HUB_CACHE", "/store/huggingface")
+    use_weight_store()
     return AutoModelForDepthEstimation.from_pretrained(model, dtype=torch.float16).to(device).eval()
 
 
@@ -38,8 +40,13 @@ def load_moge(model: str = MOGE_3_VITL, device: str = "cuda") -> torch.nn.Module
     """MoGe (``third_party/MoGe``, MIT): a v3 checkpoint when the name says so, else v2."""
     from moge.model import import_model_class_by_version
 
-    os.environ.setdefault("HF_HUB_CACHE", "/store/huggingface")
-    return import_model_class_by_version("v3" if "moge-3" in model else "v2").from_pretrained(model).to(device).eval()
+    use_weight_store()
+    return (
+        import_model_class_by_version("v3" if "moge-3" in model else "v2")
+        .from_pretrained(model)
+        .to(device)
+        .eval()
+    )
 
 
 class MoGeDepth:
@@ -55,7 +62,12 @@ class MoGeDepth:
     def __init__(self, model: str = MOGE_3_VITL, *, device: str = "cuda", batch: int = 8, resolution_level: int = 0,
                  net: torch.nn.Module | None = None) -> None:  # fmt: skip
         self.net = net if net is not None else load_moge(model, device)
-        self.device, self.batch, self.level, self.name = torch.device(device), batch, resolution_level, model
+        self.device, self.batch, self.level, self.name = (
+            torch.device(device),
+            batch,
+            resolution_level,
+            model,
+        )
         # sky is where MoGe's own mask says so (disparity exactly 0): a horizon 200x farther than the nearest
         # roof is valid depth here, which Depth Anything's relative threshold would call sky
         self.sky_rel = 0.0
@@ -67,14 +79,22 @@ class MoGeDepth:
         out = torch.zeros(b, h, w, device=self.device)
         for i in range(0, b, self.batch):
             x = frames[i : i + self.batch].to(self.device).permute(0, 3, 1, 2).float() / 255.0
-            fov = None if fov_x is None else torch.as_tensor(fov_x[i : i + len(x)], dtype=torch.float32, device=self.device)
-            d = self.net.infer(x, resolution_level=self.level, use_fp16=True, fov_x=fov)["depth"].float()
+            fov = (
+                None
+                if fov_x is None
+                else torch.as_tensor(fov_x[i : i + len(x)], dtype=torch.float32, device=self.device)
+            )
+            d = self.net.infer(x, resolution_level=self.level, use_fp16=True, fov_x=fov)[
+                "depth"
+            ].float()
             ok = torch.isfinite(d) & (d > 0)
             out[i : i + len(x)] = torch.where(ok, 1.0 / d.clamp_min(1e-6), torch.zeros_like(d))
         return out
 
 
-def mono_depth(model: str, *, device: str = "cuda", long_side: int = 700, batch: int = 16, net=None):  # type: ignore[no-untyped-def]
+def mono_depth(
+    model: str, *, device: str = "cuda", long_side: int = 700, batch: int = 16, net=None
+):  # type: ignore[no-untyped-def]
     """The wrapper for ``model``: MoGe for ``Ruicheng/moge-*`` checkpoints, a transformers depth model otherwise."""
     if "moge" in model.lower():
         return MoGeDepth(model, device=device, batch=min(batch, 8), net=net)
@@ -87,8 +107,15 @@ class MonoDepth:
     def __init__(self, model: str = "depth-anything/Depth-Anything-V2-Large-hf", *, device: str = "cuda",
                  long_side: int = 700, batch: int = 16, net: torch.nn.Module | None = None) -> None:  # fmt: skip
         self.net = net if net is not None else load_mono(model, device)
-        self.device, self.long_side, self.batch, self.name = torch.device(device), long_side, batch, model
-        self.sky_rel = 0.005  # sky: disparity under this x the image's maximum (V2 returns exactly 0 there)
+        self.device, self.long_side, self.batch, self.name = (
+            torch.device(device),
+            long_side,
+            batch,
+            model,
+        )
+        self.sky_rel = (
+            0.005  # sky: disparity under this x the image's maximum (V2 returns exactly 0 there)
+        )
 
     @torch.inference_mode()
     def __call__(self, frames: torch.Tensor, fov_x: torch.Tensor | None = None) -> torch.Tensor:
@@ -97,13 +124,18 @@ class MonoDepth:
         s = self.long_side / max(h, w)
         th, tw = max(14, round(h * s / 14) * 14), max(14, round(w * s / 14) * 14)
         out = torch.empty(b, h, w, device=self.device)
-        mean, std = _MEAN.to(self.device)[None, :, None, None], _STD.to(self.device)[None, :, None, None]
+        mean, std = (
+            _MEAN.to(self.device)[None, :, None, None],
+            _STD.to(self.device)[None, :, None, None],
+        )
         for i in range(0, b, self.batch):
             x = frames[i : i + self.batch].to(self.device).permute(0, 3, 1, 2).float() / 255.0
             x = F.interpolate(x, size=(th, tw), mode="bicubic", align_corners=False, antialias=True)
             x = ((x - mean) / std).half()
             pred = self.net(pixel_values=x).predicted_depth.float()  # [b, th, tw]
-            out[i : i + len(x)] = F.interpolate(pred[:, None], size=(h, w), mode="bilinear", align_corners=False)[:, 0]
+            out[i : i + len(x)] = F.interpolate(
+                pred[:, None], size=(h, w), mode="bilinear", align_corners=False
+            )[:, 0]
         return out
 
 
@@ -123,7 +155,9 @@ def calibrate_fill(disparity: np.ndarray, tri_depth: np.ndarray, *, far_factor: 
     """
     from drone3d.depth.align import MonotoneMap, fit_log_affine
 
-    sky = disparity <= sky_rel * max(float(disparity.max()), 1e-6) if sky_rel > 0 else disparity <= 0
+    sky = (
+        disparity <= sky_rel * max(float(disparity.max()), 1e-6) if sky_rel > 0 else disparity <= 0
+    )
     tri_depth = np.where(sky, 0.0, tri_depth).astype(np.float32)
     p = -np.log(np.maximum(disparity, 1e-6))  # increases with distance
     have = tri_depth > 0
@@ -153,5 +187,9 @@ def calibrate_fill(disparity: np.ndarray, tri_depth: np.ndarray, *, far_factor: 
     fill = ~have & ~sky & (mono > 0) & (mono < far)
     depth = np.where(have, tri_depth, np.where(fill, mono, 0.0)).astype(np.float32)
     rel = np.abs(np.exp(calib(p_at)) - z) / z
-    info.update(status="filled", filled=round(float(fill.mean()), 4), in_sample_abs_rel=round(float(np.median(rel)), 4))
+    info.update(
+        status="filled",
+        filled=round(float(fill.mean()), 4),
+        in_sample_abs_rel=round(float(np.median(rel)), 4),
+    )
     return depth, info

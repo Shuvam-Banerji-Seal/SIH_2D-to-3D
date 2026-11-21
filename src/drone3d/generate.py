@@ -57,7 +57,9 @@ def subject_keyframe(cams: np.ndarray, axes: np.ndarray, *, cone_deg: float = 12
         return mid
     rel = sub[0] - cams
     dist = np.linalg.norm(rel, axis=1)
-    looking = np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12) > np.cos(np.radians(cone_deg))
+    looking = np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12) > np.cos(
+        np.radians(cone_deg)
+    )
     if not looking.any():
         return mid
     return int(np.flatnonzero(looking)[np.argmax(dist[looking])])
@@ -76,10 +78,15 @@ def pick_keyframe(run_dir: Path) -> tuple[Path, dict]:
     cams = np.array([im.projection_center() for im in posed])
     axes = np.array([im.cam_from_world().rotation.matrix()[2] for im in posed])
     k = subject_keyframe(cams, axes)
-    return run_dir / "dataset" / "images" / posed[k].name, {"model": Path(models[0]["path"]).name, "keyframe": posed[k].name}
+    return run_dir / "dataset" / "images" / posed[k].name, {
+        "model": Path(models[0]["path"]).name,
+        "keyframe": posed[k].name,
+    }
 
 
-def pick_keyframes(run_dir: Path, views: int = 3, *, cone_deg: float = 20.0) -> list[tuple[Path, dict]]:
+def pick_keyframes(
+    run_dir: Path, views: int = 3, *, cone_deg: float = 20.0
+) -> list[tuple[Path, dict]]:
     """``views`` keyframes of the largest model that look at the subject, spread across the flown arc -> [(image,
     info)]: the subject keyframe first, then the ones 10 % in from the arc's ends (in capture order). Fewer when
     the flight looks at the subject from fewer places."""
@@ -101,14 +108,22 @@ def pick_keyframes(run_dir: Path, views: int = 3, *, cone_deg: float = 20.0) -> 
     if sub is not None and views > 1:
         rel = sub[0] - cams
         dist = np.linalg.norm(rel, axis=1)
-        looking = np.flatnonzero(np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12) > np.cos(np.radians(cone_deg)))
-        if len(looking) >= 3:  # in capture order round the arc: its start and end, 10 % in from each
+        looking = np.flatnonzero(
+            np.einsum("ij,ij->i", rel, axes) / np.maximum(dist, 1e-12)
+            > np.cos(np.radians(cone_deg))
+        )
+        if (
+            len(looking) >= 3
+        ):  # in capture order round the arc: its start and end, 10 % in from each
             for q in (0.1, 0.9)[: views - 1]:
                 k = int(looking[int(round(q * (len(looking) - 1)))])
                 if all(abs(k - p) > len(posed) // 8 for p in picks):
                     picks.append(k)
     name = Path(models[0]["path"]).name
-    return [(run_dir / "dataset" / "images" / posed[k].name, {"model": name, "keyframe": posed[k].name}) for k in picks]
+    return [
+        (run_dir / "dataset" / "images" / posed[k].name, {"model": name, "keyframe": posed[k].name})
+        for k in picks
+    ]
 
 
 def subject_crop(run_dir: Path, image: Path, keyframe: str, *, model: int = 0, margin: float = 0.12,
@@ -130,9 +145,17 @@ def subject_crop(run_dir: Path, image: Path, keyframe: str, *, model: int = 0, m
         return None
     name = sm["dir"].split("_", 1)[1]
     frame = json.loads((run_dir / "export" / sm["dir"] / "frame.json").read_text())
-    fs, fr, ft = float(frame["scale"]), np.asarray(frame["rotation"]), np.asarray(frame["translation"])
+    fs, fr, ft = (
+        float(frame["scale"]),
+        np.asarray(frame["rotation"]),
+        np.asarray(frame["translation"]),
+    )
     c, r = np.asarray(sm["focus"]["center"]), float(sm["focus"]["radius"])
-    v = np.asarray(trimesh.load(run_dir / "export" / sm["dir"] / "mesh.ply", force="mesh", process=False).vertices)
+    v = np.asarray(
+        trimesh.load(
+            run_dir / "export" / sm["dir"] / "mesh.ply", force="mesh", process=False
+        ).vertices
+    )
     near = np.hypot(v[:, 0] - c[0], v[:, 1] - c[1]) < footprint * r
     if near.sum() < 200:
         return None
@@ -141,7 +164,11 @@ def subject_crop(run_dir: Path, image: Path, keyframe: str, *, model: int = 0, m
     # the subject is what rises above its surroundings there: its upper half fixes the box's sides, the box
     # runs from the subject's top down to the ground
     tall = v[near & (v[:, 2] > ground + 0.5 * (top - ground))]
-    body = np.concatenate([tall, np.c_[tall[:, :2], np.full(len(tall), ground)]]) if len(tall) >= 100 else v[near]
+    body = (
+        np.concatenate([tall, np.c_[tall[:, :2], np.full(len(tall), ground)]])
+        if len(tall) >= 100
+        else v[near]
+    )
     rec = pycolmap.Reconstruction(str(run_dir / "dataset" / "sparse" / name))
     im = next((i for i in rec.images.values() if i.name == keyframe), None)
     if im is None:
@@ -158,7 +185,12 @@ def subject_crop(run_dir: Path, image: Path, keyframe: str, *, model: int = 0, m
     x0, x1 = np.percentile(u, [1, 99])
     y0, y1 = np.percentile(w_, [1, 99])
     mx, my = margin * (x1 - x0), margin * (y1 - y0)
-    box = (max(0, int(x0 - mx)), max(0, int(y0 - my)), min(img.width, int(x1 + mx)), min(img.height, int(y1 + my)))
+    box = (
+        max(0, int(x0 - mx)),
+        max(0, int(y0 - my)),
+        min(img.width, int(x1 + mx)),
+        min(img.height, int(y1 + my)),
+    )
     if box[2] - box[0] < 64 or box[3] - box[1] < 64:
         return None
     out = out_dir(run_dir) / out_name
@@ -179,19 +211,31 @@ def status(run_dir: Path) -> dict | None:
         return None
 
 
-def _trellis(image: Path, glb: Path, *, resolution: str, seed: int, timeout_s: float) -> tuple[bool, list[str]]:
+def _trellis(
+    image: Path, glb: Path, *, resolution: str, seed: int, timeout_s: float
+) -> tuple[bool, list[str]]:
     """TRELLIS.2 (its own environment, a subprocess) from ``image`` to ``glb`` -> (ok, the log's last lines)."""
-    env = {k: v for k, v in os.environ.items() if k not in ("OMP_PROC_BIND", "OMP_PLACES")}  # see drone3d.__init__
+    env = {
+        k: v for k, v in os.environ.items() if k not in ("OMP_PROC_BIND", "OMP_PLACES")
+    }  # see drone3d.__init__
     try:
         proc = subprocess.run([str(PYTHON), str(SCRIPT), str(glb), str(image), "--res", resolution, "--seed", str(seed)],
                               capture_output=True, text=True, env=env, timeout=timeout_s, cwd=ROOT)  # fmt: skip
-        return proc.returncode == 0 and glb.is_file(), (proc.stdout + proc.stderr).strip().splitlines()[-12:]
+        return proc.returncode == 0 and glb.is_file(), (
+            proc.stdout + proc.stderr
+        ).strip().splitlines()[-12:]
     except subprocess.TimeoutExpired:
         return False, [f"timed out after {timeout_s:.0f} s"]
 
 
-def generate_object(run_dir: Path, *, image: Path | None = None, resolution: str = "1024", seed: int = 0,
-                    timeout_s: float = 3600.0) -> dict:  # fmt: skip  (a shared GPU: 30 min was not enough for Kinbane)
+def generate_object(
+    run_dir: Path,
+    *,
+    image: Path | None = None,
+    resolution: str = "1024",
+    seed: int = 0,
+    timeout_s: float = 3600.0,
+) -> dict:  # fmt: skip  (a shared GPU: 30 min was not enough for Kinbane)
     """Generate ``export/generated/object.glb`` for a finished run -> the result record (also result.json)."""
     if not available():
         raise RuntimeError(f"TRELLIS.2 is not installed ({PYTHON}); run tools/setup_trellis2.sh")
@@ -217,14 +261,20 @@ def generate_object(run_dir: Path, *, image: Path | None = None, resolution: str
     record.update(status="ok" if ok else "failed", seconds=round(time.perf_counter() - t0, 1), finished=time.time(),
                   glb="object.glb" if ok else None, input="object.input.png" if (out / "object.input.png").is_file() else None,
                   log=tail)  # fmt: skip
-    if ok:  # placed where the subject stands, so the explorer can fill the model's unseen sides with it
+    if (
+        ok
+    ):  # placed where the subject stands, so the explorer can fill the model's unseen sides with it
         k = int(info.get("model") or 0)
         try:
             record["aligned"] = align_to_model(run_dir, model=k)
             placed = record["aligned"]["measured_covered"] >= MIN_COVER
             record["aligned"]["placed"] = placed
             _link_scene(run_dir, k, placed)
-        except (ValueError, FileNotFoundError, KeyError) as exc:  # no subject, too little surface: unplaced
+        except (
+            ValueError,
+            FileNotFoundError,
+            KeyError,
+        ) as exc:  # no subject, too little surface: unplaced
             record["aligned"] = {"status": "skipped", "reason": str(exc)[:200], "placed": False}
             _link_scene(run_dir, k, False)
     (out / "result.json").write_text(json.dumps(record, indent=1))
@@ -280,7 +330,12 @@ def _upright_icp(gp: np.ndarray, bp: np.ndarray, yaw: float, scale: float, t: np
         g, b = gp[j[ok]], bp[ok]
         gm, bm = g.mean(0), b.mean(0)
         gc, bc = g - gm, b - bm
-        yaw = float(np.arctan2((gc[:, 0] * bc[:, 1] - gc[:, 1] * bc[:, 0]).sum(), (gc[:, 0] * bc[:, 0] + gc[:, 1] * bc[:, 1]).sum()))
+        yaw = float(
+            np.arctan2(
+                (gc[:, 0] * bc[:, 1] - gc[:, 1] * bc[:, 0]).sum(),
+                (gc[:, 0] * bc[:, 0] + gc[:, 1] * bc[:, 1]).sum(),
+            )
+        )
         rg = gc @ _rz(yaw).T
         scale = float((rg * bc).sum() / max((gc**2).sum(), 1e-12))
         t = bm - scale * _rz(yaw) @ gm
@@ -306,25 +361,37 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     if not focus:
         raise ValueError("the model has no subject to align the generated object to")
     c, r = np.asarray(focus["center"]), float(focus["radius"])
-    meas = trimesh.load(run_dir / "export" / f"model_{model}" / "mesh.ply", force="mesh", process=False)
+    meas = trimesh.load(
+        run_dir / "export" / f"model_{model}" / "mesh.ply", force="mesh", process=False
+    )
     mv = np.asarray(meas.vertices)
-    near = (np.hypot(mv[:, 0] - c[0], mv[:, 1] - c[1]) < 0.5 * r)
-    ground = float(np.percentile(mv[near, 2], 5)) if near.any() else float(np.percentile(mv[:, 2], 5))
+    near = np.hypot(mv[:, 0] - c[0], mv[:, 1] - c[1]) < 0.5 * r
+    ground = (
+        float(np.percentile(mv[near, 2], 5)) if near.any() else float(np.percentile(mv[:, 2], 5))
+    )
     body = mv[near & (mv[:, 2] > ground + 0.05 * r)]
     if len(body) < 500:
         raise ValueError("too little measured surface near the subject")
     gen = trimesh.load(out / src, force="mesh", process=False)
-    gv = np.asarray(gen.vertices) @ np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float).T  # glTF y-up -> z-up
+    gv = (
+        np.asarray(gen.vertices) @ np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float).T
+    )  # glTF y-up -> z-up
     gen.vertices = gv
-    gp = np.asarray(trimesh.sample.sample_surface(gen, samples, seed=0)[0])  # seeded: the same fit every time
+    gp = np.asarray(
+        trimesh.sample.sample_surface(gen, samples, seed=0)[0]
+    )  # seeded: the same fit every time
     rng = np.random.default_rng(0)
     bp = body[rng.choice(len(body), min(samples, len(body)), replace=False)]
-    s0 = (np.percentile(bp[:, 2], 98) - ground) / max(np.percentile(gp[:, 2], 98) - gp[:, 2].min(), 1e-9)
+    s0 = (np.percentile(bp[:, 2], 98) - ground) / max(
+        np.percentile(gp[:, 2], 98) - gp[:, 2].min(), 1e-9
+    )
     thr = 0.04 * r
     base = np.array([np.median(gp[:, 0]), np.median(gp[:, 1]), gp[:, 2].min()])
 
     def cover(yaw: float, scale: float, t: np.ndarray) -> tuple[float, float]:
-        d, _ = cKDTree(scale * gp @ _rz(yaw).T + t).query(bp, distance_upper_bound=r)  # a gap past r is r
+        d, _ = cKDTree(scale * gp @ _rz(yaw).T + t).query(
+            bp, distance_upper_bound=r
+        )  # a gap past r is r
         return float((d < thr).mean()), float(np.median(np.minimum(d, r)))
 
     best = None
@@ -339,8 +406,12 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     # to-roof height is steadier where the roof was seen: refit the position at that scale and keep the better cover
     _, yaw, sc, t, _ = best
     gz = gp @ _rz(yaw).T
-    s_h = (np.percentile(bp[:, 2], 98) - ground) / max(np.percentile(gz[:, 2], 98) - gz[:, 2].min(), 1e-9)
-    y2, _, t2 = _upright_icp(gp, bp, yaw, s_h, t + (sc - s_h) * _rz(yaw) @ base, thr, iters=1)  # one step: t at s_h
+    s_h = (np.percentile(bp[:, 2], 98) - ground) / max(
+        np.percentile(gz[:, 2], 98) - gz[:, 2].min(), 1e-9
+    )
+    y2, _, t2 = _upright_icp(
+        gp, bp, yaw, s_h, t + (sc - s_h) * _rz(yaw) @ base, thr, iters=1
+    )  # one step: t at s_h
     for _ in range(20):  # translation and heading only, at the height's scale
         moved = s_h * gp @ _rz(y2).T + t2
         d, j = cKDTree(moved).query(bp, distance_upper_bound=thr)
@@ -358,7 +429,9 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     best = (score, t, med)
     score, t, med = best
     t = t.copy()
-    t[2, 3] += ground - float((gp @ t[:3, :3].T + t[:3, 3])[:, 2].min())  # it stands on the measured ground
+    t[2, 3] += ground - float(
+        (gp @ t[:3, :3].T + t[:3, 3])[:, 2].min()
+    )  # it stands on the measured ground
     pv = gv @ t[:3, :3].T + t[:3, 3]
     faces = np.asarray(gen.faces)
     # trimmed to the subject's measured footprint: what stands above its surroundings near the subject, its box
@@ -384,7 +457,9 @@ def align_to_model(run_dir: Path, *, model: int = 0, samples: int = 40000, yaws:
     faces = faces[~slab]
     placed = trimesh.Trimesh(vertices=pv, faces=faces, visual=gen.visual, process=False)
     placed.remove_unreferenced_vertices()
-    placed.vertices = np.asarray(placed.vertices) @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], float).T  # back to y-up
+    placed.vertices = (
+        np.asarray(placed.vertices) @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], float).T
+    )  # back to y-up
     placed.export(out / dst)
     rec = {"model": model, "transform_zup": t.round(6).tolist(), "measured_covered": round(score, 3),
            "median_gap_rel": round(med / r, 4), "scale": round(float(np.cbrt(abs(np.linalg.det(t[:3, :3])))), 5),
@@ -418,18 +493,32 @@ def generate_views(run_dir: Path, *, views: int = 3, resolution: str = "1024", s
     t_all = time.perf_counter()
     for i, (image, info) in enumerate(picks):
         try:
-            crop = subject_crop(run_dir, image, info["keyframe"], model=int(info["model"]), out_name=f"subject_crop_v{i}.png")
+            crop = subject_crop(
+                run_dir,
+                image,
+                info["keyframe"],
+                model=int(info["model"]),
+                out_name=f"subject_crop_v{i}.png",
+            )
         except Exception as exc:  # noqa: BLE001 -- the whole keyframe still works
             log.warning("subject crop failed: %s", exc)
             crop = None
         glb = out / f"object_v{i}.glb"
         t0 = time.perf_counter()
-        ok, tail = _trellis(crop or image, glb, resolution=resolution, seed=seed, timeout_s=timeout_s)
+        ok, tail = _trellis(
+            crop or image, glb, resolution=resolution, seed=seed, timeout_s=timeout_s
+        )
         view = {"keyframe": info["keyframe"], "cropped_to_subject": crop is not None, "glb": glb.name if ok else None,
                 "seconds": round(time.perf_counter() - t0, 1), "log": tail[-3:]}  # fmt: skip
         if ok:
             try:
-                al = align_to_model(run_dir, model=int(info["model"]), src=glb.name, dst=f"object_v{i}_aligned.glb", record=None)
+                al = align_to_model(
+                    run_dir,
+                    model=int(info["model"]),
+                    src=glb.name,
+                    dst=f"object_v{i}_aligned.glb",
+                    record=None,
+                )
                 al["placed"] = al["measured_covered"] >= MIN_COVER
                 view["aligned"] = al
             except (ValueError, FileNotFoundError, KeyError) as exc:
@@ -447,7 +536,13 @@ def generate_views(run_dir: Path, *, views: int = 3, resolution: str = "1024", s
             shutil.copyfile(out / f"object_v{i}.input.png", out / "object.input.png")
         aligned = {**best["aligned"], "glb": "object_aligned.glb"}
         (out / "aligned.json").write_text(json.dumps(aligned, indent=1))
-        record.update(status="ok", keyframe=best["keyframe"], glb="object.glb", input="object.input.png", aligned=aligned)
+        record.update(
+            status="ok",
+            keyframe=best["keyframe"],
+            glb="object.glb",
+            input="object.input.png",
+            aligned=aligned,
+        )
     else:
         record.update(status="ok" if any(v.get("glb") for v in record["views"]) else "failed",
                       aligned={"status": "skipped", "reason": "no generation fit the measured subject", "placed": False})  # fmt: skip

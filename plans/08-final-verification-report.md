@@ -1,114 +1,123 @@
-# 08 — Final Verification Report
+# 08 — Verification report
 
-`drone3d` — single-pass drone video → georeferenced 3D (SIH PS 26158 / NTRO)
-Canonical record (merged from two overlapping drafts at cycle 9). Every claim
-below carries its evidence; numbers are copied from run artifacts on disk.
+`drone3d`: single-pass drone video → georeferenced 3D model (SIH problem statement 26158, NTRO).
+Every figure below is either run in the revision of 2026-11-22 or computed from a committed record
+named beside it. The machine used for the test runs has **no NVIDIA GPU**; GPU behaviour is
+therefore reported from the A100 benchmark record, not re-measured here.
 
-## 1. Reproduce the green state
+## 1. Reproduce
 
 ```bash
-uv sync --all-extras                      # 7.3 GB; CPython 3.12.8
-uv run pytest                             # 271 tests
-uv run ruff check . && uv run ruff format --check .
+uv sync --all-extras                        # core, dev and every optional backend (PyTorch 2.14, CUDA 13.2)
+uv run pytest                               # tests that need a GPU skip themselves without one
+uv run ruff check src tests && uv run ruff format --check src tests
+uv run drone3d doctor                       # what is installed, what is missing
 
-export PATH="$PWD/.tools/colmap-env/bin:$PATH"   # COLMAP 4.2.0 CUDA
-uv run drone3d run --config configs/fast.yaml --run-dir outputs/sample_fast \
-  --set "ingest.video=datasets/Aerial Views of Rural Riches： Drone Shot of Farmland 🌾🚁 [p8eRmxosalI].webm" \
-  --set preprocess.dynamic_masking=true
+tools/fetch_datasets.sh                     # the fifteen sample videos listed in resources.md
+uv run drone3d run --config configs/fast.yaml --set ingest.video=datasets/<video>.webm
+uv run python experiments/collect_system.py && uv run python experiments/readme_table.py --write
 ```
-
-Expected: **8/8 stages OK** (georef skips gracefully without GPS), `report.html`
-and `manifest.json` written.
 
 ## 2. Quality gates
 
-| Check | Result | Evidence |
+| Check | Result |
+|---|---|
+| Tests, all extras installed (PyTorch 2.14+cu132, no CUDA device) | **289 passed, 20 skipped**; every skip needs CUDA |
+| Tests, core and dev dependencies only (CI's environment) | **201 passed, 29 skipped**; skips are the tests needing PyTorch, Open3D, trimesh, laspy |
+| Lint and format | `ruff check` and `ruff format --check` clean for `src` and `tests`; `ruff check` clean for `experiments`, `tools`, `promo` |
+| Lockfile | `uv sync --locked` succeeds; no surviving package changed version |
+| CI smoke steps | package imports; `drone3d doctor` exits 0 on a core-only install; all four `configs/*.yaml` load |
+| Can the new tests fail? | The `doctor` test is red on the previous `cli.py` (it imported PyTorch for a path); the dependency test is red on the previous `pyproject.toml` (names `tifffile`) |
+
+## 3. Measured results
+
+Fifteen sample videos, fast profile, warm engine, one video at a time, one A100 80 GB, other
+processes holding at most 2.8 GB of the card (`paper/figures/all_maps.json`; per-video table in the
+README).
+
+| Quantity | Value |
+|---|---|
+| Footage | 29.3 min over 15 videos |
+| Within the budget (1.5 × video length, i.e. 15 min per 10 min) | **11 of 15**; the misses are three FPV flights and a 19 s clip, whose per-run costs dominate a budget proportional to length |
+| Processing time per video second | 0.64 on the 11 within budget; 0.90 over all 15 |
+| View completeness (share of the registered keyframes' non-sky pixels the mesh covers) | median **0.88**, range 0.48–0.95; lowest where the far field lies beyond three times the triangulated range (PNB Merdeka 0.48, Cristo Redentor 0.49, Qutub Minar 0.51) |
+| Registration | every keyframe registered except Qutub Minar (106 of 113) |
+
+## 4. Georeferencing with synthetic GPS
+
+The sample videos carry no flight log, so GPS is simulated from the true track with 1.5 m horizontal
+and 3.0 m vertical noise on the six Jal Mahal models (`experiments/georef_e2e.py`,
+`paper/figures/fast_georef_e2e.json`). Leave-one-out horizontal RMSE is 1.9–2.7 m against the 1.5 m noise.
+
+| Model | Rotation error (°) | Scale error (%) | Geometry within 100 m of the track | Median mesh error within 100 m (m) | Median mesh error beyond 300 m (m) |
+|---|---|---|---|---|---|
+| 0 | 0.015 | 0.35 | 0.1 % | 2.06 | 7.3 |
+| 1 | 0.226 | 0.07 | 0.1 % | 0.86 | 8.7 |
+| 2 | 0.360 | 0.44 | 0 % | — | 68.8 |
+| 3 | 0.019 | 0.47 | **93.6 %** | **0.43** | — |
+| 4 | 0.337 | 0.50 | 0 % | — | 17.8 |
+| 5 | 0.056 | 0.50 | no mesh | — | — |
+
+Rotation and scale are recovered to 0.36° and 0.5 % on every model. The mesh error is a property of
+*where the geometry lies*: it is about half a metre where the model is near the track and grows with
+distance. Only model 3 has most of its geometry (94 %) within 100 m; the others lie mostly 300 m or
+more from the track, with medians of 7–69 m. The official target of 1 m is thus met only near the
+track, and the figure "below 1 m within 100 m" describes one model, not the set.
+
+## 5. Evidence against the official criteria
+
+| Criterion (weight) | Evidence | Gap |
 |---|---|---|
-| Tests | **271 passed** (20 files) | `uv run pytest`, repeated |
-| Coverage | **81%** | `--cov=src/drone3d` |
-| Lint | clean | `ruff check .` |
-| Format | clean | `ruff format --check .` (81 files) |
-| CI | would pass | `uv lock --check` ok; CI's exact pytest line executed locally |
-| Mutation check | F4 test proven non-vacuous | bug reintroduced → red → reverted → green |
-| Double-audit | **PASS ×2** | two consecutive clean waves |
+| Reconstruction accuracy (30 %) | Poses from flow within 0.2 % of the flight extent and 0.28° of SIFT SfM (Jal Mahal pass 3); georeferencing as in §4; held-out depth error 2.7 % after calibration (accurate profile) | No real flight log and no reference cloud: ≤ 1 m is unverified away from the track |
+| Model completeness (20 %) | Median view completeness 0.88 over 15 videos (§3) | Measured against what the keyframes saw, not a reference model; unseen surfaces are absent |
+| Processing speed (20 %) | 11 of 15 within budget; 0.64 s per video second on those (§3) | FPV flights and very short clips exceed a budget proportional to length |
+| Innovation (15 %) | Overlap-band keyframes, parallax verdict, structure from flow, ground-levelled 4-DoF georeferencing, labelled generated and complete models ([`04`](04-decisions.md), [`paper/`](../paper/)) | Qualitative |
+| Scalability (10 %) | Warm engine with job slots; live segments modelled 26–38 s after a 30 s segment closes (Qutub Minar replay) | Multi-slot throughput is unmeasured, limitation 5 |
+| User interface (5 %) | Web console and explorer; `tools/record_ui/e2e.mjs` drives every page and layer in a GPU browser | Not run in this revision |
 
-## 3. Pipeline result on the bundled clip
+Output formats required by the statement: OBJ, PLY, LAS, GeoTIFF, GLB/glTF, FBX. Round trips of LAS,
+GeoTIFF (scale, tie point, CRS), GLB and the mesh writers are tested (`test_export_formats`); FBX
+is written by the optional `meshconv` converter (`tools/build_meshconv.sh`) and is not covered by the
+test suite.
 
-| Stage | Result | Timing |
+## 6. Defects found and fixed in this revision
+
+| Defect | Effect | Guard |
 |---|---|---|
-| ingest | 20 frames sampled @ 1 fps from 19.1 s | 7.2 s |
-| preprocess | 20/20 selected, 20 dynamic masks written | 2.9 s |
-| sfm | **21 images, 1286 points**, 0.3019 px reprojection | 91 s |
-| dense | **246,354 points** | 234 s |
-| mesh | **31,883 vertices / 63,904 faces** | 337 s |
-| georef | 19 tie points | 0.3 s |
-| metrics | 4 clouds summarised | 0.2 s |
-| report | `report.html` + `manifest.json` | 0.3 s |
+| `drone3d doctor` imported a PyTorch module to read one path | Traceback on an install without PyTorch, including CI's smoke step | `test_doctor_runs_without_torch` |
+| `tifffile` imported by the GeoTIFF writer but declared nowhere | GeoTIFF export failed without the `depth` extra; `scipy` and `pillow` were likewise only in `depth` | `test_dependencies` |
+| Engine capability probe ignored `$DEPTH_ASSETS_DIR` | Marigold reported present or absent contrary to what the loader would do | `test_model_paths` |
+| `/store/huggingface` forced as the weight cache | First-use downloads failed with a permission error on any other machine | `test_model_paths` |
+| `drone3d view` edited the standard library's shared MIME table | Leaked into every HTTP server in the process | `test_cli` |
+| Tests needing PyTorch, Open3D, trimesh or laspy failed instead of skipping | pytest aborted in CI's environment | 201 passed on core and dev only |
+| README "Measured" section empty in every commit | The benchmark the docs refer to was missing | filled from `all_maps.json` |
+| Throughput generators reported a run whose jobs failed | 6.98× "throughput" from 13 failed jobs of 15 | both generators skip failed runs |
+| `ruff format` wrapped the comments `app/schema.py` reads | 12 options lost their help text in the console | `test_console_api`; `config.py` exempted from the formatter |
 
-## 4. PS criteria — evidence matrix
+## 7. Limitations
 
-| # | Criterion | Target | Status | Evidence |
-|---|---|---|---|---|
-| 1 | Geometric accuracy | ≤1×GSD horiz, ≤2×GSD vert | **MEASURED, not scored** | `mean_reprojection_error_px = 0.3019`. 1 px reprojection ≈ 1 GSD of ground error, so the reconstruction is *consistent with* the target. Scoring needs a reference cloud. |
-| 2 | Metric scale error | ≤2 % | **BLOCKED (data)** | needs real telemetry |
-| 3 | Completeness | ≥80 % @0.5 m | **BLOCKED (data)** | needs reference cloud |
-| 4 | Visual quality | facades/roofs recognisable | **PARTIAL** | textured mesh produced; no human review recorded |
-| 5 | No dynamic ghosting | visual | **PARTIAL** | masks wired in COLMAP's convention (name + polarity + location) via `--ImageReader.mask_path`; visual confirmation pending |
-| 6 | Georeferencing | ≤3 m horiz | **BLOCKED (data)** | *Measurement* verified via injected-noise tests |
-| 7 | Robustness | no crash, graceful degradation | **PASS** | 8/8 stages; missing backends skip; Poisson crash falls back to Delaunay |
-| 8 | Latency | near-real-time `fast` | **MEASURED** | see §3 |
-| 9 | Usability | one command + report | **PASS** | `drone3d run` → `report.html` |
-| 10 | Reproducibility | same input → same metrics | **PASS** | `metrics.json` byte-identical across repeated re-runs |
+1. **No real flight log or reference cloud.** Accuracy is verified with synthetic GPS only (§4).
+2. Completeness is a view measure, not a comparison with ground truth.
+3. Dynamic objects are not masked.
+4. GPU code (RAFT with CUDA Graphs, TSDF fusion, texture baking, nvJPEG) was not executed in this
+   revision; 20 tests skip. It rests on the A100 benchmark record.
+5. `paper/figures/engine_throughput.json` records a 2-slot run in which 13 of 15 jobs failed. No
+   throughput claim is made from it until it is repeated.
+6. The accurate profile needs the spirula-studio build and the Marigold weights, neither present on
+   the verification machine (`drone3d doctor` shows them as missing); it was not re-run.
+7. The wording "below 1 m within 100 m of the track" in the README, `docs/problem-statement.md` and
+   the paper should carry the model-3 qualification of §4.
 
-**Scored: 3 of 10** (7, 9, 10). Evidence for 1; measured-but-unscored 4, 5, 8;
-**blocked on data: 2, 3, 6**.
+## 8. To close the loop
 
-## 5. Defects: 22 found and fixed
-
-| ID | Defect | Found by |
-|---|---|---|
-| F1 | `TelemetrySample.to_dict` slots crash | code read |
-| F2 | Masks never fed to COLMAP (location + name + **polarity**) | code read + live COLMAP docs |
-| F3 | `_largest_model` precedence | code read |
-| F4 | Frame budget ignored when `frame_count<=0` | code read |
-| F5 | chamfer ~2.4 GB/chunk | arithmetic |
-| F6 | Depth polarity documented backwards | empirical model run |
-| F8 | COLMAP absent | `doctor` |
-| F12 | `.tools/` broke ruff + 4.4 G untracked | own regression |
-| F13 | `model_converter` TXT aborted: output dir missing | running the pipeline |
-| F14 | `poisson_mesher` SIGSEGV | running the pipeline |
-| F15 | `delaunay_mesher --output_type` rejected | running the pipeline |
-| F16 | `write_ply` colour-block **data corruption** | running the pipeline |
-| F18 | CSV no-header guard dead code | writing tests |
-| F19 | Eager detector map broke *all* feature methods on OpenCV 5.x | writing tests |
-| F20 | Report double-HTML-escaping (`a & b.jpg` → `a &amp; b.jpg`) | writing report-content tests |
-| F21 | Partial re-runs stripped earlier stages' metrics from the report | inspecting the real `report.html` |
-| F22 | `metrics.json` stored twice → all 44 metric keys rendered twice | inspecting the real `report.html` |
-| F7 | **Sample video has no GPS** | ffprobe — *data gap, not code* |
-
-**9 of 22 were only findable by executing the code or inspecting output artifacts.**
-Static code reading found just 2.
-
-## 6. Honest limitations
-
-- `tools/synthesize_telemetry.py` derives GPS from the SfM camera centres, so its
-  0.00 m RMSE is a **tautology**, not accuracy evidence. It exists so the georef
-  path can be exercised and tested.
-- Criterion 1's figure is *reprojection* error — self-consistency with the images,
-  not agreement with ground truth. Necessary, not sufficient.
-- No human visual review of the textured mesh is recorded (criteria 4, 5).
-- `mono_depth` (torch) and the Open3D Poisson path are covered only at guard paths.
-
-## 7. To close the loop
-
-Supply **either** a real drone flight log (CSV / DJI SRT / GPX / JSON) **or** an
-NTRO reference cloud, then:
+With a real flight log (CSV, DJI SRT, GPX or JSON). The log is loaded by `ingest` and joined to the
+keyframes by timestamp, so run the profile with it rather than re-running `georef` alone:
 
 ```bash
-export PATH="$PWD/.tools/colmap-env/bin:$PATH"
-uv run drone3d run --config configs/fast.yaml --run-dir outputs/sample_fast --stages georef,metrics,report
-python -c "import json;print(json.load(open('outputs/sample_fast/georef/result.json'))['gps_accuracy'])"
+uv run drone3d run --config configs/fast.yaml --set ingest.video=<video> --set ingest.telemetry=<log>
 ```
 
-Compare `rmse_horizontal_m` against **3.0 m** (criterion 6), then re-run the
-double-audit and write `plans/INFINITY_DONE`.
+then compare `models[*].in_sample.rmse_horizontal_m` and `models[*].held_out.loo_rmse_horizontal_m`
+in `outputs/<run>/georef/result.json` with the official 1 m. To repeat the throughput run, start the
+engine with `drone3d engine --slots 2`, run `uv run python experiments/engine_throughput.py 2`,
+check that its `failed` list is empty, and regenerate the README table with `readme_table.py --write`.

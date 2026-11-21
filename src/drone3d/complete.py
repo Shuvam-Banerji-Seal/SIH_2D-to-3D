@@ -40,13 +40,30 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["carve", "complete_model", "drop_base_slab", "link_scene", "ray_elevation", "retexture", "sky_to_edges", "snap_planes", "solidify", "solidify_consensus", "splats_360", "transfer_texture"]
+__all__ = [
+    "carve",
+    "complete_model",
+    "drop_base_slab",
+    "link_scene",
+    "ray_elevation",
+    "retexture",
+    "sky_to_edges",
+    "snap_planes",
+    "solidify",
+    "solidify_consensus",
+    "splats_360",
+    "transfer_texture",
+]
 
 log = get_logger(__name__)
 
-Y_UP = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]])  # z-up -> glTF y-up, as export.formats
+Y_UP = np.array(
+    [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]]
+)  # z-up -> glTF y-up, as export.formats
 SEEN_FACING = 0.15  # |cos| of the viewing angle below which a keyframe does not texture a texel (> 81 degrees)
-FULL_FACING = 0.4  # ... and above which its colour replaces the generated one entirely (< 66 degrees)
+FULL_FACING = (
+    0.4  # ... and above which its colour replaces the generated one entirely (< 66 degrees)
+)
 NOTE = "complete model: measured and photographed where the flight saw it; the rest generated (TRELLIS.2) and inpainted, not measured"
 TEXTURE_SIZE = 4096  # the subject's atlas: TRELLIS.2 bakes 2048^2, too coarse for the photographed walls' windows
 
@@ -61,7 +78,9 @@ def _load_glb(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, np
                                          for n, g in ((n, scene.graph[n][1]) for n in scene.graph.nodes_geometry)])  # fmt: skip
     else:
         mesh = scene
-    v = np.asarray(mesh.vertices, np.float64) @ Y_UP  # y-up -> z-up (Y_UP is orthogonal: its inverse is its transpose)
+    v = (
+        np.asarray(mesh.vertices, np.float64) @ Y_UP
+    )  # y-up -> z-up (Y_UP is orthogonal: its inverse is its transpose)
     uv, img = None, None
     vis = getattr(mesh, "visual", None)
     if getattr(vis, "uv", None) is not None:
@@ -72,7 +91,9 @@ def _load_glb(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, np
     return v, np.asarray(mesh.faces, np.int64), uv, img
 
 
-def _uv_texels(uv: np.ndarray, f: np.ndarray, size: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _uv_texels(
+    uv: np.ndarray, f: np.ndarray, size: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """The atlas texels each triangle covers -> (flat texel index, triangle, barycentric [N, 3]).
 
     Ray casting in UV space (Embree): a ray per texel centre, down onto the triangles laid out at (u, 1 - v).
@@ -80,7 +101,9 @@ def _uv_texels(uv: np.ndarray, f: np.ndarray, size: int) -> tuple[np.ndarray, np
     import open3d as o3d
     import open3d.core as o3c
 
-    tri = np.stack([uv[:, 0] * size, (1.0 - uv[:, 1]) * size, np.zeros(len(uv))], 1).astype(np.float32)
+    tri = np.stack([uv[:, 0] * size, (1.0 - uv[:, 1]) * size, np.zeros(len(uv))], 1).astype(
+        np.float32
+    )
     scene = o3d.t.geometry.RaycastingScene()
     scene.add_triangles(o3c.Tensor(tri), o3c.Tensor(f.astype(np.uint32)))
     ys, xs = np.mgrid[0:size, 0:size].astype(np.float32)
@@ -111,17 +134,23 @@ def _depth_maps(v: np.ndarray, f: np.ndarray, views, width: int = 640) -> list[n
         ys, xs = np.mgrid[0:h, 0:w].astype(np.float64)
         # pixel centres of this map in the view's own pixels (texture_gpu._project's convention: -0.5)
         px, py = (xs + 0.5) / s, (ys + 0.5) / s
-        xn, yn = _undistort(torch.as_tensor((px - vw.cx) / vw.fx), torch.as_tensor((py - vw.cy) / vw.fx), vw.k1)
+        xn, yn = _undistort(
+            torch.as_tensor((px - vw.cx) / vw.fx), torch.as_tensor((py - vw.cy) / vw.fx), vw.k1
+        )
         dc = np.stack([xn.numpy(), yn.numpy(), np.ones_like(xs)], -1).reshape(-1, 3)  # camera z = 1
         r = np.asarray(vw.rotation)
         centre = -r.T @ np.asarray(vw.translation)
         rays = np.concatenate([np.broadcast_to(centre, dc.shape), dc @ r], 1).astype(np.float32)
-        t = scene.cast_rays(o3c.Tensor(rays))["t_hit"].numpy().reshape(h, w)  # along an unnormalised ray: t = z
+        t = (
+            scene.cast_rays(o3c.Tensor(rays))["t_hit"].numpy().reshape(h, w)
+        )  # along an unnormalised ray: t = z
         out.append(np.where(np.isfinite(t), t, np.inf).astype(np.float32))
     return out
 
 
-def _sky_masks(views, width: int = 640, model: str = "depth-anything/Depth-Anything-V2-Large-hf") -> list[np.ndarray]:  # type: ignore[no-untyped-def]
+def _sky_masks(
+    views, width: int = 640, model: str = "depth-anything/Depth-Anything-V2-Large-hf"
+) -> list[np.ndarray]:  # type: ignore[no-untyped-def]
     """Per keyframe, the sky at ``width`` px, by the dense stage's rule (Depth Anything V2: disparity under 0.5 %
     of the image's maximum), eroded 3 px so that a silhouette is never sky."""
     import torch
@@ -135,7 +164,9 @@ def _sky_masks(views, width: int = 640, model: str = "depth-anything/Depth-Anyth
     for vw in views:
         h0, w0 = vw.image.shape[:2]
         h = max(1, round(h0 * width / w0))
-        small = F.interpolate(vw.image.permute(2, 0, 1)[None].float(), size=(h, width), mode="area")[0].permute(1, 2, 0)
+        small = F.interpolate(
+            vw.image.permute(2, 0, 1)[None].float(), size=(h, width), mode="area"
+        )[0].permute(1, 2, 0)
         disp = mono(small.round().clamp(0, 255).to(torch.uint8)[None])[0]
         sky = (disp <= mono.sky_rel * disp.max().clamp_min(1e-6)).cpu().numpy()
         out.append(ndimage.binary_erosion(sky, iterations=3))
@@ -152,7 +183,9 @@ def ray_elevation(cam, world_to_cam: np.ndarray, size: tuple[int, int]) -> np.nd
     sx = w / cam.width
     f, cx, cy = cam.focal_length_x * sx, cam.principal_point_x * sx, cam.principal_point_y * sx
     u, v = np.meshgrid((np.arange(w) + 0.5 - cx) / f, (np.arange(h) + 0.5 - cy) / f)
-    d = np.stack([u, v, np.ones_like(u)], -1) @ np.asarray(world_to_cam)  # rows: R^T applied to camera rays
+    d = np.stack([u, v, np.ones_like(u)], -1) @ np.asarray(
+        world_to_cam
+    )  # rows: R^T applied to camera rays
     return np.degrees(np.arcsin(d[..., 2] / np.linalg.norm(d, axis=-1))).astype(np.float32)
 
 
@@ -177,21 +210,38 @@ def sky_to_edges(image: np.ndarray, sky: np.ndarray, elevation: np.ndarray, *, w
 
     h0, w0 = image.shape[:2]
     h = max(1, round(h0 * width / w0))
-    img = cv2.resize(np.ascontiguousarray(image), (width, h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
+    img = (
+        cv2.resize(np.ascontiguousarray(image), (width, h), interpolation=cv2.INTER_AREA).astype(
+            np.float32
+        )
+        / 255.0
+    )
     raw = ndimage.binary_dilation(sky, iterations=3)  # the erosion undone
     s0 = cv2.resize(raw.astype(np.uint8), (width, h), interpolation=cv2.INTER_NEAREST) > 0
     if not s0.any():
         return np.zeros((h0, w0), bool)
     wgt = ndimage.gaussian_filter(s0.astype(np.float32), sigma)
-    near_sky = np.stack([ndimage.gaussian_filter(img[..., c] * s0, sigma) for c in range(3)], -1) / np.maximum(wgt, 1e-6)[..., None]
-    up = cv2.resize(np.ascontiguousarray(elevation, dtype=np.float32), (width, h), interpolation=cv2.INTER_LINEAR) >= above_deg
+    near_sky = (
+        np.stack([ndimage.gaussian_filter(img[..., c] * s0, sigma) for c in range(3)], -1)
+        / np.maximum(wgt, 1e-6)[..., None]
+    )
+    up = (
+        cv2.resize(
+            np.ascontiguousarray(elevation, dtype=np.float32),
+            (width, h),
+            interpolation=cv2.INTER_LINEAR,
+        )
+        >= above_deg
+    )
     like = (np.linalg.norm(img - near_sky, axis=-1) < tol) & (wgt > 0.02) & up
     reach = ndimage.binary_dilation(s0, iterations=band)
     grown = ndimage.binary_propagation(s0, mask=s0 | (like & reach))
     return cv2.resize(grown.astype(np.uint8), (w0, h0), interpolation=cv2.INTER_NEAREST) > 0
 
 
-def drop_base_slab(v: np.ndarray, f: np.ndarray, *, band: float = 0.02, min_share: float = 0.15) -> np.ndarray:
+def drop_base_slab(
+    v: np.ndarray, f: np.ndarray, *, band: float = 0.02, min_share: float = 0.15
+) -> np.ndarray:
     """Faces of the platform a generator stood its object on -> keep mask.
 
     TRELLIS.2 gave Jal Mahal its lake: a horizontal slab at a third of the palace's height, 52 % of the
@@ -221,14 +271,22 @@ def drop_base_slab(v: np.ndarray, f: np.ndarray, *, band: float = 0.02, min_shar
     cell = float(np.ptp(v[:, :2], 0).max()) / 200
     lo = v[:, :2].min(0) - 4 * cell
     shape = tuple((np.ptp(v[:, :2], 0) / cell).astype(int)[::-1] + 9)
-    ij = np.floor((tri[cen[:, 2] > zp + 2.5 * band * height].reshape(-1, 3)[:, :2] - lo) / cell).astype(int)
+    ij = np.floor(
+        (tri[cen[:, 2] > zp + 2.5 * band * height].reshape(-1, 3)[:, :2] - lo) / cell
+    ).astype(int)
     foot = np.zeros(shape, bool)
     foot[ij[:, 1], ij[:, 0]] = True
-    foot = ndimage.binary_dilation(ndimage.binary_fill_holes(ndimage.binary_closing(foot, iterations=2)), iterations=3)
+    foot = ndimage.binary_dilation(
+        ndimage.binary_fill_holes(ndimage.binary_closing(foot, iterations=2)), iterations=3
+    )
     cj = np.floor((cen[:, :2] - lo) / cell).astype(int)
     out = ~foot[cj[:, 1], cj[:, 0]]
-    below = cen[:, 2] < zp - band * height  # under the platform (the ground, the water) is not the object
-    return ~((out & (cen[:, 2] < zp + 2.5 * band * height)) | below)  # a thick slab: its upper face too
+    below = (
+        cen[:, 2] < zp - band * height
+    )  # under the platform (the ground, the water) is not the object
+    return ~(
+        (out & (cen[:, 2] < zp + 2.5 * band * height)) | below
+    )  # a thick slab: its upper face too
 
 
 def snap_planes(v: np.ndarray, f: np.ndarray, *, tol: float = 0.025, min_share: float = 0.04, max_planes: int = 16,
@@ -262,7 +320,9 @@ def snap_planes(v: np.ndarray, f: np.ndarray, *, tol: float = 0.025, min_share: 
         if not len(idx) or area[idx].sum() < min_share * area.sum():
             break
         p = area[idx] / area[idx].sum()
-        sample = rng.choice(idx, size=min(len(idx), 20000), p=p)  # candidates scored on an area-weighted sample
+        sample = rng.choice(
+            idx, size=min(len(idx), 20000), p=p
+        )  # candidates scored on an area-weighted sample
         cand = rng.choice(idx, size=300, p=p)
         hit = (np.abs(((cen[sample][None] - cen[cand][:, None]) * n[cand][:, None]).sum(-1)) < tol * size) & \
               (np.abs(n[sample] @ n[cand].T).T > 0.9)  # fmt: skip
@@ -302,7 +362,9 @@ def snap_planes(v: np.ndarray, f: np.ndarray, *, tol: float = 0.025, min_share: 
                 hits[both & ~far_i, j] = False
     out = wv.copy()
     combos, which = np.unique(hits, axis=0, return_inverse=True)
-    for c, combo in enumerate(combos):  # vertices near the same planes: one projection for all of them
+    for c, combo in enumerate(
+        combos
+    ):  # vertices near the same planes: one projection for all of them
         if not combo.any() or (not corners and combo.sum() > 1):
             continue
         ks = np.flatnonzero(combo)[:3]  # a corner is where three planes meet
@@ -312,9 +374,13 @@ def snap_planes(v: np.ndarray, f: np.ndarray, *, tol: float = 0.025, min_share: 
         # the point nearest each vertex on all its planes (the plane, their edge or their corner): min |x - p| s.t. A x = b
         lam = np.linalg.lstsq(a @ a.T, (wv[sel] @ a.T - b).T, rcond=None)[0]
         moved = wv[sel] - lam.T @ a
-        ok = np.linalg.norm(moved - wv[sel], axis=1) <= 2 * tol * size  # never far: a bad corner stays as it was
+        ok = (
+            np.linalg.norm(moved - wv[sel], axis=1) <= 2 * tol * size
+        )  # never far: a bad corner stays as it was
         out[np.flatnonzero(sel)[ok]] = moved[ok]
-    info = [{"normal": pl["normal"].round(3).tolist(), "share": round(pl["share"], 3)} for pl in planes]
+    info = [
+        {"normal": pl["normal"].round(3).tolist(), "share": round(pl["share"], 3)} for pl in planes
+    ]
     return out[weld], info
 
 
@@ -343,16 +409,26 @@ def carve(v: np.ndarray, f: np.ndarray, views, measured: tuple[np.ndarray, np.nd
         h, w = vw.image.shape[:2]
         u, y, z = _project(cen, vw)
         dm = torch.as_tensor(depth[k], device=device)
-        dm = -F.max_pool2d(-dm[None, None], window, stride=1, padding=window // 2)[0, 0]  # nearest surface around
+        dm = -F.max_pool2d(-dm[None, None], window, stride=1, padding=window // 2)[
+            0, 0
+        ]  # nearest surface around
         s = dm.shape[1] / w
         inside = (z > 0) & (u >= 0) & (u <= w - 1) & (y >= 0) & (y <= h - 1)
-        near = dm[((y + 0.5) * s).long().clamp(0, dm.shape[0] - 1), ((u + 0.5) * s).long().clamp(0, dm.shape[1] - 1)]
+        near = dm[
+            ((y + 0.5) * s).long().clamp(0, dm.shape[0] - 1),
+            ((u + 0.5) * s).long().clamp(0, dm.shape[1] - 1),
+        ]
         free = torch.isfinite(near) & (z < near * (1 - margin))
         if sky is not None:
             from scipy import ndimage
 
-            sk = torch.as_tensor(ndimage.binary_erosion(sky[k], iterations=sky_margin), device=device)
-            free |= sk[((y + 0.5) * s).long().clamp(0, sk.shape[0] - 1), ((u + 0.5) * s).long().clamp(0, sk.shape[1] - 1)]
+            sk = torch.as_tensor(
+                ndimage.binary_erosion(sky[k], iterations=sky_margin), device=device
+            )
+            free |= sk[
+                ((y + 0.5) * s).long().clamp(0, sk.shape[0] - 1),
+                ((u + 0.5) * s).long().clamp(0, sk.shape[1] - 1),
+            ]
         votes += (inside & free).int()
     return (votes < min_views).cpu().numpy()
 
@@ -386,7 +462,11 @@ def retexture(v: np.ndarray, f: np.ndarray, uv: np.ndarray | None, albedo: np.nd
     tid_t = torch.as_tensor(tid, device=dev)
     pts = (torch.as_tensor(bary, dtype=torch.float32, device=dev)[:, :, None] * tri[tid_t]).sum(1)
     n_pts = nrm[tid_t]
-    occ_v, occ_f = (np.concatenate([v, occluders[0]]), np.concatenate([f, occluders[1] + len(v)])) if occluders else (v, f)
+    occ_v, occ_f = (
+        (np.concatenate([v, occluders[0]]), np.concatenate([f, occluders[1] + len(v)]))
+        if occluders
+        else (v, f)
+    )
     depth = _depth_maps(occ_v, occ_f, views)
     timing = {"raster": time.perf_counter() - t0}
     t0 = time.perf_counter()
@@ -398,10 +478,15 @@ def retexture(v: np.ndarray, f: np.ndarray, uv: np.ndarray | None, albedo: np.nd
         inside = (z > 0) & (u >= 0) & (u <= w - 1) & (y >= 0) & (y <= h - 1)
         if vw.mask is not None:
             mh, mw = vw.mask.shape
-            inside &= ~vw.mask[(y * (mh / h)).long().clamp(0, mh - 1), (u * (mw / w)).long().clamp(0, mw - 1)]
+            inside &= ~vw.mask[
+                (y * (mh / h)).long().clamp(0, mh - 1), (u * (mw / w)).long().clamp(0, mw - 1)
+            ]
         dm = torch.as_tensor(depth[k], device=dev)
         s = dm.shape[1] / w
-        near = dm[((y + 0.5) * s).long().clamp(0, dm.shape[0] - 1), ((u + 0.5) * s).long().clamp(0, dm.shape[1] - 1)]
+        near = dm[
+            ((y + 0.5) * s).long().clamp(0, dm.shape[0] - 1),
+            ((u + 0.5) * s).long().clamp(0, dm.shape[1] - 1),
+        ]
         centre = -torch.as_tensor(vw.rotation.T @ vw.translation, dtype=torch.float32, device=dev)
         to_cam = centre - p
         dist = to_cam.norm(dim=-1).clamp_min(1e-9)
@@ -409,13 +494,20 @@ def retexture(v: np.ndarray, f: np.ndarray, uv: np.ndarray | None, albedo: np.nd
         ok = inside & (z <= near * 1.02) & (facing >= SEEN_FACING)
         if sky is not None:  # a texel that lands on the sky is not seen, whatever the geometry says
             sk = torch.as_tensor(sky[k], device=dev)
-            ok &= ~sk[((y + 0.5) * s).long().clamp(0, sk.shape[0] - 1), ((u + 0.5) * s).long().clamp(0, sk.shape[1] - 1)]
-        return torch.where(ok, facing / dist, torch.zeros_like(dist)), torch.where(ok, facing, torch.zeros_like(dist))
+            ok &= ~sk[
+                ((y + 0.5) * s).long().clamp(0, sk.shape[0] - 1),
+                ((u + 0.5) * s).long().clamp(0, sk.shape[1] - 1),
+            ]
+        return torch.where(ok, facing / dist, torch.zeros_like(dist)), torch.where(
+            ok, facing, torch.zeros_like(dist)
+        )
 
     # per triangle (centroids) for the exposure gains, per texel for the colours: the two best views
     cen = tri.mean(1)
     tri_scores = torch.stack([score(cen, nrm, k)[0] for k in range(len(views))])
-    gains, gain_stats = _view_gains(views, cen, torch.where(tri_scores > 0, tri_scores, -torch.ones_like(tri_scores)))
+    gains, gain_stats = _view_gains(
+        views, cen, torch.where(tri_scores > 0, tri_scores, -torch.ones_like(tri_scores))
+    )
     best = torch.zeros(2, len(pts), device=dev)
     best_k = torch.full((2, len(pts)), -1, dtype=torch.long, device=dev)
     face = torch.zeros(len(pts), device=dev)
@@ -424,7 +516,9 @@ def retexture(v: np.ndarray, f: np.ndarray, uv: np.ndarray | None, albedo: np.nd
         better = s > best[0]
         second = ~better & (s > best[1])
         best[1] = torch.where(better, best[0], torch.where(second, s, best[1]))
-        best_k[1] = torch.where(better, best_k[0], torch.where(second, torch.full_like(best_k[1], k), best_k[1]))
+        best_k[1] = torch.where(
+            better, best_k[0], torch.where(second, torch.full_like(best_k[1], k), best_k[1])
+        )
         best[0] = torch.where(better, s, best[0])
         best_k[0] = torch.where(better, torch.full_like(best_k[0], k), best_k[0])
         face = torch.where(better, fc, face)
@@ -442,7 +536,9 @@ def retexture(v: np.ndarray, f: np.ndarray, uv: np.ndarray | None, albedo: np.nd
             g = torch.stack([2 * u / (w - 1) - 1, 2 * y / (h - 1) - 1], -1)[None, None]
             sample = F.grid_sample(vw.image.permute(2, 0, 1)[None].float(), g, mode="bilinear", align_corners=True,
                                    padding_mode="border")[0, :, 0].T  # fmt: skip
-            photo[sel] += wts[rank, sel, None] * (sample * gains[k] if gains is not None else sample)
+            photo[sel] += wts[rank, sel, None] * (
+                sample * gains[k] if gains is not None else sample
+            )
     timing["views"] = time.perf_counter() - t0
     alpha = ((face - SEEN_FACING) / (FULL_FACING - SEEN_FACING)).clamp(0, 1)
     alpha = torch.where(best[0] > 0, alpha, torch.zeros_like(alpha))
@@ -493,7 +589,9 @@ def _heading(yaw: float) -> np.ndarray:
     return np.array([[c, -sn, 0.0], [sn, c, 0.0], [0.0, 0.0, 1.0]])
 
 
-def _occupancy(v: np.ndarray, f: np.ndarray, lo: np.ndarray, vox: float, shape: np.ndarray) -> tuple[np.ndarray, str]:
+def _occupancy(
+    v: np.ndarray, f: np.ndarray, lo: np.ndarray, vox: float, shape: np.ndarray
+) -> tuple[np.ndarray, str]:
     """What (v, f) (already in the grid's heading) encloses, on the grid at ``lo`` with ``vox`` voxels -> (solid,
     the fill rule). Its base capped; inside is what a flood fill from outside does not reach, or, where a hole
     let the fill in (carving opened the highrise's crown), what is enclosed along two of the three axes."""
@@ -501,7 +599,9 @@ def _occupancy(v: np.ndarray, f: np.ndarray, lo: np.ndarray, vox: float, shape: 
     from scipy import ndimage
 
     mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(v), o3d.utility.Vector3iVector(f))
-    grid = o3d.geometry.VoxelGrid.create_from_triangle_mesh_within_bounds(mesh, vox, lo, lo + (shape - 1) * vox)
+    grid = o3d.geometry.VoxelGrid.create_from_triangle_mesh_within_bounds(
+        mesh, vox, lo, lo + (shape - 1) * vox
+    )
     idx = np.array([x.grid_index for x in grid.get_voxels()])
     occ = np.zeros(shape, bool)
     if not len(idx):
@@ -510,7 +610,9 @@ def _occupancy(v: np.ndarray, f: np.ndarray, lo: np.ndarray, vox: float, shape: 
     occ[idx[:, 0], idx[:, 1], idx[:, 2]] = True
     base = int(idx[:, 2].min())
     foot = ndimage.binary_fill_holes(ndimage.binary_closing(occ.any(2), iterations=2))
-    occ[:, :, base : base + 2] |= foot[:, :, None]  # the base, which a placed object is trimmed open at
+    occ[:, :, base : base + 2] |= foot[
+        :, :, None
+    ]  # the base, which a placed object is trimmed open at
     shell = ndimage.binary_dilation(occ, iterations=1)
     solid = ndimage.binary_erosion(ndimage.binary_fill_holes(shell), iterations=1) | occ
     if solid.sum() - occ.sum() < 0.5 * occ.sum():  # hollow: the fill came in through a hole
@@ -520,7 +622,9 @@ def _occupancy(v: np.ndarray, f: np.ndarray, lo: np.ndarray, vox: float, shape: 
     return solid, "flood fill"
 
 
-def _surface(solid: np.ndarray, lo: np.ndarray, vox: float, rz: np.ndarray) -> tuple[np.ndarray, np.ndarray, bool, float]:
+def _surface(
+    solid: np.ndarray, lo: np.ndarray, vox: float, rz: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, bool, float]:
     """Marching cubes of a voxel solid, outward normals, bodies under 1 % dropped, lightly Taubin-smoothed
     (vertices only: the topology stays closed) -> (vertices in the world's heading, faces, watertight, volume)."""
     import trimesh
@@ -529,14 +633,25 @@ def _surface(solid: np.ndarray, lo: np.ndarray, vox: float, rz: np.ndarray) -> t
     verts, faces, _, _ = marching_cubes(np.pad(solid, 1).astype(np.float32), 0.5)
     m = trimesh.Trimesh((verts - 1) * vox + lo, faces, process=True)
     parts = m.split(only_watertight=False)
-    m = trimesh.util.concatenate([p for p in parts if len(p.faces) >= 0.01 * len(m.faces)]) if len(parts) > 1 else m
+    m = (
+        trimesh.util.concatenate([p for p in parts if len(p.faces) >= 0.01 * len(m.faces)])
+        if len(parts) > 1
+        else m
+    )
     if m.volume < 0:
         m.invert()
     trimesh.smoothing.filter_taubin(m, iterations=5)
-    return np.asarray(m.vertices, np.float64) @ rz, np.asarray(m.faces, np.int64), bool(m.is_watertight), float(m.volume)
+    return (
+        np.asarray(m.vertices, np.float64) @ rz,
+        np.asarray(m.faces, np.int64),
+        bool(m.is_watertight),
+        float(m.volume),
+    )
 
 
-def solidify(v: np.ndarray, f: np.ndarray, *, resolution: int = 224, yaw: float = 0.0) -> tuple[np.ndarray, np.ndarray, dict]:
+def solidify(
+    v: np.ndarray, f: np.ndarray, *, resolution: int = 224, yaw: float = 0.0
+) -> tuple[np.ndarray, np.ndarray, dict]:
     """A closed surface of the solid (v, f) bounds (z up) -> ``(vertices, faces, info)``.
 
     Voxelised at ``resolution`` along its longest side in its own heading (``yaw``: its largest wall's normal,
@@ -602,7 +717,11 @@ def transfer_texture(v: np.ndarray, f: np.ndarray, src: tuple[np.ndarray, np.nda
     tri = torch.as_tensor(v, dtype=torch.float32, device=dev)[torch.as_tensor(f, device=dev)]
     corners, uv_obj = soup_layout(len(f), size, dev)
     flat, tid, ok, (wa, wb, wc), pts = soup_texels(corners, tri, size)
-    texels = (flat[ok].cpu().numpy(), tid[ok].cpu().numpy(), torch.stack([wa, wb, wc], 1)[ok].cpu().numpy())
+    texels = (
+        flat[ok].cpu().numpy(),
+        tid[ok].cpu().numpy(),
+        torch.stack([wa, wb, wc], 1)[ok].cpu().numpy(),
+    )
     flat, pts = texels[0], pts[ok].cpu().numpy()
     scene = o3d.t.geometry.RaycastingScene()
     scene.add_triangles(o3c.Tensor(sv.astype(np.float32)), o3c.Tensor(sf.astype(np.uint32)))
@@ -612,9 +731,17 @@ def transfer_texture(v: np.ndarray, f: np.ndarray, src: tuple[np.ndarray, np.nda
         q = scene.compute_closest_points(o3c.Tensor(pts[s : s + 4_000_000].astype(np.float32)))
         prim = q["primitive_ids"].numpy().astype(np.int64)
         b = q["primitive_uvs"].numpy()
-        tuv = (1 - b[:, :1] - b[:, 1:]) * suv[sf[prim, 0]] + b[:, :1] * suv[sf[prim, 1]] + b[:, 1:] * suv[sf[prim, 2]]
-        g = torch.as_tensor(np.stack([2 * tuv[:, 0] - 1, 1 - 2 * tuv[:, 1]], 1), dtype=torch.float32, device=dev)
-        col = F.grid_sample(img, g[None, None], mode="bilinear", align_corners=False, padding_mode="border")[0, :, 0].T
+        tuv = (
+            (1 - b[:, :1] - b[:, 1:]) * suv[sf[prim, 0]]
+            + b[:, :1] * suv[sf[prim, 1]]
+            + b[:, 1:] * suv[sf[prim, 2]]
+        )
+        g = torch.as_tensor(
+            np.stack([2 * tuv[:, 0] - 1, 1 - 2 * tuv[:, 1]], 1), dtype=torch.float32, device=dev
+        )
+        col = F.grid_sample(
+            img, g[None, None], mode="bilinear", align_corners=False, padding_mode="border"
+        )[0, :, 0].T
         albedo[flat[s : s + 4_000_000]] = col.round().clamp(0, 255).to(torch.uint8).cpu().numpy()
     return uv_obj.cpu().numpy(), albedo.reshape(size, size, 3), texels
 
@@ -644,7 +771,9 @@ def fill_ground(v: np.ndarray, f: np.ndarray, colours: np.ndarray, centre: np.nd
     xs, ys = x0 + (jj + 0.5) * cell, y0 + (ii + 0.5) * cell
     from scipy.ndimage import map_coordinates
 
-    z = map_coordinates(ground, [(ys - gy0) / cell - 0.5, (xs - gx0) / cell - 0.5], order=1, mode="nearest")
+    z = map_coordinates(
+        ground, [(ys - gy0) / cell - 0.5, (xs - gx0) / cell - 0.5], order=1, mode="nearest"
+    )
     # cells a surface covers (seen from above), and each covered cell's lowest surface colour
     tri = v[f]
     samples = np.concatenate([tri.mean(1), tri.reshape(-1, 3)])
@@ -680,7 +809,12 @@ def fill_ground(v: np.ndarray, f: np.ndarray, colours: np.ndarray, centre: np.nd
     hole = ndimage.binary_dilation(hole, iterations=1)  # overlap the seen ground's ragged edge
     q = np.arange(n * n).reshape(n, n)
     ok = (hole[:-1, :-1] | hole[:-1, 1:] | hole[1:, :-1] | hole[1:, 1:]).ravel()
-    a, b, c, d = q[:-1, :-1].ravel()[ok], q[:-1, 1:].ravel()[ok], q[1:, :-1].ravel()[ok], q[1:, 1:].ravel()[ok]
+    a, b, c, d = (
+        q[:-1, :-1].ravel()[ok],
+        q[:-1, 1:].ravel()[ok],
+        q[1:, :-1].ravel()[ok],
+        q[1:, 1:].ravel()[ok],
+    )
     faces = np.concatenate([np.stack([a, b, d], 1), np.stack([a, d, c], 1)])
     used, inv = np.unique(faces, return_inverse=True)
     verts = np.stack([xs.ravel(), ys.ravel(), z.ravel() - 0.01 * cell], 1)[used]
@@ -691,7 +825,9 @@ def _face_colours(mesh) -> np.ndarray:  # type: ignore[no-untyped-def]
     """Per face of a textured trimesh, the texture at its centroid (uint8 [F, 3])."""
     uv = np.asarray(mesh.visual.uv)[np.asarray(mesh.faces)].mean(1)
     mat = mesh.visual.material
-    img = np.asarray((getattr(mat, "baseColorTexture", None) or getattr(mat, "image", None)).convert("RGB"))
+    img = np.asarray(
+        (getattr(mat, "baseColorTexture", None) or getattr(mat, "image", None)).convert("RGB")
+    )
     h, w = img.shape[:2]
     x = np.clip((uv[:, 0] * w).astype(int), 0, w - 1)
     y = np.clip(((1 - uv[:, 1]) * h).astype(int), 0, h - 1)
@@ -707,7 +843,9 @@ def _textured(v: np.ndarray, f: np.ndarray, corner_uv: np.ndarray, image):  # ty
                            visual=trimesh.visual.TextureVisuals(uv=corner_uv.reshape(-1, 2), image=image), process=False)  # fmt: skip
 
 
-def _write_subject(v: np.ndarray, f: np.ndarray, corner_uv: np.ndarray, albedo: np.ndarray, stem: Path) -> list[Path]:
+def _write_subject(
+    v: np.ndarray, f: np.ndarray, corner_uv: np.ndarray, albedo: np.ndarray, stem: Path
+) -> list[Path]:
     """Textured GLB (node ``subject``, JPEG texture) and OBJ (shared vertices, per-corner ``vt``; + .mtl, .jpg)."""
     import io
 
@@ -719,7 +857,9 @@ def _write_subject(v: np.ndarray, f: np.ndarray, corner_uv: np.ndarray, albedo: 
     tex = stem.with_name(stem.name + "_albedo.jpg")
     tex.write_bytes(buf.getvalue())
     glb = stem.with_suffix(".glb")
-    trimesh.Scene({"subject": _textured(v, f, corner_uv, Image.open(io.BytesIO(buf.getvalue())))}).export(glb)
+    trimesh.Scene(
+        {"subject": _textured(v, f, corner_uv, Image.open(io.BytesIO(buf.getvalue())))}
+    ).export(glb)
     obj, mtl = stem.with_suffix(".obj"), stem.with_suffix(".mtl")
     mtl.write_text(f"newmtl albedo\nKa 1 1 1\nKd 1 1 1\nillum 1\nmap_Kd {tex.name}\n")
     fi = np.empty((len(f), 6), np.int64)
@@ -733,7 +873,9 @@ def _write_subject(v: np.ndarray, f: np.ndarray, corner_uv: np.ndarray, albedo: 
     return [glb, obj, mtl, tex]
 
 
-def _thumbnail(glb: Path, out: Path, base: np.ndarray, height: float, first_cam: np.ndarray, size=(640, 360)) -> Path:
+def _thumbnail(
+    glb: Path, out: Path, base: np.ndarray, height: float, first_cam: np.ndarray, size=(640, 360)
+) -> Path:
     """The scene, textured, from the side opposite the flight's first camera, looking at the subject."""
     from PIL import Image
 
@@ -765,16 +907,28 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
 
     t_start = time.perf_counter()
     gen_dir = run_dir / "export" / "generated"
-    gen = json.loads((gen_dir / "result.json").read_text()) if (gen_dir / "result.json").is_file() else {}
+    gen = (
+        json.loads((gen_dir / "result.json").read_text())
+        if (gen_dir / "result.json").is_file()
+        else {}
+    )
     aligned = gen.get("aligned") or {}
-    if gen.get("status") != "ok" or not aligned.get("placed") or int(aligned.get("model", -1)) != model:
+    if (
+        gen.get("status") != "ok"
+        or not aligned.get("placed")
+        or int(aligned.get("model", -1)) != model
+    ):
         raise ValueError("no generated object placed on this model: run `drone3d generate` first")
     sfm = json.loads((run_dir / "sfm" / "result.json").read_text())
     model_dir = Path(sfm["models"][model]["path"])
     name = model_dir.name
     mdir = run_dir / "export" / f"model_{name}"
     frame = json.loads((mdir / "frame.json").read_text())
-    fs, fr, ft = float(frame["scale"]), np.asarray(frame["rotation"]), np.asarray(frame["translation"])
+    fs, fr, ft = (
+        float(frame["scale"]),
+        np.asarray(frame["rotation"]),
+        np.asarray(frame["translation"]),
+    )
 
     def to_sfm(x: np.ndarray) -> np.ndarray:  # export frame (z up) -> SfM frame
         return ((x - ft) / fs) @ fr
@@ -787,13 +941,19 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     # the keyframe views, as the export's baker builds them
     rec = pycolmap.Reconstruction(str(model_dir))
     posed = sorted((im for im in rec.images.values() if im.has_pose), key=lambda im: im.name)
-    pick = [posed[int(round(i))] for i in np.linspace(0, len(posed) - 1, min(texture_views, len(posed)))]
+    pick = [
+        posed[int(round(i))] for i in np.linspace(0, len(posed) - 1, min(texture_views, len(posed)))
+    ]
     images = run_dir / "dataset" / "images"
     overlay = load_mask(images.parent)
     overlay = torch.from_numpy(overlay).cuda() if overlay is not None else None
     views = []
     for im in pick:
-        img = decode_jpeg(read_file(str(images / im.name)), device="cuda").permute(1, 2, 0).contiguous()
+        img = (
+            decode_jpeg(read_file(str(images / im.name)), device="cuda")
+            .permute(1, 2, 0)
+            .contiguous()
+        )
         cam = rec.cameras[im.camera_id]
         s = img.shape[1] / cam.width
         pose = im.cam_from_world()
@@ -806,7 +966,9 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
 
     # 1. no ground disc, flat facades, then carve what the keyframes saw through -- each generation alike
     t0 = time.perf_counter()
-    raw = o3d.io.read_triangle_mesh(str(run_dir / "dense" / f"model_{name}" / "mesh.ply"))  # the measurement
+    raw = o3d.io.read_triangle_mesh(
+        str(run_dir / "dense" / f"model_{name}" / "mesh.ply")
+    )  # the measurement
     measured = (np.asarray(raw.vertices), np.asarray(raw.triangles))
     sky = _sky_masks(views)
 
@@ -816,7 +978,9 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
         keep = carve(to_sfm(v), f, views, measured, sky=sky)
         # what the carving cut loose (pieces under 1 %), connected through positions: the GLB splits its vertices
         # along UV seams, 13108 index-connected pieces of what is one body
-        _, weld = np.unique(np.round(v / (1e-6 * float(np.ptp(v, 0).max())), 0), axis=0, return_inverse=True)
+        _, weld = np.unique(
+            np.round(v / (1e-6 * float(np.ptp(v, 0).max())), 0), axis=0, return_inverse=True
+        )
         kf = f[keep]
         adj = trimesh.graph.face_adjacency(weld.reshape(-1)[kf])
         comps = trimesh.graph.connected_components(adj, nodes=np.arange(len(kf)), min_len=1)
@@ -825,7 +989,13 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
         used = np.unique(f2)
         remap = np.full(len(v), -1)
         remap[used] = np.arange(len(used))
-        return v[used], (uv[used] if uv is not None else None), remap[f2], planes_, int((~keep).sum())
+        return (
+            v[used],
+            (uv[used] if uv is not None else None),
+            remap[f2],
+            planes_,
+            int((~keep).sum()),
+        )
 
     n_generated = len(gf)
     slab_faces = int((~drop_base_slab(gv, gf)).sum())
@@ -836,7 +1006,12 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     others = []
     for vw in gen.get("views") or []:
         al = vw.get("aligned") or {}
-        if al.get("placed") and al.get("glb") and (gen_dir / al["glb"]).is_file() and vw["keyframe"] != gen.get("keyframe"):
+        if (
+            al.get("placed")
+            and al.get("glb")
+            and (gen_dir / al["glb"]).is_file()
+            and vw["keyframe"] != gen.get("keyframe")
+        ):
             ov, of, _, _ = _load_glb(gen_dir / al["glb"])
             cv_, _, cf_, _, _ = clean(ov, of, None)
             others.append((cv_, cf_))
@@ -850,8 +1025,12 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
         solid_v, solid_f, solid_info = solidify_consensus([(gv, gf), *others], yaw=yaw)
     else:
         solid_v, solid_f, solid_info = solidify(gv, gf, yaw=yaw)
-    snapped, _ = snap_planes(solid_v, solid_f, tol=0.03, corners=False)  # the stubs carving left: flat again
-    if _closed_as_stored(snapped, solid_f):  # a file stores positions: it must stay closed through them
+    snapped, _ = snap_planes(
+        solid_v, solid_f, tol=0.03, corners=False
+    )  # the stubs carving left: flat again
+    if _closed_as_stored(
+        snapped, solid_f
+    ):  # a file stores positions: it must stay closed through them
         solid_v = snapped
     sdf = o3d.t.geometry.RaycastingScene()
     sdf.add_triangles(o3c.Tensor(solid_v.astype(np.float32)), o3c.Tensor(solid_f.astype(np.uint32)))
@@ -867,7 +1046,9 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     foot = np.zeros(tuple(ij.max(0)[::-1] + 13), bool)
     foot[ij[:, 1], ij[:, 0]] = True
     foot = ndimage.binary_fill_holes(ndimage.binary_closing(foot, iterations=2))
-    foot = ndimage.binary_dilation(foot, iterations=10)  # 5 % of its size round it: the fused roof edge's flaps
+    foot = ndimage.binary_dilation(
+        foot, iterations=10
+    )  # 5 % of its size round it: the fused roof edge's flaps
     cj = np.floor((cen[:, :2] - lo2) / cell).astype(int)
     inb = (cj >= 0).all(1) & (cj[:, 0] < foot.shape[1]) & (cj[:, 1] < foot.shape[0])
     on_foot = np.zeros(len(cen), bool)
@@ -879,7 +1060,9 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     # 3. the solid's atlas: the generated texture at the nearest point, then the photographs wherever a
     #    keyframe sees the solid (projected onto it directly: relayed through the generated mesh they smeared)
     t0 = time.perf_counter()
-    corner_uv, gen_albedo, texels = transfer_texture(solid_v, solid_f, (gv, gf, guv, galb), size=TEXTURE_SIZE)
+    corner_uv, gen_albedo, texels = transfer_texture(
+        solid_v, solid_f, (gv, gf, guv, galb), size=TEXTURE_SIZE
+    )
     solid_albedo, tex_info = retexture(to_sfm(solid_v), solid_f, None, gen_albedo, views, occluders=(to_sfm(sv), keep_f),
                                        sky=sky, texels=texels)  # fmt: skip
     views.clear()  # the keyframes on the GPU: freed
@@ -895,7 +1078,9 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     files = _write_subject(local, solid_f, corner_uv, solid_albedo, out / "subject")
     solid = trimesh.Trimesh(local, solid_f, process=False)
     solid.export(out / "subject.stl")
-    solid = trimesh.load(out / "subject.stl")  # judged as a reader sees it: positions merged, float32
+    solid = trimesh.load(
+        out / "subject.stl"
+    )  # judged as a reader sees it: positions merged, float32
     files.append(out / "subject.stl")
     fbx = write_fbx(files[0], out / "subject.fbx")
     if fbx:
@@ -905,7 +1090,9 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     from PIL import Image
 
     s_scene = trimesh.load(str(mdir / "mesh_textured.glb"), process=False, maintain_order=True)
-    s_mesh = next(iter(s_scene.geometry.values())) if isinstance(s_scene, trimesh.Scene) else s_scene
+    s_mesh = (
+        next(iter(s_scene.geometry.values())) if isinstance(s_scene, trimesh.Scene) else s_scene
+    )
     s_mesh.update_faces(~shell)
     s_mesh.remove_unreferenced_vertices()
     buf = io.BytesIO()
@@ -916,7 +1103,11 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     cams = np.array([im.projection_center() for im in posed])
     axes = np.array([im.cam_from_world().rotation.matrix()[2] for im in posed])
     sub = _subject(cams, axes)
-    flight_r = fs * sub[1] if sub is not None else float(np.linalg.norm(np.ptp(fs * cams @ fr.T, 0)[:2])) / 2
+    flight_r = (
+        fs * sub[1]
+        if sub is not None
+        else float(np.linalg.norm(np.ptp(fs * cams @ fr.T, 0)[:2])) / 2
+    )
     face_col = _face_colours(s_mesh)
     gfv, gff, gfc = fill_ground(sv, sf[~shell], face_col, fp_centre, 2.0 * flight_r, size / 100,
                                 subject=(solid_v, solid_f))  # fmt: skip
@@ -932,7 +1123,9 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     scene.export(out / "scene.glb")
     files.append(out / "scene.glb")
     try:  # the console's card: the complete model from where the flight never was (opposite its first keyframe)
-        _thumbnail(out / "scene.glb", out / "thumb.jpg", fp_centre, height, cams[0] * fs @ fr.T + ft)
+        _thumbnail(
+            out / "scene.glb", out / "thumb.jpg", fp_centre, height, cams[0] * fs @ fr.T + ft
+        )
     except (ValueError, RuntimeError, IndexError) as exc:
         log.warning("complete model thumbnail: %s", exc)
     result = {
@@ -956,8 +1149,12 @@ def complete_model(run_dir: Path, *, model: int = 0, texture_views: int = 48) ->
     }  # fmt: skip
     (out / "result.json").write_text(json.dumps(result, indent=1))
     link_scene(run_dir, model)
-    log.info("complete model: %d%% of the subject's texels photographed, solid watertight=%s, %.0f s",
-             100 * tex_info["photo_texels"], solid.is_watertight, result["seconds"]["total"])
+    log.info(
+        "complete model: %d%% of the subject's texels photographed, solid watertight=%s, %.0f s",
+        100 * tex_info["photo_texels"],
+        solid.is_watertight,
+        result["seconds"]["total"],
+    )
     return result
 
 
@@ -966,7 +1163,9 @@ def _sky_gradient(images: list[np.ndarray], skies: list[np.ndarray], bands: int 
     acc, cnt = np.zeros((bands, 3)), np.zeros(bands)
     for img, sky in zip(images, skies, strict=True):
         h = sky.shape[0]
-        small = img[:: max(1, img.shape[0] // h), :: max(1, img.shape[1] // sky.shape[1])][:h, : sky.shape[1]]
+        small = img[:: max(1, img.shape[0] // h), :: max(1, img.shape[1] // sky.shape[1])][
+            :h, : sky.shape[1]
+        ]
         rows = np.minimum((np.arange(h) * bands) // h, bands - 1)
         for b in range(bands):
             m = sky[rows == b]
@@ -1040,7 +1239,11 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
     model_dir = Path(sfm["models"][model]["path"])
     name = model_dir.name
     frame = json.loads((run_dir / "export" / f"model_{name}" / "frame.json").read_text())
-    fs, fr, ft = float(frame["scale"]), np.asarray(frame["rotation"]), np.asarray(frame["translation"])
+    fs, fr, ft = (
+        float(frame["scale"]),
+        np.asarray(frame["rotation"]),
+        np.asarray(frame["translation"]),
+    )
     dataset = run_dir / "dataset"
     init = dataset / "sparse_init" / name
     rec = pycolmap.Reconstruction(str(init if (init / "images.bin").is_file() else model_dir))
@@ -1062,12 +1265,18 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
     # the headings the flight missed
     views = []
     for de, rf in rings:
-        high = de >= 20.0  # well above the flight: no keyframe looks from there, so every heading, 15 degrees apart
+        high = (
+            de >= 20.0
+        )  # well above the flight: no keyframe looks from there, so every heading, 15 degrees apart
         for az in np.arange(0, 360, 2 * step_deg if high else step_deg):
             if not high and (np.abs((flown - az + 180) % 360 - 180)).min() < gap_deg:
                 continue
-            a_ = np.radians(az)  # the flight's horizontal radius times rf, raised to its elevation plus de
-            c = target + rf * radius * np.array([np.cos(a_), np.sin(a_), np.tan(np.radians(elev + de))])
+            a_ = np.radians(
+                az
+            )  # the flight's horizontal radius times rf, raised to its elevation plus de
+            c = target + rf * radius * np.array(
+                [np.cos(a_), np.sin(a_), np.tan(np.radians(elev + de))]
+            )
             f_ = (target - c) / np.linalg.norm(target - c)
             right = np.cross(f_, [0.0, 0.0, 1.0])
             right /= np.linalg.norm(right)
@@ -1090,7 +1299,11 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
     sky_px = [F.interpolate(i.permute(2, 0, 1)[None].float(), size=m.shape, mode="area")[0].permute(1, 2, 0).cpu().numpy()[m]
               for i, m in zip(imgs, skies, strict=True) if m.any()]  # fmt: skip
     # the trainer's background: the sky's median colour, so that the sky is left empty rather than painted
-    sky_rgb = tuple(round(float(x) / 255, 4) for x in np.median(np.concatenate(sky_px), 0)) if sky_px else None
+    sky_rgb = (
+        tuple(round(float(x) / 255, 4) for x in np.median(np.concatenate(sky_px), 0))
+        if sky_px
+        else None
+    )
     del imgs
     torch.cuda.empty_cache()
     parts = load_parts(out / "scene.glb")
@@ -1099,7 +1312,9 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
         shutil.rmtree(data)
     (data / "images" / "virtual").mkdir(parents=True)
     (data / "masks" / "virtual").mkdir(parents=True)
-    for d in sorted({im.name.split("/")[0] for im in posed}):  # the keyframes, as they are, every pixel supervised
+    for d in sorted(
+        {im.name.split("/")[0] for im in posed}
+    ):  # the keyframes, as they are, every pixel supervised
         (data / "images" / d).symlink_to((dataset / "images" / d).resolve())
         (data / "masks" / d).mkdir(parents=True, exist_ok=True)
     white = Image.fromarray(np.full((h, w), 255, np.uint8))
@@ -1122,20 +1337,51 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
         # supervised: the complete model, and the sky above the horizon; below it, where nothing was modelled,
         # the photographs see the distant city -- painting sky there made fog in front of the real views
         ys = np.arange(h)[:, None] + 0.5
-        up = (R.T @ np.stack([np.zeros_like(ys[:, 0]), (ys[:, 0] - h / 2) / fpx, np.ones(h)]))[2] > 0  # per row
+        up = (R.T @ np.stack([np.zeros_like(ys[:, 0]), (ys[:, 0] - h / 2) / fpx, np.ones(h)]))[
+            2
+        ] > 0  # per row
         keep = hit | up[:, None]
-        if (np.abs((flown - az + 180) % 360 - 180)).min() < gap_deg:  # above the flight: the photographs have the
-            keep = (part == subject_part) | (up[:, None] & ~hit)  # surroundings; the subject is what hazed there
-        Image.fromarray((keep * 255).astype(np.uint8)).save(data / "masks" / Path(nm).with_suffix(".png"))
+        if (
+            np.abs((flown - az + 180) % 360 - 180)
+        ).min() < gap_deg:  # above the flight: the photographs have the
+            keep = (part == subject_part) | (
+                up[:, None] & ~hit
+            )  # surroundings; the subject is what hazed there
+        Image.fromarray((keep * 255).astype(np.uint8)).save(
+            data / "masks" / Path(nm).with_suffix(".png")
+        )
         names.append(nm)
     t_render = time.perf_counter() - t0
     # the COLMAP model: the keyframes' (with the dense cloud) plus a pinhole camera, rig, frame and image per view
     with tempfile.TemporaryDirectory() as tmp:
         rec.write_text(tmp)
-        txt = {f: (Path(tmp) / f).read_text() for f in ("cameras.txt", "rigs.txt", "frames.txt", "images.txt", "points3D.txt")}
+        txt = {
+            f: (Path(tmp) / f).read_text()
+            for f in ("cameras.txt", "rigs.txt", "frames.txt", "images.txt", "points3D.txt")
+        }
     cam_id = max(rec.cameras) + 1
-    rig_id = max((int(line.split()[0]) for line in txt["rigs.txt"].splitlines() if line and not line.startswith("#")), default=0) + 1
-    frame_id = max((int(line.split()[0]) for line in txt["frames.txt"].splitlines() if line and not line.startswith("#")), default=0) + 1
+    rig_id = (
+        max(
+            (
+                int(line.split()[0])
+                for line in txt["rigs.txt"].splitlines()
+                if line and not line.startswith("#")
+            ),
+            default=0,
+        )
+        + 1
+    )
+    frame_id = (
+        max(
+            (
+                int(line.split()[0])
+                for line in txt["frames.txt"].splitlines()
+                if line and not line.startswith("#")
+            ),
+            default=0,
+        )
+        + 1
+    )
     img_id = max(rec.images) + 1
     txt["cameras.txt"] += f"{cam_id} PINHOLE {w} {h} {fpx} {fpx} {w / 2} {h / 2}\n"
     txt["rigs.txt"] += f"{rig_id} 1 CAMERA {cam_id}\n"
@@ -1193,7 +1439,10 @@ def splats_360(run_dir: Path, *, model: int = 0, step_deg: float = 7.5, gap_deg:
                        eval_interval=cfg.eval_interval,
                        flags={"train_resolution_divisor": cfg.resolution_divisor, "cache_images": cfg.cache_images,
                               "load_depths": 0, **({"background_color": sky_rgb} if sky_rgb else {}), **cfg.flags})  # fmt: skip
-        result.update(status="ok", **{k_: v_ for k_, v_ in tr.to_dict().items() if k_ not in ("config", "seconds")})
+        result.update(
+            status="ok",
+            **{k_: v_ for k_, v_ in tr.to_dict().items() if k_ not in ("config", "seconds")},
+        )
         result["seconds"]["train"] = round(tr.seconds, 1)
         if tr.splat_ply is not None:  # for the web viewer, in the model's export frame
             from drone3d.export.splats import compose, export_splat, train_from_world
@@ -1215,7 +1464,11 @@ def link_scene(run_dir: Path, model: int = 0) -> dict | None:
     path = run_dir / "export" / "scene.json"
     if not (out / "scene.glb").is_file() or not path.is_file():
         return None
-    trained = json.loads((out / "splats_360.json").read_text()) if (out / "splats_360.json").is_file() else {}
+    trained = (
+        json.loads((out / "splats_360.json").read_text())
+        if (out / "splats_360.json").is_file()
+        else {}
+    )
     entry = {"scene": "complete/scene.glb", "subject": "complete/subject.glb",
              "splat": "complete/splats_360.splat" if (out / "splats_360.splat").is_file() else None,
              "splat_background": trained.get("background"), "note": NOTE}  # fmt: skip

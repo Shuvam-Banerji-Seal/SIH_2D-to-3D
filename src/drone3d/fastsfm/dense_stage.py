@@ -48,7 +48,9 @@ def _write_depth_previews(ims: list, depths: list[np.ndarray], out: Path) -> Non
     if not have:
         return
     out.mkdir(parents=True, exist_ok=True)
-    lo, hi = np.percentile(1.0 / np.concatenate(have), [2, 98])  # one scale per model: views compare
+    lo, hi = np.percentile(
+        1.0 / np.concatenate(have), [2, 98]
+    )  # one scale per model: views compare
     for im, d in zip(ims, depths, strict=True):
         inv = np.where(d > 0, 1.0 / np.maximum(d, 1e-9), 0.0)
         x = np.clip((inv - lo) / max(hi - lo, 1e-12), 0.0, 1.0)
@@ -104,7 +106,10 @@ def tie_depths(rec, ims, scale: float, size: tuple[int, int]) -> list[np.ndarray
         if obs:
             pose = im.cam_from_world()
             xy = np.array([o[0] for o in obs], np.float64) * scale  # COLMAP: pixel centres at +0.5
-            z = (np.array([o[1] for o in obs], np.float64) @ np.asarray(pose.rotation.matrix()).T + np.asarray(pose.translation))[:, 2]
+            z = (
+                np.array([o[1] for o in obs], np.float64) @ np.asarray(pose.rotation.matrix()).T
+                + np.asarray(pose.translation)
+            )[:, 2]
             u, v = np.floor(xy[:, 0]).astype(np.int64), np.floor(xy[:, 1]).astype(np.int64)
             ok = (z > 0) & (u >= 0) & (u < w) & (v >= 0) & (v < h)
             d[v[ok], u[ok]] = z[ok]
@@ -133,7 +138,9 @@ def view_coverage(vertices: np.ndarray, triangles: np.ndarray, cams: list[Camera
     ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
     shares = []
     for i, c in enumerate(cams):
-        d_cam = np.stack([(xs + 0.5 - c.cx) / c.f, (ys + 0.5 - c.cy) / c.f, np.ones_like(xs)], -1).reshape(-1, 3)
+        d_cam = np.stack(
+            [(xs + 0.5 - c.cx) / c.f, (ys + 0.5 - c.cy) / c.f, np.ones_like(xs)], -1
+        ).reshape(-1, 3)
         d = d_cam @ np.asarray(c.rotation, dtype=np.float32)  # R^T d as rows
         o = np.broadcast_to(np.asarray(c.centre, dtype=np.float32), d.shape)
         rays = o3c.Tensor(np.ascontiguousarray(np.concatenate([o, d], 1), dtype=np.float32))
@@ -166,10 +173,19 @@ def mesh_depth_error(vertices: np.ndarray, triangles: np.ndarray, cams: list[Cam
         m = ref > 0
         if not m.any():
             continue
-        d_cam = np.stack([(xs[m] + 0.5 - c.cx) / c.f, (ys[m] + 0.5 - c.cy) / c.f, np.ones(int(m.sum()), np.float32)], -1)
+        d_cam = np.stack(
+            [
+                (xs[m] + 0.5 - c.cx) / c.f,
+                (ys[m] + 0.5 - c.cy) / c.f,
+                np.ones(int(m.sum()), np.float32),
+            ],
+            -1,
+        )
         d = d_cam @ np.asarray(c.rotation, dtype=np.float32)
         o = np.broadcast_to(np.asarray(c.centre, dtype=np.float32), d.shape)
-        t = scene.cast_rays(o3c.Tensor(np.ascontiguousarray(np.concatenate([o, d], 1), dtype=np.float32)))["t_hit"].numpy()
+        t = scene.cast_rays(
+            o3c.Tensor(np.ascontiguousarray(np.concatenate([o, d], 1), dtype=np.float32))
+        )["t_hit"].numpy()
         ok = np.isfinite(t)
         if ok.any():  # d has camera-frame z = 1, so t is the depth
             errs.append(np.abs(t[ok] - ref[m][ok]) / ref[m][ok])
@@ -221,43 +237,64 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
         fwd, bwd = both[: len(chunk)], both[len(chunk) :]
         ok_f, ok_b = consistency_mask(fwd, bwd), consistency_mask(bwd, fwd)
         for k, (i, j) in enumerate(chunk):
-            cand[i].append(pair_depth(cams[i], cams[j], fwd[k], ok_f[k], min_angle_deg=min_angle_deg))
-            cand[j].append(pair_depth(cams[j], cams[i], bwd[k], ok_b[k], min_angle_deg=min_angle_deg))
+            cand[i].append(
+                pair_depth(cams[i], cams[j], fwd[k], ok_f[k], min_angle_deg=min_angle_deg)
+            )
+            cand[j].append(
+                pair_depth(cams[j], cams[i], bwd[k], ok_b[k], min_angle_deg=min_angle_deg)
+            )
     depths = []
     for i in range(n):
         if not cand[i]:
             depths.append(np.zeros((h, w), np.float32))
             continue
         d = torch.stack([c[0] for c in cand[i]])
-        wts = torch.stack([c[1] for c in cand[i]]).clamp(max=5.0).pow(2)  # depth variance ~ 1 / angle^2
+        wts = (
+            torch.stack([c[1] for c in cand[i]]).clamp(max=5.0).pow(2)
+        )  # depth variance ~ 1 / angle^2
         depths.append(fuse_depths(d, wts, rel_tol=rel_tol).cpu().numpy())
     torch.cuda.synchronize()
     timing["triangulate"] = time.perf_counter() - t0
     from drone3d.io.overlay import load_mask
 
-    overlay = load_mask(images.parent, (w, h))  # a burnt-in logo: no depth there, from flow or from the prior
+    overlay = load_mask(
+        images.parent, (w, h)
+    )  # a burnt-in logo: no depth there, from flow or from the prior
     if overlay is not None:
         overlay = np.asarray(ndimage_dilate(overlay, 2))
         depths = [np.where(overlay, 0.0, d).astype(np.float32) for d in depths]
     tri_cov = float(np.mean([(d > 0).mean() for d in depths]))
     # A view flow could not triangulate (a short shot: its neighbours are too close for min_angle_deg) takes
     # its SfM tie points instead -- sparse, but enough to calibrate the monocular fill to the model's scale.
-    tie_views = [i for i in range(n) if (depths[i] > 0).sum() < TIE_FALLBACK_PX and (ties[i] > 0).sum() >= TIE_MIN_POINTS]
+    tie_views = [
+        i
+        for i in range(n)
+        if (depths[i] > 0).sum() < TIE_FALLBACK_PX and (ties[i] > 0).sum() >= TIE_MIN_POINTS
+    ]
     for i in tie_views:
         depths[i] = np.where(depths[i] > 0, depths[i], ties[i]).astype(np.float32)
-    tri_depths = [d.copy() for d in depths]  # triangulated (flow, or SfM tie points) only, before the monocular fill
+    tri_depths = [
+        d.copy() for d in depths
+    ]  # triangulated (flow, or SfM tie points) only, before the monocular fill
     fill_info, sky = None, None
     if mono is not None:
         t0 = time.perf_counter()
-        fov = torch.tensor([2 * math.degrees(math.atan(w / (2 * c.f))) for c in cams])  # MoGe takes the SfM camera's
+        fov = torch.tensor(
+            [2 * math.degrees(math.atan(w / (2 * c.f))) for c in cams]
+        )  # MoGe takes the SfM camera's
         disp = mono(frames, fov_x=fov).cpu().numpy()
         sky_rel = getattr(mono, "sky_rel", 0.005)
         top = np.maximum(disp.reshape(len(disp), -1).max(1), 1e-6)[:, None, None]
         sky = disp <= sky_rel * top if sky_rel > 0 else disp <= 0
         infos = []
         for i in range(n):
-            depths[i], inf = calibrate_fill(disp[i], depths[i], far_factor=far_factor, sky_rel=sky_rel,
-                                            min_samples=TIE_MIN_POINTS if i in tie_views else 400)
+            depths[i], inf = calibrate_fill(
+                disp[i],
+                depths[i],
+                far_factor=far_factor,
+                sky_rel=sky_rel,
+                min_samples=TIE_MIN_POINTS if i in tie_views else 400,
+            )
             infos.append(inf)
         if overlay is not None:
             depths = [np.where(overlay, 0.0, d).astype(np.float32) for d in depths]
@@ -265,7 +302,9 @@ def compute_depths(model_dir: Path, images: Path, raft, mono, *, long_side: int,
         fill_info = {"model": mono.name, "filled_images": len(filled),
                      "in_sample_abs_rel_median": round(float(np.median([x["in_sample_abs_rel"] for x in filled])), 4) if filled else None}  # fmt: skip
         timing["mono"] = time.perf_counter() - t0
-    if refine != "none":  # edge-aware (OpenCV ximgproc); measured, not the default: see fastsfm.refine
+    if (
+        refine != "none"
+    ):  # edge-aware (OpenCV ximgproc); measured, not the default: see fastsfm.refine
         from drone3d.fastsfm.refine import refine_depths
 
         t0 = time.perf_counter()
@@ -292,7 +331,10 @@ def _drop_specks(mesh, *, share: float = 0.0005, least: int = 50) -> dict:  # ty
     if small.any():
         mesh.remove_triangles_by_mask(small)
         mesh.remove_unreferenced_vertices()
-    return {"components": int((count < max(least, share * len(cluster))).sum()), "triangles": int(small.sum())}
+    return {
+        "components": int((count < max(least, share * len(cluster))).sum()),
+        "triangles": int(small.sum()),
+    }
 
 
 def extraction_weight(min_views: str | int, depth_maps: int) -> float:
@@ -317,7 +359,11 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     cams, frames, depths, sky, timing = r["cams"], r["frames"], r["depths"], r["sky"], r["timing"]
     used_stride, tri_cov, fill_info = r["used_stride"], r["tri_cov"], r["fill_info"]
     n, h, w, _ = frames.shape
-    valid = np.concatenate([d[d > 0] for d in depths]) if any((d > 0).any() for d in depths) else np.zeros(0)
+    valid = (
+        np.concatenate([d[d > 0] for d in depths])
+        if any((d > 0).any() for d in depths)
+        else np.zeros(0)
+    )
     name = model_dir.name
     if not len(valid):
         return {"model": str(model_dir), "status": "no-depth", "keyframes": n}
@@ -332,7 +378,9 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     if fusion is not None:  # in a child process: an Open3D CUDA fault cannot poison this one
         f = fusion.fuse(fused_frames, weight_threshold=wt, **tsdf_kw)
         voxel = f["voxel"]
-        mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(f["vertices"]), o3d.utility.Vector3iVector(f["triangles"]))
+        mesh = o3d.geometry.TriangleMesh(
+            o3d.utility.Vector3dVector(f["vertices"]), o3d.utility.Vector3iVector(f["triangles"])
+        )
         if f["vertex_colors"] is not None:
             mesh.vertex_colors = o3d.utility.Vector3dVector(f["vertex_colors"].astype(np.float64))
         pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(f["points"]))
@@ -353,7 +401,9 @@ def _dense_model(model_dir: Path, images: Path, out_dir: Path, raft, mono, *, lo
     if not len(mesh.triangles) and not len(pcd.points):
         log.info("dense %s: %d keyframes, the TSDF produced no surface", name, n)
         return {"model": str(model_dir), "status": "empty", "keyframes": n}
-    completeness = view_coverage(np.asarray(mesh.vertices), np.asarray(mesh.triangles), cams, (w, h), sky)
+    completeness = view_coverage(
+        np.asarray(mesh.vertices), np.asarray(mesh.triangles), cams, (w, h), sky
+    )
     mdir = out_dir / f"model_{name}"
     mdir.mkdir(parents=True, exist_ok=True)
     o3d.io.write_triangle_mesh(str(mdir / "mesh.ply"), mesh)
@@ -403,7 +453,9 @@ def run_dense(
     out_dir.mkdir(parents=True, exist_ok=True)
     # Open3D in a process of its own, booting while the first depth maps are computed (see fusion_worker)
     # auto: in the warm engine, whose process outlives many videos (one video per process is safe in-process)
-    isolate = isolate_fusion == "always" or (isolate_fusion == "auto" and models.active() is not None)
+    isolate = isolate_fusion == "always" or (
+        isolate_fusion == "auto" and models.active() is not None
+    )
     fusion = FusionWorker() if isolate else None
     raft = models.raft("raft_large", batch=16, iters=12)
     mono = None
@@ -417,7 +469,9 @@ def run_dense(
                                         voxel_px=voxel_px, trunc_voxels=trunc_voxels,
                                         tsdf_memory_gb=tsdf_memory_gb, fusion=fusion, refine=refine,
                                         min_views=min_views, far_factor=far_factor))  # fmt: skip
-        except RuntimeError as exc:  # a CUDA / Open3D failure on one model must not lose the others (FusionError too)
+        except (
+            RuntimeError
+        ) as exc:  # a CUDA / Open3D failure on one model must not lose the others (FusionError too)
             log.warning("dense %s failed: %s", model_dir.name, str(exc)[:300])
             results.append({"model": str(model_dir), "status": "failed", "error": str(exc)[:300]})
             torch.cuda.empty_cache()

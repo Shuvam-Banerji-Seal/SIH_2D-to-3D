@@ -18,17 +18,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 import yaml
+from engine_api import call, slug
 
 ROOT = Path(__file__).resolve().parents[1]
-ENGINE = "http://127.0.0.1:8770"
 STAGES = ["ingest", "keyframes", "sfm", "dense", "georef", "splat", "export", "metrics", "report"]
 SPLAT = {"models": "all", "quality": "medium", "iterations": 7000, "depth_weight": 0, "parallel": 1}
 FOREIGN_GB = 3.0
@@ -36,16 +34,6 @@ FOREIGN_GB = 3.0
 # 90 % of the SMs together while the largest held 1.4 GB
 FOREIGN_SM = 10
 QUIET_S = 120
-
-
-def call(path: str, body: dict | None = None) -> dict:
-    req = urllib.request.Request(ENGINE + path, data=json.dumps(body).encode() if body is not None else None,
-                                 headers={"Content-Type": "application/json"}, method="POST" if body is not None else "GET")  # fmt: skip
-    return json.loads(urllib.request.urlopen(req, timeout=60).read())
-
-
-def slug(name: str, n: int = 40) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", re.sub(r"\s*\[[^\]]+\]\.\w+$", "", name).lower()).strip("_")[:n].strip("_")
 
 
 def _tree(pid: int) -> set[int]:

@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 
 from drone3d.logging_utils import get_logger
+from drone3d.utils.model_cache import use_weight_store
 
 __all__ = ["compose", "invert", "merge_models", "model_depth", "ransac_sim3", "umeyama"]
 
@@ -106,7 +107,12 @@ def ransac_sim3(a: np.ndarray, b: np.ndarray, thresh: float, *, iters: int = 200
     s, r, t = umeyama(a[best], b[best])
     res = np.linalg.norm(s * a @ r.T + t - b, axis=1)
     inl = res < thresh
-    return {"sim3": (s, r, t), "inliers": int(inl.sum()), "candidates": len(a), "median_residual": float(np.median(res[inl]))}
+    return {
+        "sim3": (s, r, t),
+        "inliers": int(inl.sum()),
+        "candidates": len(a),
+        "median_residual": float(np.median(res[inl])),
+    }
 
 
 _ROMA: dict[str, Any] = {}
@@ -115,9 +121,7 @@ _ROMA: dict[str, Any] = {}
 def _roma(setting: str):  # type: ignore[no-untyped-def]
     """RoMa v2 (MIT; its checkpoint carries its DINOv3 backbone), loaded once per process."""
     if setting not in _ROMA:
-        import os
-
-        os.environ.setdefault("TORCH_HOME", "/store/huggingface/torch")
+        use_weight_store()
         from romav2 import RoMaV2
 
         _ROMA.clear()
@@ -139,14 +143,18 @@ def _calibrated_depth(rec, im, images: Path, mono) -> tuple[np.ndarray, float] |
     cam = rec.cameras[im.camera_id]
     w, h = LIFT_SIZE
     scale = w / cam.width
-    rgb = np.asarray(Image.open(images / im.name).convert("RGB").resize((w, round(cam.height * scale))))
+    rgb = np.asarray(
+        Image.open(images / im.name).convert("RGB").resize((w, round(cam.height * scale)))
+    )
     disp = mono(torch.from_numpy(rgb)[None].cuda())[0].cpu().numpy()
     (tie,) = tie_depths(rec, [im], scale, (rgb.shape[1], rgb.shape[0]))
     depth, info = calibrate_fill(disp, tie, min_samples=60, sky_rel=getattr(mono, "sky_rel", 0.005))
     return (depth, scale) if info.get("status") == "filled" else None
 
 
-def _lift(rec, im, xy: np.ndarray, dm: tuple[np.ndarray, float] | None) -> tuple[np.ndarray, np.ndarray]:  # type: ignore[no-untyped-def]
+def _lift(
+    rec, im, xy: np.ndarray, dm: tuple[np.ndarray, float] | None
+) -> tuple[np.ndarray, np.ndarray]:  # type: ignore[no-untyped-def]
     """Full-resolution pixels -> world points where the calibrated depth has a value -> (points, mask)."""
     if dm is None:
         return np.zeros((0, 3)), np.zeros(len(xy), bool)
@@ -175,11 +183,18 @@ def _match_batched(roma, pairs: list[tuple[Any, Any]], matches_per_pair: int) ->
     with torch.inference_mode():
         for s in range(0, len(pairs), MATCH_BATCH):
             chunk = pairs[s : s + MATCH_BATCH]
-            pred = roma(torch.cat([a for a, _ in chunk]).float() / 255, torch.cat([b for _, b in chunk]).float() / 255)
+            pred = roma(
+                torch.cat([a for a, _ in chunk]).float() / 255,
+                torch.cat([b for _, b in chunk]).float() / 255,
+            )
             for i in range(len(chunk)):
                 conf = pred["confidence_AB"][i : i + 1]
                 overlap, precision = _map_confidence(confidence=conf, threshold=roma.threshold)
-                one = {"warp_AB": pred["warp_AB"][i : i + 1], "overlap_AB": overlap, "precision_AB": precision}
+                one = {
+                    "warp_AB": pred["warp_AB"][i : i + 1],
+                    "overlap_AB": overlap,
+                    "precision_AB": precision,
+                }
                 out.append(roma.sample(one, matches_per_pair)[0])
     return out
 
@@ -221,7 +236,11 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
                 x = decode_jpeg(read_file(str(images / im.name)), device="cuda").float()[None] / 255
                 lr[im.name] = F.interpolate(x, size=(roma.H_lr, roma.W_lr), mode="bicubic", align_corners=False,
                                             antialias=True).clamp(0, 1).mul(255).round().to(torch.uint8)  # fmt: skip
-                small.append(F.interpolate(x, size=(256, 448), mode="bicubic", align_corners=False, antialias=True))
+                small.append(
+                    F.interpolate(
+                        x, size=(256, 448), mode="bicubic", align_corners=False, antialias=True
+                    )
+                )
                 keys.append((name, im.image_id, im.name))
         # a global descriptor per keyframe: RoMa's DINOv3 features of the deeper layer, mean-pooled
         desc = [F.normalize(roma.f(torch.cat(small[s : s + 32]))[-1].float().mean(dim=(1, 2)), dim=1).cpu()
@@ -235,7 +254,9 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
     model_of = np.array([k[0] for k in keys])
     names = sorted(recs, key=lambda k: -recs[k].num_reg_images())
     idx = {n: np.where(model_of == n)[0] for n in names}
-    best = {(a, b): float(sim[np.ix_(idx[a], idx[b])].max()) for a in names for b in names if a != b}
+    best = {
+        (a, b): float(sim[np.ix_(idx[a], idx[b])].max()) for a in names for b in names if a != b
+    }
     rank = {}  # (a, b) -> b's place among a's partners by similarity (0: the most similar)
     for a in names:
         for r_, b in enumerate(sorted((b for b in names if b != a), key=lambda b: -best[(a, b)])):
@@ -247,7 +268,9 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
             if len(names) > max_partners + 1 and place >= max_partners:
                 continue
             block = sim[np.ix_(idx[a], idx[b])]
-            order = np.dstack(np.unravel_index(np.argsort(-block, axis=None), block.shape))[0][:pairs_per_model_pair]
+            order = np.dstack(np.unravel_index(np.argsort(-block, axis=None), block.shape))[0][
+                :pairs_per_model_pair
+            ]
             todo.append((a, b, [(keys[idx[a][r_]], keys[idx[b][c_]]) for r_, c_ in order]))
     timing["model_pairs"] = float(len(todo))
     t0 = time.perf_counter()
@@ -267,7 +290,10 @@ def find_links(recs: dict[str, Any], images: Path, *, pairs_per_model_pair: int 
             xa = np.stack([(m[:, 0] + 1) / 2 * ca.width, (m[:, 1] + 1) / 2 * ca.height], 1)
             xb = np.stack([(m[:, 2] + 1) / 2 * cb.width, (m[:, 3] + 1) / 2 * cb.height], 1)
             t1 = time.perf_counter()
-            for key, rec, im in (((a, ima.image_id), recs[a], ima), ((b, imb.image_id), recs[b], imb)):
+            for key, rec, im in (
+                ((a, ima.image_id), recs[a], ima),
+                ((b, imb.image_id), recs[b], imb),
+            ):
                 if key not in depth_cache:
                     depth_cache[key] = _calibrated_depth(rec, im, images, mono)
             Xa, oka = _lift(recs[a], ima, xa, depth_cache[(a, ima.image_id)])
@@ -334,7 +360,9 @@ def groups_from_links(names: list[str], edges: list[dict], *, min_inliers: int =
                   key=lambda e: -e["inliers"])  # fmt: skip
     order = {n: i for i, n in enumerate(names)}
     ident: Sim3 = (1.0, np.eye(3), np.zeros(3))
-    comp: dict[str, dict[str, Sim3]] = {n: {n: ident} for n in names}  # root -> {member: Sim3 member -> root}
+    comp: dict[str, dict[str, Sim3]] = {
+        n: {n: ident} for n in names
+    }  # root -> {member: Sim3 member -> root}
     root_of = {n: n for n in names}
 
     def distance(members: dict[str, Sim3], to: Sim3 = ident) -> float:
@@ -348,7 +376,9 @@ def groups_from_links(names: list[str], edges: list[dict], *, min_inliers: int =
         ra, rb = root_of[e["a"]], root_of[e["b"]]
         if ra == rb:
             continue
-        t = compose(comp[ra][e["a"]], compose(e["sim3"], invert(comp[rb][e["b"]])))  # rb's frame -> ra's
+        t = compose(
+            comp[ra][e["a"]], compose(e["sim3"], invert(comp[rb][e["b"]]))
+        )  # rb's frame -> ra's
         if depths is not None:
             da, db = distance(comp[ra]), distance(comp[rb], t)
             if np.isfinite(da) and np.isfinite(db) and max(da, db) > max_depth_ratio * min(da, db):
@@ -382,7 +412,11 @@ def write_merged(recs: dict[str, Any], members: dict[str, Sim3], out_dir: Path) 
             txt = {f: [line.split() for line in (Path(tmp) / f).read_text().splitlines() if line and not line.startswith("#")]
                    for f in ("cameras.txt", "rigs.txt", "frames.txt", "points3D.txt")}  # fmt: skip
             # images.txt comes in line pairs, and an image without points has an empty second line
-            txt["images.txt"] = [line.split() for line in (Path(tmp) / "images.txt").read_text().splitlines() if not line.startswith("#")]
+            txt["images.txt"] = [
+                line.split()
+                for line in (Path(tmp) / "images.txt").read_text().splitlines()
+                if not line.startswith("#")
+            ]
         cmap = {int(c[0]): off["cam"] + k + 1 for k, c in enumerate(txt["cameras.txt"])}
         rmap = {int(c[0]): off["rig"] + k + 1 for k, c in enumerate(txt["rigs.txt"])}
         fmap = {int(c[0]): off["frame"] + k + 1 for k, c in enumerate(txt["frames.txt"])}
@@ -393,24 +427,39 @@ def write_merged(recs: dict[str, Any], members: dict[str, Sim3], out_dir: Path) 
             cams.append([str(cmap[int(c[0])]), *c[1:]])
         for rg in txt["rigs.txt"]:  # RIG_ID NUM_SENSORS REF_TYPE REF_ID [TYPE ID ...]
             rigs.append([str(rmap[int(rg[0])]), rg[1], rg[2], str(cmap[int(rg[3])]), *rg[4:]])
-        for fr in txt["frames.txt"]:  # FRAME_ID RIG_ID QW QX QY QZ TX TY TZ NUM_DATA (TYPE SENSOR_ID DATA_ID)*
+        for fr in txt[
+            "frames.txt"
+        ]:  # FRAME_ID RIG_ID QW QX QY QZ TX TY TZ NUM_DATA (TYPE SENSOR_ID DATA_ID)*
             data = fr[10:]
             for k in range(0, len(data), 3):
                 data[k + 1], data[k + 2] = str(cmap[int(data[k + 1])]), str(imap[int(data[k + 2])])
             frames.append([str(fmap[int(fr[0])]), str(rmap[int(fr[1])]), *fr[2:10], *data])
-        for k in range(0, len(img_rows), 2):  # IMAGE_ID QW QX QY QZ TX TY TZ CAMERA_ID NAME / (X Y POINT3D_ID)*
+        for k in range(
+            0, len(img_rows), 2
+        ):  # IMAGE_ID QW QX QY QZ TX TY TZ CAMERA_ID NAME / (X Y POINT3D_ID)*
             head, pts = img_rows[k], img_rows[k + 1] if k + 1 < len(img_rows) else []
-            pts = [pts[j] if (j % 3) != 2 else (str(pmap[int(pts[j])]) if int(pts[j]) >= 0 else "-1") for j in range(len(pts))]
+            pts = [
+                pts[j] if (j % 3) != 2 else (str(pmap[int(pts[j])]) if int(pts[j]) >= 0 else "-1")
+                for j in range(len(pts))
+            ]
             images.append([str(imap[int(head[0])]), *head[1:8], str(cmap[int(head[8])]), *head[9:]])
             images.append(pts)
         for p in txt["points3D.txt"]:  # POINT3D_ID X Y Z R G B ERROR (IMAGE_ID POINT2D_IDX)*
             track = p[8:]
-            track = [str(imap[int(track[j])]) if j % 2 == 0 else track[j] for j in range(len(track))]
+            track = [
+                str(imap[int(track[j])]) if j % 2 == 0 else track[j] for j in range(len(track))
+            ]
             points.append([str(pmap[int(p[0])]), *p[1:8], *track])
         off = {"cam": off["cam"] + len(cmap), "rig": off["rig"] + len(rmap), "frame": off["frame"] + len(fmap),
                "image": off["image"] + len(imap), "point": off["point"] + len(pmap)}  # fmt: skip
     out_dir.mkdir(parents=True, exist_ok=True)
-    for f, rows in (("cameras.txt", cams), ("rigs.txt", rigs), ("frames.txt", frames), ("images.txt", images), ("points3D.txt", points)):
+    for f, rows in (
+        ("cameras.txt", cams),
+        ("rigs.txt", rigs),
+        ("frames.txt", frames),
+        ("images.txt", images),
+        ("points3D.txt", points),
+    ):
         (out_dir / f).write_text("".join(" ".join(r) + "\n" for r in rows))
     merged = pycolmap.Reconstruction(str(out_dir))  # read back: the ids and tracks are consistent
     merged.write_binary(str(out_dir))
@@ -424,17 +473,32 @@ def merge_models(model_dirs: list[Path], images: Path, out_root: Path, **kw: Any
 
     recs = {p.name: pycolmap.Reconstruction(str(p)) for p in model_dirs}
     names = sorted(recs, key=lambda k: -recs[k].num_reg_images())
-    edges, timing = find_links(recs, images, **{k: v for k, v in kw.items() if k in ("pairs_per_model_pair", "setting")})
+    edges, timing = find_links(
+        recs, images, **{k: v for k, v in kw.items() if k in ("pairs_per_model_pair", "setting")}
+    )
     groups = groups_from_links(names, edges, depths={n: model_depth(r) for n, r in recs.items()},
                                weights={n: float(r.num_reg_images()) for n, r in recs.items()},
                                **{k: v for k, v in kw.items() if k in ("min_inliers", "min_share", "max_depth_ratio")})  # fmt: skip
     t0 = time.perf_counter()
     out = []
-    for k, g in enumerate(sorted(groups, key=lambda g: -sum(recs[n].num_reg_images() for n in g["members"]))):
+    for k, g in enumerate(
+        sorted(groups, key=lambda g: -sum(recs[n].num_reg_images() for n in g["members"]))
+    ):
         dst = out_root / str(k)
         write_merged(recs, g["members"], dst)
-        out.append({"path": str(dst), "members": sorted(g["members"]), "images": sum(recs[n].num_reg_images() for n in g["members"])})
+        out.append(
+            {
+                "path": str(dst),
+                "members": sorted(g["members"]),
+                "images": sum(recs[n].num_reg_images() for n in g["members"]),
+            }
+        )
     timing["write"] = time.perf_counter() - t0
-    log.info("merge: %d models -> %d (%s)", len(names), len(out), ", ".join(f"{len(g['members'])}:{g['images']}" for g in out))
+    log.info(
+        "merge: %d models -> %d (%s)",
+        len(names),
+        len(out),
+        ", ".join(f"{len(g['members'])}:{g['images']}" for g in out),
+    )
     return {"groups": out, "edges": [{k: v for k, v in e.items() if k != "sim3"} | {"scale": round(e["sim3"][0], 4)} for e in edges],
             "timing": {k: round(v, 2) for k, v in timing.items()}}  # fmt: skip

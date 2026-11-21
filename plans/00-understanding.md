@@ -1,84 +1,62 @@
 # 00 — Understanding
 
-Read sweep: 2026-09-26. Reconciled at cycle 9 (this file was stale — its Findings
-table described the codebase *before* 15 defects were fixed). Current state lives
-in `CONTINUATION_STATE.md` and `08-final-verification-report.md`; this file keeps
-the durable understanding of the project itself.
+What the project must do, why it is hard, and the contracts the code relies on. Stage tables and
+the evidence behind each design choice are in [`docs/architecture.md`](../docs/architecture.md); the
+official statement is in [`docs/problem-statement.md`](../docs/problem-statement.md). Last revised
+2026-11-22.
 
-## Restated problem
+## Problem
 
-`drone3d` = CLI + library that turns **one single-pass drone video** (+ optional
-GPS/IMU log) into a **georeferenced, metrically-accurate, textured 3D model**.
-Smart India Hackathon PS **26158** (NTRO). Deliverables: sparse/dense cloud,
-textured mesh, georeferenced PLY + camera-track GeoJSON, metrics, one-page HTML report.
+Smart India Hackathon problem statement **26158** (NTRO): from **one pass** of a moving UAV, no flight
+planning and no ground control, produce a georeferenced, metrically accurate, textured 3D model of
+the visible scene as a mesh or point cloud, in OBJ, PLY, LAS, GeoTIFF, glTF/GLB and FBX, viewable in a
+web or desktop viewer. The budget is **15 minutes for a 10-minute video**. Scoring: reconstruction
+accuracy 30 %, completeness 20 %, processing speed 20 %, innovation 15 %, scalability 10 %, user
+interface 5 %.
 
-## What the repo is
+## Why a single pass is hard
 
-| Aspect | State |
-| --- | --- |
-| Maturity | `0.1.0`, 18 commits |
-| Structure | `src/drone3d`, 8 artifact-contract stages |
-| Tests | **271 passing** across 20 files; 81 % coverage |
-| CI | ruff lint+format, import smoke, `drone3d doctor`, config load, pytest |
-| Env | `uv` `.venv` (CPython 3.12.8, all extras), COLMAP 4.2.0 CUDA in `.tools/colmap-env` |
-| Sample data | 1 × `.webm` — 2560×1440 VP9, 23.976 fps, 457 frames / 19.06 s, 22.7 MB |
-| Telemetry for it | **None** — this is the one remaining blocker |
+| Difficulty | Consequence | Mechanism in the code |
+|---|---|---|
+| Thousands of redundant frames, a few bad ones | A fixed sampling rate wastes work where the drone is slow and leaves gaps where it is fast | Keyframes chosen by measured co-visibility: the sharpest frame whose overlap with the last keyframe lies in a band (`keyframes/select.py`) |
+| The footage may not contain 3D at all | A drone yawing on the spot, or a planar or distant scene, gives video a homography explains; no computation recovers depth from it | Per-pass verdict from rotation-compensated parallax, measured with *direct* keyframe-pair flow and normalised by the noise floor (`keyframes/geometry.py`) |
+| Baselines of 0.1–1° between neighbouring keyframes | Triangulation against the nearest view is ill-conditioned | Flow is triangulated against neighbours up to 12 keyframes away; a monocular prior calibrated to that depth fills what flow cannot see (`fastsfm/`) |
+| A single pass is nearly a straight line | Aligning camera centres to GPS leaves the roll about the flight axis undetermined | Model levelled on its ground plane; only yaw, scale and translation fitted (`geo/georef.py`) |
+| Time scales with footage length | Per-video-second cost must stay below 1.5 s | One NVDEC decode, SfM from optical flow instead of SIFT, GPU TSDF and texture baking, a warm engine (`io/nvdec.py`, `engine/`) |
+| Surfaces the pass never faced | Completeness is bounded by what the camera saw | Reported as view completeness; the optional generated and complete models are labelled as *generated*, never measured (`generate.py`, `complete.py`) |
 
-## Pipeline (stage → artifact contract)
+## Artifact contracts
 
-| # | Stage | Reads | Writes | Backend |
-| --- | --- | --- | --- | --- |
-| 1 | `ingest` | `ingest.video`, `ingest.telemetry` | `frames/`, `ingest/frames.csv`, `video_info.json` | OpenCV |
-| 2 | `preprocess` | `ingest/frames.csv` | `frames_selected/`, `preprocess/masks/`, `selected_frames.csv` | OpenCV |
-| 3 | `sfm` | images dir | `sfm/database.db`, `sparse/`, `sparse.ply`, `sparse_txt/` | COLMAP CLI |
-| 4 | `dense` | `sfm` result + images | `dense/dense/fused.ply` or `dense/depth/*.npy` | COLMAP MVS / HF depth |
-| 5 | `mesh` | `dense` result | `mesh/mesh-*.ply`, `mesh/textured/` | COLMAP poisson/**delaunay**/texture, Open3D |
-| 6 | `georef` | `sfm` text model + frame GPS | `georef/georeferenced_*.ply`, `camera_track.geojson` | NumPy (Umeyama) |
-| 7 | `metrics` | all results | `metrics/metrics.json` | NumPy |
-| 8 | `report` | everything | `report.html`, `manifest.json` | OpenCV |
+Stages exchange data only through files in one run directory, so any stage can be re-run alone
+(`drone3d run --run-dir R --stages dense,export`). Each stage writes `<stage>/result.json`.
 
-Graceful degradation is a design pillar: a missing backend ⇒ stage `skipped`, run
-continues, `PipelineResult.ok` stays true.
-
-## Artifact contracts worth knowing
-
-- **Dynamic masks** live at `preprocess/masks/<image-name>.png` — *outside* the
-  images dir (COLMAP scans `image_path` recursively) — named `<image>.png` with
-  **0 = ignore** polarity, consumed via `--ImageReader.mask_path`.
-- **`model_converter --output_type TXT`** requires its output directory to
-  already exist; `--output_type PLY` does not.
-- **PLY binary is interleaved per vertex.** Writing positions then colours as
-  separate blocks silently corrupts every vertex past the first.
-- **`delaunay_mesher`** has no `--output_type` flag in COLMAP 4.x.
-- **OpenCV 5.x removed AKAZE** and its stubs omit `SIFT_create` /
-  `VideoWriter_fourcc` (both work at runtime).
-
-## Key algorithms
-
-- **Keyframe selection** — `0.6·sharpness + 0.25·exposure + 0.15·contrast`,
-  greedy accept with `min_spacing_s` enforced via `bisect`/`insort`.
-- **Georef** — camera centres ↔ per-frame GPS in local ENU (WGS84→ECEF→ENU,
-  pure NumPy), **Umeyama** closed-form similarity, reports GPS RMSE.
-- **Metrics** — bounds, voxel coverage, symmetric Chamfer (BLAS identity
-  `|a−b|²=|a|²+|b|²−2a·b`, 64 MB budget), completeness, scale error.
-- **Telemetry** — alias-table column detection; CSV/TSV, DJI SRT, GPX, JSON;
-  `bisect` linear interpolation onto frame timestamps.
-
-## Success criteria status
-
-Scored **3 of 10** (7 robustness, 9 usability, 10 reproducibility). Criterion 1
-has supporting evidence (SfM reprojection error 0.30 px ≈ 0.3× GSD). Criteria
-**2, 3, 6 are blocked on external data** — see `08-final-verification-report.md`.
+| Contract | Detail | Guarded by |
+|---|---|---|
+| Stage registry | `ALL_STAGES` in `config.py`; `Pipeline._stage_<name>` implements each | `test_config`, `test_report` |
+| COLMAP models | `dataset/sparse/N/{cameras,images,points3D}.bin`, one per pass or merged group of passes | `test_fastsfm_components` |
+| Depth maps | 16-bit PNG, linear z-depth scaled so the 99.9th percentile is 65535, 0 = no data | `test_depth_align` |
+| PLY | Binary PLY is **interleaved per vertex**; a separate colour block corrupts every vertex after the first | `test_ply` (round trip compares values) |
+| Frames | Survey frame is z-up ENU; GLB is y-up as glTF requires; STL keeps the survey frame | `test_export_formats` |
+| LAS | LAS 1.4, point format 7 (RGB), millimetre quantisation, CRS as WKT (UTM + EPSG) when georeferenced | `test_export_formats` |
+| GeoTIFF | North-up, PixelIsArea, scale and tie point, projected EPSG or user-defined CRS | `test_export_formats` |
+| Camera track | `georef/camera_track.geojson` is WGS84 (RFC 7946 has no `crs` member) | — |
+| Console help | Each option's help text is the comment on the same source line as its field in `config.py` (`app/schema.py`); **do not reformat `config.py`** | `test_console_api` |
 
 ## Constraints
 
-- GPL-2.0-only. Optional extras: `ai`, `sfm`, `mesh`, `geo`, `api`.
-- Ruff line length 100; `E,F,I,UP,B,SIM,C4,RET,PTH`, `E501` ignored.
-- Tests must be hermetic: stub `run_command`/`which`, assert on argv.
+- Licence: this repository is GPL-2.0-only. spirula-studio (GPL-3.0) runs as a separate program
+  through its command line and is never linked or bundled. Third-party terms are in
+  [`01-research.md`](01-research.md).
+- Environment: Python ≥ 3.12 (developed on 3.14), PyTorch 2.14 with CUDA 13.2, one NVIDIA GPU
+  (developed on an A100 80 GB). Heavy dependencies sit behind extras and are imported where used;
+  everything the code imports is declared in `pyproject.toml` (`tests/test_dependencies.py`).
+- Tests are offline and deterministic; those needing a GPU or an optional library skip themselves.
 
 ## Open questions
 
-| ID | Question | Prio |
-| --- | --- | --- |
-| Q6 | Camera model / FoV of the sample clip — needed for a real GSD figure | High |
-| Q7 | Real flight log or NTRO reference cloud — unblocks criteria 2, 3, 6 | **High** |
+| ID | Question | Status |
+|---|---|---|
+| Q1 | How accurate is georeferencing on a real flight log? | **Open.** None of the 15 sample videos carries GPS; verified with synthetic GPS only (see [`08`](08-final-verification-report.md)) |
+| Q2 | How are dynamic objects (vehicles, people) kept out of the model? | **Open.** Not masked; spirula-studio's `--distraction-robustness` and SAM masking exist but are not wired in |
+| Q3 | Can the far field beyond three times the triangulated range be filled? | **Open.** The prior is 47–87 % off there, so it is left empty ([`docs/roadmap.md`](../docs/roadmap.md), item 3) |
+| Q4 | Does spirula-studio write a COLMAP sparse model? | **Answered, yes.** `dataset/sparse/N/` is its output ([`docs/data-formats.md`](../docs/data-formats.md)), which `georef` consumes |

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from drone3d.export.formats import NODATA, rasterize_top, write_geotiff, write_las, write_mesh
 
@@ -22,6 +23,7 @@ def test_rasterize_top_keeps_the_highest_point_per_cell() -> None:
 
 
 def test_las_round_trip(tmp_path: Path) -> None:
+    pytest.importorskip("laspy")
     import laspy
 
     rng = np.random.default_rng(1)
@@ -50,6 +52,7 @@ def test_geotiff_carries_scale_tiepoint_and_crs(tmp_path: Path) -> None:
 
 
 def test_write_mesh_formats(tmp_path: Path) -> None:
+    pytest.importorskip("trimesh")
     import trimesh
 
     v = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
@@ -63,6 +66,7 @@ def test_write_mesh_formats(tmp_path: Path) -> None:
 
 
 def test_glb_is_y_up_and_stl_keeps_the_survey_frame(tmp_path: Path) -> None:
+    pytest.importorskip("trimesh")
     import trimesh
 
     from drone3d.export.formats import Y_UP
@@ -113,6 +117,7 @@ def test_frame_previews_for_the_viewer(tmp_path: Path) -> None:
 
 
 def test_decimation_keeps_shape_and_colour(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    pytest.importorskip("open3d")
     import sys
 
     import open3d as o3d
@@ -135,8 +140,6 @@ def test_decimation_keeps_shape_and_colour(monkeypatch) -> None:  # type: ignore
 
 
 def test_decimation_keeps_colours_where_they_were() -> None:
-    import pytest
-
     pytest.importorskip("fast_simplification")
     from drone3d.export.stage import _decimate
 
@@ -146,7 +149,11 @@ def test_decimation_keeps_colours_where_they_were() -> None:
     q = np.arange(n * n).reshape(n, n)
     f = np.concatenate([np.stack([q[:-1, :-1].ravel(), q[1:, :-1].ravel(), q[:-1, 1:].ravel()], 1),
                         np.stack([q[1:, :-1].ravel(), q[1:, 1:].ravel(), q[:-1, 1:].ravel()], 1)])  # fmt: skip
-    vc = np.stack([np.round(255 * v[:, 0]), np.full(len(v), 90), np.full(len(v), 160)], 1).astype(np.uint8)
+    vc = np.stack([np.round(255 * v[:, 0]), np.full(len(v), 90), np.full(len(v), 160)], 1).astype(
+        np.uint8
+    )
     dv, df, dc = _decimate(None, v, f, vc, len(f) // 4)
     assert abs(len(df) - len(f) // 4) <= 2 and dc.shape == (len(dv), 3)
-    assert np.abs(dc[:, 0].astype(float) - 255 * dv[:, 0]).max() < 12  # the colour of the place it moved to
+    assert (
+        np.abs(dc[:, 0].astype(float) - 255 * dv[:, 0]).max() < 12
+    )  # the colour of the place it moved to

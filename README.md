@@ -78,6 +78,34 @@ flowchart LR
 ## Measured
 
 <!-- measured:start -->
+One NVIDIA A100 80 GB, the warm engine running one video at a time, budget = 1.5 × video length (the
+problem statement's 15 minutes for a 10-minute video). *Completeness* is the share of every registered
+keyframe's non-sky pixels whose ray hits the mesh; a model without a mesh counts as uncovered
+([`scene_view_completeness`](src/drone3d/metrics/quality.py)). *Mesh + cloud* is the fast profile
+(ingest to export); Gaussian splats for every model are trained afterwards and timed separately.
+
+| Video | Length | Keyframes | Registered | Models | Completeness | Mesh + cloud | Budget | Splats (all models) | Splat PSNR |
+|---|---|---|---|---|---|---|---|---|---|
+| GoPro waterfall (FPV) | 18 s | 179 | 179 | 1 | 0.93 | **89 s** | 27 s ✗ | 69 s | 26.4 dB |
+| Rural farmland | 19 s | 21 | 21 | 1 | 0.94 | **33 s** | 29 s ✗ | 60 s | 31.1 dB |
+| Petronas Towers (FPV) | 35 s | 251 | 251 | 6 | 0.77 | **149 s** | 53 s ✗ | 377 s | 16.6 dB |
+| Jal Mahal | 55 s | 128 | 128 | 6 | 0.88 | **73 s** | 82 s ✓ | 398 s | 27.6 dB |
+| Iceland canyon (FPV) | 67 s | 603 | 603 | 6 | 0.95 | **277 s** | 101 s ✗ | 471 s | 27.7 dB |
+| Hagia Sophia | 85 s | 69 | 69 | 9 | 0.85 | **72 s** | 128 s ✓ | 193 s | 19.3 dB |
+| Cristo Redentor | 94 s | 110 | 110 | 8 | 0.49 | **73 s** | 141 s ✓ | 503 s | 19.0 dB |
+| Hanoi Opera House | 103 s | 74 | 74 | 3 | 0.80 | **69 s** | 154 s ✓ | 290 s | 15.6 dB |
+| PNB Merdeka 118 | 115 s | 156 | 156 | 4 | 0.48 | **79 s** | 173 s ✓ | 525 s | 16.4 dB |
+| Reichstag | 130 s | 70 | 70 | 8 | 0.92 | **86 s** | 195 s ✓ | 268 s | 19.3 dB |
+| Colosseum | 135 s | 75 | 75 | 11 | 0.95 | **91 s** | 203 s ✓ | 328 s | 21.7 dB |
+| Qutub Minar | 187 s | 113 | 106 | 6 | 0.51 | **98 s** | 281 s ✓ | 198 s | 21.0 dB |
+| Angkor Wat | 193 s | 115 | 115 | 8 | 0.90 | **125 s** | 290 s ✓ | 265 s | 20.4 dB |
+| Notre-Dame | 214 s | 107 | 107 | 6 | 0.95 | **105 s** | 322 s ✓ | 375 s | 21.3 dB |
+| Eiffel Tower | 306 s | 193 | 193 | 10 | 0.81 | **159 s** | 459 s ✓ | 580 s | 18.8 dB |
+
+11 of 15 within the budget; 29 min of footage at 0.90 s per video second overall; median completeness 0.88.
+Over the budget: GoPro waterfall (FPV), Rural farmland, Petronas Towers (FPV), Iceland canyon (FPV) — FPV flights, whose speed needs many keyframes per second, and clips under half a minute, where fixed per-run costs dominate a budget proportional to length.
+
+The rate trade-off is set in [`configs/fast.yaml`](configs/fast.yaml); analysing at a fixed 12 fps instead gives Jal Mahal 0.89 / 110 s, Qutub Minar 0.85 / 130 s.
 <!-- measured:end -->
 
 Georeferencing, with synthetic GPS (1.5 m horizontal / 3 m vertical noise) on
@@ -284,6 +312,8 @@ src/drone3d/
 ├── geo/                WGS84/ENU, Umeyama, ground-levelled 4-DoF georeferencing
 ├── gpu/               NVML sampler per stage (records GPU sharing) and snapshots for the console
 ├── pipeline.py, config.py, cli.py
+docs/, plans/          architecture, data formats, roadmap; problem understanding, third-party
+                        register, decisions and the verification report
 experiments/            scripts behind every number above and in the paper
 paper/, promo/          LaTeX paper; code-drawn films + compositor: the promo, and the explainer
                         "How it works" (promo/explainer_*.py; every example from our own runs)

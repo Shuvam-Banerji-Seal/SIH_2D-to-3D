@@ -22,7 +22,14 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["DepthStageResult", "aggregate", "configure_bitsandbytes", "recalibrate", "run_depth", "supervision_mask"]
+__all__ = [
+    "DepthStageResult",
+    "aggregate",
+    "configure_bitsandbytes",
+    "recalibrate",
+    "run_depth",
+    "supervision_mask",
+]
 
 log = get_logger(__name__)
 
@@ -57,7 +64,12 @@ def aggregate(per_image: dict[str, dict]) -> dict[str, dict]:
 
 
 def supervision_mask(
-    pred: np.ndarray, depth: np.ndarray, p_at: np.ndarray, z: np.ndarray, far_factor: float, margin: float = 0.05
+    pred: np.ndarray,
+    depth: np.ndarray,
+    p_at: np.ndarray,
+    z: np.ndarray,
+    far_factor: float,
+    margin: float = 0.05,
 ) -> np.ndarray:
     """Pixels whose depth the SfM calibration actually constrains.
 
@@ -69,7 +81,9 @@ def supervision_mask(
     """
     lo, hi = np.quantile(p_at, [0.005, 0.995])
     pad = margin * max(hi - lo, 1e-6)
-    return (pred >= lo - pad) & (pred <= hi + pad) & (depth < far_factor * float(np.quantile(z, 0.99)))
+    return (
+        (pred >= lo - pad) & (pred <= hi + pad) & (depth < far_factor * float(np.quantile(z, 0.99)))
+    )
 
 
 def configure_bitsandbytes() -> None:
@@ -262,7 +276,9 @@ def recalibrate(
             obs_by_model[model] = sfm_depth_observations(model)
         obs = obs_by_model[model][name]
         stem = Path(name).with_suffix("")
-        pred = torch.from_numpy(np.load(dataset / "depth_raw" / f"{stem}.npz")["pred"].astype(np.float32))[None]
+        pred = torch.from_numpy(
+            np.load(dataset / "depth_raw" / f"{stem}.npz")["pred"].astype(np.float32)
+        )[None]
         p_at = sample_at(pred, obs.uv, obs.width, obs.height)
         fit = fit_log_affine(p_at, obs.z)
         if fit is None or fit.a <= 0:

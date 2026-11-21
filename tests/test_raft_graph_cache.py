@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import pytest
-import torch
 
-from drone3d.keyframes.flow import RaftFlow
+torch = pytest.importorskip("torch")
+
+from drone3d.keyframes.flow import RaftFlow  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA graphs need a GPU")
 
@@ -17,7 +18,10 @@ class _Net(torch.nn.Module):
 
 def test_least_recently_used_graph_is_dropped() -> None:
     f = RaftFlow("raft_small", batch=2, iters=1, max_graphs=2, net=_Net().cuda())
-    frames = {hw: torch.randint(0, 255, (2, *hw, 3), dtype=torch.uint8, device="cuda") for hw in [(8, 16), (16, 16), (8, 8)]}
+    frames = {
+        hw: torch.randint(0, 255, (2, *hw, 3), dtype=torch.uint8, device="cuda")
+        for hw in [(8, 16), (16, 16), (8, 8)]
+    }
     f(frames[(8, 16)], frames[(8, 16)])
     f(frames[(16, 16)], frames[(16, 16)])
     f(frames[(8, 16)], frames[(8, 16)])  # used again: now the most recent
@@ -37,9 +41,15 @@ def test_two_threads_share_one_raft_network_without_mixing_their_calls() -> None
     except Exception as exc:  # no cached weights and no network
         pytest.skip(f"RAFT weights unavailable: {exc}")
     shapes = [(128, 192), (160, 256)]  # RAFT needs 128 px at least
-    frames = {hw: (torch.randint(0, 255, (4, *hw, 3), dtype=torch.uint8, device="cuda"),) * 1 for hw in shapes}
+    frames = {
+        hw: (torch.randint(0, 255, (4, *hw, 3), dtype=torch.uint8, device="cuda"),) * 1
+        for hw in shapes
+    }
     pairs = {hw: (f[0], torch.roll(f[0], 2, dims=2)) for hw, f in frames.items()}
-    alone = {hw: RaftFlow("raft_small", batch=4, iters=4, net=net, cuda_graph=False)(*pairs[hw]) for hw in shapes}
+    alone = {
+        hw: RaftFlow("raft_small", batch=4, iters=4, net=net, cuda_graph=False)(*pairs[hw])
+        for hw in shapes
+    }
     out, errors = {}, []
 
     def work(hw):  # type: ignore[no-untyped-def]

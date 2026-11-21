@@ -25,10 +25,12 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+from drone3d.depth.assets import resolve_assets_dir
 from drone3d.engine import models
 from drone3d.engine.live import LiveSession
 from drone3d.gpu.nvml import free_bytes, snapshot
 from drone3d.logging_utils import _DATE_FORMAT, _LOG_FORMAT, get_logger
+from drone3d.utils.model_cache import hf_hub_cache
 
 __all__ = ["Engine", "create_engine_app", "fit_to_gpu", "models_for"]
 
@@ -138,7 +140,9 @@ class Engine:
         """``slots`` runs execute at once: 1 measures one video's time; 2 overlaps one run's CPU phases
         (mapping, file writing) with another's GPU phases for throughput on a batch."""
         self.repo, self.outputs = Path(repo), Path(outputs)
-        self.cache = models.ModelCache(device=device, reserve_gb=reserve_gb, concurrent=int(slots) > 1)
+        self.cache = models.ModelCache(
+            device=device, reserve_gb=reserve_gb, concurrent=int(slots) > 1
+        )
         models.activate(self.cache)
         self.release_after_job = release_after_job
         self.slots = max(1, int(slots))
@@ -218,7 +222,12 @@ class Engine:
             if any(j.name == name for j in self.queue) or name in self.running:
                 raise ValueError(f"run {name!r} is already queued or running")
             job = Job(
-                name=name, run_dir=str(run), config=copy.deepcopy(config), kind=kind, live=live, front=front
+                name=name,
+                run_dir=str(run),
+                config=copy.deepcopy(config),
+                kind=kind,
+                live=live,
+                front=front,
             )
             run.mkdir(parents=True, exist_ok=True)
             import yaml
@@ -226,7 +235,9 @@ class Engine:
             (run / "ui_config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
             self._state(job)
             if front:  # ahead of ordinary work, behind what is already ahead of it: live segments stay in order
-                self.queue.insert(next((i for i, q in enumerate(self.queue) if not q.front), len(self.queue)), job)
+                self.queue.insert(
+                    next((i for i, q in enumerate(self.queue) if not q.front), len(self.queue)), job
+                )
             else:
                 self.queue.append(job)
         self._wake.set()
@@ -520,8 +531,12 @@ def capabilities(repo: Path) -> dict[str, Any]:
             return f"{Path(exe).parent.parent.name or 'ffmpeg'}: -hwaccel cuda"
         from drone3d.io.nvdec import h264_encoder
 
-        if h264_encoder() != "h264_nvenc":  # a real one-frame encode: listing the encoder is not having one
-            raise RuntimeError("no hardware encoder on this GPU (an A100 has none); cameras are encoded with libx264")
+        if (
+            h264_encoder() != "h264_nvenc"
+        ):  # a real one-frame encode: listing the encoder is not having one
+            raise RuntimeError(
+                "no hardware encoder on this GPU (an A100 has none); cameras are encoded with libx264"
+            )
         return "h264_nvenc (a one-frame encode succeeded)"
 
     def open3d() -> str:
@@ -556,7 +571,7 @@ def capabilities(repo: Path) -> dict[str, Any]:
             raise FileNotFoundError(str(path))
         return what
 
-    hf = Path(os.environ.get("HF_HUB_CACHE", "/store/huggingface"))
+    hf = hf_hub_cache()
     return {
         "cuda": _check(torch_cuda),
         "nvdec": _check(lambda: ffmpeg("nvdec")),
@@ -572,9 +587,7 @@ def capabilities(repo: Path) -> dict[str, Any]:
                 "Depth Anything V2 Large weights",
             )
         ),  # fmt: skip
-        "marigold": _check(
-            lambda: weights(Path("/store/huggingface/marigold-v2"), "Marigold v2 + Qwen weights")
-        ),
+        "marigold": _check(lambda: weights(resolve_assets_dir(), "Marigold v2 + Qwen weights")),
     }
 
 
@@ -632,7 +645,12 @@ def create_engine_app(engine: Engine):  # type: ignore[no-untyped-def]
     @app.post("/jobs")
     def submit(body: dict) -> dict:
         try:
-            job = engine.submit(body["name"], body["config"], run_dir=body.get("run_dir"), front=bool(body.get("front")))
+            job = engine.submit(
+                body["name"],
+                body["config"],
+                run_dir=body.get("run_dir"),
+                front=bool(body.get("front")),
+            )
         except (KeyError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:  # ConfigError and friends

@@ -54,7 +54,9 @@ def _sample(field_: torch.Tensor, pts: torch.Tensor) -> torch.Tensor:
     """Bilinear sample ``field_ [C, H, W]`` at ``pts [M, 2]`` -> ``[M, C]``."""
     _, h, w = field_.shape
     g = torch.stack([2 * pts[:, 0] / (w - 1) - 1, 2 * pts[:, 1] / (h - 1) - 1], -1)
-    out = F.grid_sample(field_[None].float(), g[None, None], align_corners=True, padding_mode="border")
+    out = F.grid_sample(
+        field_[None].float(), g[None, None], align_corners=True, padding_mode="border"
+    )
     return out[0, :, 0].T
 
 
@@ -62,7 +64,9 @@ def _inside(p: torch.Tensor, w: int, h: int) -> torch.Tensor:
     return (p[:, 0] >= 0) & (p[:, 0] <= w - 1) & (p[:, 1] >= 0) & (p[:, 1] <= h - 1)
 
 
-def _step(fwd: torch.Tensor, bwd: torch.Tensor, pts: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def _step(
+    fwd: torch.Tensor, bwd: torch.Tensor, pts: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Move ``pts`` along ``fwd``; forward-backward consistent and inside -> (new, ok)."""
     _, h, w = fwd.shape
     d = _sample(fwd, pts)
@@ -94,7 +98,12 @@ class _PairFlows:
 
     def _compute(self, t0: int) -> None:
         n = len(self.frames)
-        pairs = [(t - d, t) for t in range(t0, min(n, t0 + self.block)) for d in range(1, self.span + 1) if t - d >= 0]
+        pairs = [
+            (t - d, t)
+            for t in range(t0, min(n, t0 + self.block))
+            for d in range(1, self.span + 1)
+            if t - d >= 0
+        ]
         if not pairs:
             return
         start = time.perf_counter()
@@ -153,14 +162,18 @@ def build_tracks(
     dev = frames.device
     pf = _PairFlows(frames, flow, span, block)
     ys, xs = torch.meshgrid(
-        torch.arange(stride / 2, h, stride, device=dev), torch.arange(stride / 2, w, stride, device=dev), indexing="ij"
+        torch.arange(stride / 2, h, stride, device=dev),
+        torch.arange(stride / 2, w, stride, device=dev),
+        indexing="ij",
     )
     grid = torch.stack([xs.flatten(), ys.flatten()], -1).float()
     cw, ch = math.ceil(w / stride), math.ceil(h / stride)
 
     pos = torch.zeros(0, 2, device=dev)  # live tracks at the current keyframe
     ids = torch.zeros(0, dtype=torch.long, device=dev)
-    hist = torch.full((0, span, 2), float("nan"), device=dev)  # hist[:, j]: position at keyframe k - j
+    hist = torch.full(
+        (0, span, 2), float("nan"), device=dev
+    )  # hist[:, j]: position at keyframe k - j
     next_id = 0
     obs_img, obs_id, obs_xy = [], [], []
     ended_by_check = 0
@@ -233,7 +246,9 @@ def build_tracks(
         "size": [int(w), int(h)],
         "tracks": int((lengths >= 2).sum()),
         "observations": int(keep.sum()),
-        "mean_track_length": round(float(lengths[lengths >= 2].mean()), 2) if (lengths >= 2).any() else 0.0,
+        "mean_track_length": round(float(lengths[lengths >= 2].mean()), 2)
+        if (lengths >= 2).any()
+        else 0.0,
         "ended_by_direct_check": int(ended_by_check),
         "flow_pairs": pf.pairs_done,
         "flow_seconds": round(pf.seconds, 2),

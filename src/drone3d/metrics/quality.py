@@ -204,7 +204,9 @@ def scene_view_completeness(sfm: dict, dense: dict) -> float | None:
     keyframes dense used (every second one for large models), which stand for
     all of the model's views. ``sfm``/``dense`` are the stages' ``result.json``.
     """
-    reg = {str(m["path"]).rstrip("/").rsplit("/", 1)[-1]: m["images"] for m in sfm.get("models", [])}
+    reg = {
+        str(m["path"]).rstrip("/").rsplit("/", 1)[-1]: m["images"] for m in sfm.get("models", [])
+    }
     total = sum(reg.values())
     if not total:
         return None

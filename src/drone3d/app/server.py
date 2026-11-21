@@ -55,7 +55,10 @@ def model_catalog(run: Path) -> dict:
     A model is a *main* piece when it holds at least 15 % of the registered keyframes (the largest always
     is), a *fragment* otherwise -- a short shot nothing else overlaps; fragments are kept, not shown first.
     """
-    sfm, dense = _read(run / "sfm" / "result.json") or {}, _read(run / "dense" / "result.json") or {}
+    sfm, dense = (
+        _read(run / "sfm" / "result.json") or {},
+        _read(run / "dense" / "result.json") or {},
+    )
     splat = _read(run / "splat" / "result.json") or {}
     d_by = {Path(m["model"]).name: m for m in dense.get("models", [])}
     s_by = {Path(m["model"]).name: m for m in splat.get("models", []) if m.get("model")}
@@ -80,9 +83,15 @@ def model_catalog(run: Path) -> dict:
     for i, e in enumerate(out):
         e["role"] = "main" if i == 0 or e["share"] >= 0.15 else "fragment"
     merge = sfm.get("merge") or {}
-    return {"models": out, "registered": total, "merged": merge.get("status") == "ok",
-            "models_before_merge": merge.get("models_before"), "models_after_merge": merge.get("models_after"),
-            "generated": generated_object(run), "complete": complete_object(run)}
+    return {
+        "models": out,
+        "registered": total,
+        "merged": merge.get("status") == "ok",
+        "models_before_merge": merge.get("models_before"),
+        "models_after_merge": merge.get("models_after"),
+        "generated": generated_object(run),
+        "complete": complete_object(run),
+    }
 
 
 def generated_object(run: Path) -> dict:
@@ -102,7 +111,9 @@ def generated_object(run: Path) -> dict:
             "placed": (rec.get("aligned") or {}).get("measured_covered") if (rec.get("aligned") or {}).get("placed") else None}  # fmt: skip
 
 
-COMPLETE_JOBS: dict[str, str] = {}  # run name -> the complete-model job running for it ("complete" | "splats")
+COMPLETE_JOBS: dict[
+    str, str
+] = {}  # run name -> the complete-model job running for it ("complete" | "splats")
 
 
 def complete_object(run: Path) -> dict:
@@ -112,7 +123,18 @@ def complete_object(run: Path) -> dict:
     sp = _read(out / "splats_360.json") or {}
     base = f"/runs/{run.name}/export/complete"
     job = COMPLETE_JOBS.get(run.name)
-    files = [f for f in ("subject.glb", "subject.obj", "subject.fbx", "subject.stl", "scene.glb", "splats_360.splat") if (out / f).is_file()]
+    files = [
+        f
+        for f in (
+            "subject.glb",
+            "subject.obj",
+            "subject.fbx",
+            "subject.stl",
+            "scene.glb",
+            "splats_360.splat",
+        )
+        if (out / f).is_file()
+    ]
     return {"status": "running" if job == "complete" else rec.get("status") or "none",
             "splats": "running" if job == "splats" else ("ok" if (out / "splats_360.splat").is_file() else "none"),
             "watertight": rec.get("watertight"), "photographed": round(1 - rec["generated_share"], 3) if "generated_share" in rec else None,
@@ -138,7 +160,10 @@ def _group(name: str, kind: str) -> str:
         return "live"
     if name.startswith("map_"):
         return "benchmark"
-    if re.match(r"^(abl_|ded_|q_|eng_|dev_|repro|sample_|cold\d?_)|^(jal_mahal|qutub)(_fast\d*|_rel\d+)?$", name):
+    if re.match(
+        r"^(abl_|ded_|q_|eng_|dev_|repro|sample_|cold\d?_)|^(jal_mahal|qutub)(_fast\d*|_rel\d+)?$",
+        name,
+    ):
         return "development"  # the runs behind the paper's studies, from earlier versions of the pipeline
     return "builds"
 
@@ -172,6 +197,8 @@ def _place(part: Path, dest: Path) -> tuple[Path, bool]:
         if _same_file(part, cand):
             return cand, True
     raise HTTPException(409, f"too many uploads named {dest.name}")
+
+
 _SOURCE = re.compile(r"^(rtsp|rtmp|srt|udp|http|https|tcp)://\S+$|^/dev/video\d+$")
 
 
@@ -270,10 +297,17 @@ def create_app(
         from drone3d.io.nvdec import probe_stream
 
         out = []
-        for root, origin in ((uploads, "upload"), (repo / "datasets", "sample")):  # a fresh upload first
+        for root, origin in (
+            (uploads, "upload"),
+            (repo / "datasets", "sample"),
+        ):  # a fresh upload first
             if not root.is_dir():
                 continue
-            files = sorted(root.iterdir(), key=lambda p: -p.stat().st_mtime) if origin == "upload" else sorted(root.iterdir())
+            files = (
+                sorted(root.iterdir(), key=lambda p: -p.stat().st_mtime)
+                if origin == "upload"
+                else sorted(root.iterdir())
+            )
             for p in files:
                 if p.suffix.lower() not in kind or not p.is_file():
                     continue
@@ -313,11 +347,15 @@ def create_app(
         name = Path(file.filename or "upload").name
         if Path(name).suffix.lower() not in VIDEO_EXT | LOG_EXT:
             raise HTTPException(400, f"unsupported file type: {name}")
-        part = uploads / f".{name}.{threading.get_ident()}.part"  # hidden, and not a video: never listed half-written
+        part = (
+            uploads / f".{name}.{threading.get_ident()}.part"
+        )  # hidden, and not a video: never listed half-written
         try:
             with part.open("wb") as fh:
                 shutil.copyfileobj(file.file, fh, 8 << 20)
-            if Path(name).suffix.lower() in VIDEO_EXT:  # refuse now what the ingest stage would fail on later
+            if (
+                Path(name).suffix.lower() in VIDEO_EXT
+            ):  # refuse now what the ingest stage would fail on later
                 from drone3d.io.nvdec import probe_stream
 
                 try:
@@ -326,7 +364,9 @@ def create_app(
                 except Exception:
                     ok = False
                 if not ok:
-                    raise HTTPException(400, f"{name} is not a readable video (no video stream with a duration)")
+                    raise HTTPException(
+                        400, f"{name} is not a readable video (no video stream with a duration)"
+                    )
             dest, reused = _place(part, uploads / name)
         finally:
             part.unlink(missing_ok=True)
@@ -377,9 +417,16 @@ def create_app(
                     "live" if (d / "live.json").is_file() else "run"
                 )
                 s["group"] = _group(d.name, s["kind"])
-                photos = sorted((d / "export" / "model_0" / "frames" / "photo").glob("*.jpg")) or sorted(
-                    d.glob("segments/*/export/model_0/frames/photo/*.jpg"))  # a live session: its segments' models
-                s["thumb"] = f"/runs/{d.name}/{photos[len(photos) // 2].relative_to(d).as_posix()}" if photos else None
+                photos = sorted(
+                    (d / "export" / "model_0" / "frames" / "photo").glob("*.jpg")
+                ) or sorted(
+                    d.glob("segments/*/export/model_0/frames/photo/*.jpg")
+                )  # a live session: its segments' models
+                s["thumb"] = (
+                    f"/runs/{d.name}/{photos[len(photos) // 2].relative_to(d).as_posix()}"
+                    if photos
+                    else None
+                )
                 items.append(s)
         return sorted(items, key=lambda s: -s["mtime"])
 
@@ -394,7 +441,9 @@ def create_app(
         name, config = build_config(req)
         if req.get("engine", True) and engine.online():
             try:
-                job = engine.submit(name, config, front=bool(req.get("next")))  # "run next": ahead of a queued batch
+                job = engine.submit(
+                    name, config, front=bool(req.get("next"))
+                )  # "run next": ahead of a queued batch
             except EngineError as exc:
                 raise fail(exc) from exc
             return {"name": name, "via": "engine", "job": job}
@@ -424,9 +473,16 @@ def create_app(
             for key in ("mesh", "points", "splat"):
                 if m.get(key):
                     m[key] = f"{url}/export/{m[key]}"
-            if (m.get("generated") or {}).get("mesh"):  # drone3d.generate's object, placed in this model's frame
-                m["generated"] = {**m["generated"], "mesh": f"{url}/export/{m['generated']['mesh']}"}
-            if m.get("complete"):  # drone3d.complete: the whole subject in its scene, and 360-degree splats
+            if (m.get("generated") or {}).get(
+                "mesh"
+            ):  # drone3d.generate's object, placed in this model's frame
+                m["generated"] = {
+                    **m["generated"],
+                    "mesh": f"{url}/export/{m['generated']['mesh']}",
+                }
+            if m.get(
+                "complete"
+            ):  # drone3d.complete: the whole subject in its scene, and 360-degree splats
                 m["complete"] = {k: (f"{url}/export/{v}" if k in ("scene", "subject", "splat") and v else v)
                                  for k, v in m["complete"].items()}  # fmt: skip
             m["files"] = [{**f, "path": f"{url}/export/{f['path']}"} for f in m.get("files", [])]
@@ -484,7 +540,9 @@ def create_app(
         if not _NAME.match(name) or not (run / "sfm" / "result.json").is_file():
             raise HTTPException(404, "no finished run of that name")
         if not generate.available():
-            raise HTTPException(409, "TRELLIS.2 is not installed on this machine (tools/setup_trellis2.sh)")
+            raise HTTPException(
+                409, "TRELLIS.2 is not installed on this machine (tools/setup_trellis2.sh)"
+            )
         busy = [k for k, t in generating.items() if t.is_alive()]
         if busy:
             raise HTTPException(409, f"already generating {busy[0]}; one object at a time")
@@ -493,7 +551,9 @@ def create_app(
 
         def work() -> None:
             try:
-                generate.generate_views(run, views=views) if views > 1 else generate.generate_object(run)
+                generate.generate_views(
+                    run, views=views
+                ) if views > 1 else generate.generate_object(run)
             except Exception as exc:  # recorded in result.json by generate_object where it can be
                 log.warning("generate %s: %s", name, exc)
 
@@ -509,7 +569,9 @@ def create_app(
             raise HTTPException(404, "no finished run of that name")
         busy = [k for k, t in generating.items() if t.is_alive()]
         if busy:
-            raise HTTPException(409, f"the GPU is busy with {busy[0]}; one generation or completion at a time")
+            raise HTTPException(
+                409, f"the GPU is busy with {busy[0]}; one generation or completion at a time"
+            )
         if kind == "splats" and not (run / "export" / "complete" / "scene.glb").is_file():
             raise HTTPException(409, "build the complete model first")
 
@@ -628,8 +690,8 @@ def create_app(
 
     @app.get("/api/live/{name}")
     def live_get(name: str) -> dict:
-        state = _read(outputs / name / "live.json")
-        if not _NAME.match(name) or state is None:
+        state = _read(outputs / name / "live.json") if _NAME.match(name) else None
+        if state is None:
             raise HTTPException(404, "no such live session")
         return state
 

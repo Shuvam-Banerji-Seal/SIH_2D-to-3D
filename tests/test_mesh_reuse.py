@@ -26,7 +26,9 @@ def _run(tmp_path: Path, log_text: str | None, names: list[str]) -> tuple[Path, 
 
 
 def test_reuses_complete_mesh(tmp_path: Path) -> None:
-    run, log = _run(tmp_path, DONE, ["mesh_vertexcolor.ply", "mesh_textured.glb", "mesh_textured.obj"])
+    run, log = _run(
+        tmp_path, DONE, ["mesh_vertexcolor.ply", "mesh_textured.glb", "mesh_textured.obj"]
+    )
     found = _finished_mesh(run, log, ("ply", "glb", "obj"))
     assert found is not None and found.seconds == 42.5 and len(found.files) == 3
 

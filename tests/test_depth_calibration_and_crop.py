@@ -8,7 +8,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from drone3d.depth.align import MonotoneMap, _pav, cross_validate
+pytest.importorskip("torch")
+
+from drone3d.depth.align import MonotoneMap, _pav, cross_validate  # noqa: E402
 
 
 def test_pav_is_non_decreasing_and_weight_preserving() -> None:

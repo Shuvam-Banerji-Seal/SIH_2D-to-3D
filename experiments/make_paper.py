@@ -438,7 +438,7 @@ def system_section(macros: dict[str, str]) -> list[str]:
                 + ", ".join(f"{r['wall_s']:.0f}\\,s {r['parallel']} at a time" for r in more)
                 + " --- because Vulkan contexts time-slice the GPU; one trainer already keeps it busy.")
         if thr:
-            t2 = [r for r in thr if r["slots"] > 1 and r.get("one_slot_sum_s")]
+            t2 = [r for r in thr if r["slots"] > 1 and r.get("one_slot_sum_s") and not r.get("failed")]  # a run with failed jobs timed nothing
             if t2:
                 r = max(t2, key=lambda r: r["slots"])
                 macros.update(ThroughputSlots=str(r["slots"]), ThroughputGain=f"{r['one_slot_sum_s'] / r['wall_s']:.2f}")

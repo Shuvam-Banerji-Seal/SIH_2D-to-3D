@@ -7,14 +7,17 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import torch
-import torch.nn.functional as F
+
+torch = pytest.importorskip("torch")
+F = pytest.importorskip("torch.nn.functional")
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 
 
 @pytest.mark.parametrize("hwaccel", [False, True])
-def test_sidecar_frames_are_the_analysis_frames_at_another_size(tmp_path: Path, hwaccel: bool) -> None:
+def test_sidecar_frames_are_the_analysis_frames_at_another_size(
+    tmp_path: Path, hwaccel: bool
+) -> None:
     from drone3d.io.nvdec import (
         ffmpeg_bin,
         probe_stream,
@@ -30,7 +33,11 @@ def test_sidecar_frames_are_the_analysis_frames_at_another_size(tmp_path: Path, 
     )  # fmt: skip
     info = probe_stream(clip)
     plain = list(stream_analysis_chunks(info, (160, 90), stride=2, chunk=8, hwaccel=hwaccel))
-    stacked = list(stream_analysis_chunks(info, (160, 90), stride=2, chunk=8, hwaccel=hwaccel, sidecar=(320, 180)))
+    stacked = list(
+        stream_analysis_chunks(
+            info, (160, 90), stride=2, chunk=8, hwaccel=hwaccel, sidecar=(320, 180)
+        )
+    )
     idx_plain = np.concatenate([c[0] for c in plain])
     idx_stacked = np.concatenate([c[0] for c in stacked])
     np.testing.assert_array_equal(idx_plain, idx_stacked)

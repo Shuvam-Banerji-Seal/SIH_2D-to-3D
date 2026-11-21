@@ -95,7 +95,12 @@ class EngineClient:
         try:
             s = self._call("GET", "/status", timeout=6.0)
         except EngineError as exc:
-            return {**base, "online": self.online(), "busy_unresponsive": self.online(), "error": str(exc)}
+            return {
+                **base,
+                "online": self.online(),
+                "busy_unresponsive": self.online(),
+                "error": str(exc),
+            }
         s.pop("gpu", None)  # the console samples the GPU itself, every second
         return {**base, "online": True, **s}
 
@@ -175,7 +180,9 @@ class EngineClient:
         return self._call("POST", "/models/unload", {}, timeout=60)
 
     def submit(self, name: str, config: dict, *, front: bool = False) -> Any:
-        return self._call("POST", "/jobs", {"name": name, "config": config, "front": front}, timeout=15)
+        return self._call(
+            "POST", "/jobs", {"name": name, "config": config, "front": front}, timeout=15
+        )
 
     def cancel(self, name: str) -> Any:
         return self._call("POST", f"/jobs/{name}/cancel", {}, timeout=10)

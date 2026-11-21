@@ -70,7 +70,9 @@ def static_overlay_mask(luma: Sequence[np.ndarray], *, edge: float = 20.0, persi
     seeds = hits >= persist * len(stack)
     h, w = seeds.shape
     glyph = max(2, round(0.004 * max(h, w)))
-    weak = ndimage.binary_closing(hits >= grow * len(stack), structure=np.ones((2 * glyph + 1, 2 * glyph + 1)))
+    weak = ndimage.binary_closing(
+        hits >= grow * len(stack), structure=np.ones((2 * glyph + 1, 2 * glyph + 1))
+    )
     grown, _ = ndimage.label(weak, structure=np.ones((3, 3)))
     keep = np.unique(grown[seeds & weak])
     cand = np.isin(grown, keep[keep > 0])

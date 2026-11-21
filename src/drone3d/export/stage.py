@@ -76,7 +76,9 @@ class _Clock:
         return {k: round(v, 2) for k, v in self.seconds.items()}
 
 
-def _axis_depth(points: np.ndarray, eye: np.ndarray, axis: np.ndarray, cone_deg: float = 3.0) -> float:
+def _axis_depth(
+    points: np.ndarray, eye: np.ndarray, axis: np.ndarray, cone_deg: float = 3.0
+) -> float:
     """How far along ``axis`` from ``eye`` the surface is: the viewer's orbit pivot.
 
     The median depth of the points inside a narrow cone around the axis, where the
@@ -90,7 +92,9 @@ def _axis_depth(points: np.ndarray, eye: np.ndarray, axis: np.ndarray, cone_deg:
     along = rel @ axis
     perp = np.linalg.norm(rel - along[:, None] * axis, axis=1)
     for widen in (1, 3, 10):  # a sparse cloud: widen the cone before falling back to every point
-        if (cone := (along > 0) & (perp < np.tan(np.radians(cone_deg * widen)) * along)).sum() >= 50:
+        if (
+            cone := (along > 0) & (perp < np.tan(np.radians(cone_deg * widen)) * along)
+        ).sum() >= 50:
             return float(np.median(along[cone]))
     return float(np.median(along[along > 0])) if (along > 0).any() else 1.0
 
@@ -140,7 +144,9 @@ def _subject_view(points: np.ndarray, cams: np.ndarray, axes: np.ndarray) -> np.
         cos = np.einsum("ij,ij->i", rel, axes) / np.maximum(np.linalg.norm(rel, axis=1), 1e-12)
         if cos.max() > np.cos(np.radians(20)):
             pick = int(np.argmax(cos))
-    return np.array([cams[pick], cams[pick] + _axis_depth(points, cams[pick], axes[pick]) * axes[pick]])
+    return np.array(
+        [cams[pick], cams[pick] + _axis_depth(points, cams[pick], axes[pick]) * axes[pick]]
+    )
 
 
 def _clean_mesh(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, geo: dict | None, points: np.ndarray, cams: np.ndarray,
@@ -159,7 +165,11 @@ def _clean_mesh(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, geo: dict |
         tr = geo["transform"]
         s_, r_, t_ = float(tr["scale"]), np.asarray(tr["rotation"]), np.asarray(tr["translation"])
     else:  # the export's levelling, when it has it (1.7 s for rural's model when recomputed)
-        s_, r_, t_ = 1.0, level if level is not None else _level(points, cams, np.transpose(cam_rots, (0, 2, 1))), np.zeros(3)
+        s_, r_, t_ = (
+            1.0,
+            level if level is not None else _level(points, cams, np.transpose(cam_rots, (0, 2, 1))),
+            np.zeros(3),
+        )
     up = s_ * v @ r_.T + t_
     extent = float(np.linalg.norm(np.percentile(up[:, :2], 95, 0) - np.percentile(up[:, :2], 5, 0)))
     window = 0.6 * s_ * subject[1] if subject is not None else 0.1 * extent
@@ -197,7 +207,9 @@ def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec
     pick = [posed[int(round(i))] for i in np.linspace(0, len(posed) - 1, min(views, len(posed)))]
     from drone3d.io.overlay import load_mask
 
-    overlay = load_mask(images.parent)  # the baker scales it to each view; None: the video has no overlay
+    overlay = load_mask(
+        images.parent
+    )  # the baker scales it to each view; None: the video has no overlay
     overlay = torch.from_numpy(overlay).cuda() if overlay is not None else None
     vs = []
     for im in pick:
@@ -219,7 +231,9 @@ def bake_texture(v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, posed, rec
     return uv, albedo, info
 
 
-def _write_textured(v: np.ndarray, f: np.ndarray, uv: np.ndarray, albedo: np.ndarray, stem: Path) -> list[Path]:
+def _write_textured(
+    v: np.ndarray, f: np.ndarray, uv: np.ndarray, albedo: np.ndarray, stem: Path
+) -> list[Path]:
     """Textured GLB and OBJ (+ .mtl, .jpg), the atlas stored as JPEG.
 
     PNG-encoding a 4096^2 atlas twice took 9 s per model; JPEG is ~20x faster
@@ -271,9 +285,15 @@ def _decimate(mesh, v: np.ndarray, f: np.ndarray, vc: np.ndarray | None, target:
         import fast_simplification as fs
     except ImportError:
         small = mesh.simplify_quadric_decimation(target_number_of_triangles=target)
-        colours = (np.asarray(small.vertex_colors) * 255).astype(np.uint8) if small.has_vertex_colors() else None
+        colours = (
+            (np.asarray(small.vertex_colors) * 255).astype(np.uint8)
+            if small.has_vertex_colors()
+            else None
+        )
         return np.asarray(small.vertices), np.asarray(small.triangles), colours
-    dv, df = fs.simplify(v.astype(np.float32), f.astype(np.int32), target_reduction=1.0 - target / len(f))
+    dv, df = fs.simplify(
+        v.astype(np.float32), f.astype(np.int32), target_reduction=1.0 - target / len(f)
+    )
     colours = None
     if vc is not None:
         from scipy.spatial import cKDTree
@@ -306,10 +326,16 @@ def _frame_previews(posed: list, images: Path | None, depth_dir: Path | None, ou
             (out / "depth").mkdir(parents=True, exist_ok=True)
             shutil.copy2(depth_dir / f"{stem}.jpg", out / "depth" / f"{stem}.jpg")
         names.append(im.name)
-    return {"names": names, "photo": (out / "photo").exists(), "depth": (out / "depth").exists()} if names else None
+    return (
+        {"names": names, "photo": (out / "photo").exists(), "depth": (out / "depth").exists()}
+        if names
+        else None
+    )
 
 
-def _textured_and_fbx(baked: tuple | None, mdir: Path, fbx_src: Path | None, fbx: bool, blend: bool = False) -> list[Path]:
+def _textured_and_fbx(
+    baked: tuple | None, mdir: Path, fbx_src: Path | None, fbx: bool, blend: bool = False
+) -> list[Path]:
     """Background half of a model's export: textured GLB/OBJ, then FBX and .blend (from the textured GLB)."""
     out = _write_textured(*baked, mdir / "mesh_textured") if baked is not None else []
     src = out[0] if out else fbx_src
@@ -360,18 +386,28 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             continue
         name = Path(m["model"]).name
         mdir = out_dir / f"model_{name}"
-        if mdir.exists():  # our own output: stale files from an earlier export would be listed as current
+        if (
+            mdir.exists()
+        ):  # our own output: stale files from an earlier export would be listed as current
             shutil.rmtree(mdir)
         mdir.mkdir(parents=True)
         with clock("read"):
             mesh = o3d.io.read_triangle_mesh(m["mesh"])
             pcd = o3d.io.read_point_cloud(m["points"])
         v, f = np.asarray(mesh.vertices), np.asarray(mesh.triangles)
-        vc = (np.asarray(mesh.vertex_colors) * 255).astype(np.uint8) if mesh.has_vertex_colors() else None
+        vc = (
+            (np.asarray(mesh.vertex_colors) * 255).astype(np.uint8)
+            if mesh.has_vertex_colors()
+            else None
+        )
         p = np.asarray(pcd.points)
         pc = (np.asarray(pcd.colors) * 255).astype(np.uint8) if pcd.has_colors() else None
-        if not len(p) or not len(f):  # nothing to deliver (or a cloud without surface): skip, do not fail
-            log.warning("export: model %s has %d points and %d triangles; skipped", name, len(p), len(f))
+        if not len(p) or not len(
+            f
+        ):  # nothing to deliver (or a cloud without surface): skip, do not fail
+            log.warning(
+                "export: model %s has %d points and %d triangles; skipped", name, len(p), len(f)
+            )
             continue
         rec = pycolmap.Reconstruction(m["model"])
         posed = [im for im in sorted(rec.images.values(), key=lambda i: i.name) if im.has_pose]
@@ -379,11 +415,17 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         # world-from-camera rotations: the viewer flies the drone's path and looks through its keyframes
         cam_rots = np.array([im.cam_from_world().rotation.matrix().T for im in posed])
         cam0 = rec.cameras[posed[0].camera_id]
-        intr = {"f": float(cam0.focal_length_x), "width": int(cam0.width), "height": int(cam0.height)}
+        intr = {
+            "f": float(cam0.focal_length_x),
+            "width": int(cam0.width),
+            "height": int(cam0.height),
+        }
         # initial viewer pose: the keyframe looking most directly at the subject (optical axes: third rows)
         axes = np.array([im.cam_from_world().rotation.matrix()[2] for im in posed])
         view = _subject_view(p, cams, axes)
-        subject = _subject(cams, axes)  # the viewer's focus box: the subject, a camera distance around it
+        subject = _subject(
+            cams, axes
+        )  # the viewer's focus box: the subject, a camera distance around it
         if subject is not None:
             view = np.vstack([view, subject[0]])  # moved into the export frame with the view
         # The full-density mesh is the measurement deliverable (PLY); the viewable copies
@@ -396,21 +438,32 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         rot = None  # the levelling (a model without a georeference): computed once, for the clean model and the export
         if geo_by_model.get(m["model"]) is None:
             with clock("level"):
-                rot = _level(p, cams, np.transpose(cam_rots, (0, 2, 1)))  # world-to-camera, as estimate_up takes them
+                rot = _level(
+                    p, cams, np.transpose(cam_rots, (0, 2, 1))
+                )  # world-to-camera, as estimate_up takes them
         if clean_mesh:
             with clock("clean"):
                 try:
                     src_v, src_f, src_vc, clean_info = _clean_mesh(v, f, vc, geo_by_model.get(m["model"]), p, cams, cam_rots,
                                                                    voxel=float(m.get("voxel") or 0.0), subject=subject,
                                                                    level=rot)  # fmt: skip
-                    src_mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(src_v), o3d.utility.Vector3iVector(src_f))
+                    src_mesh = o3d.geometry.TriangleMesh(
+                        o3d.utility.Vector3dVector(src_v), o3d.utility.Vector3iVector(src_f)
+                    )
                     if src_vc is not None:
                         src_mesh.vertex_colors = o3d.utility.Vector3dVector(src_vc[:, :3] / 255.0)
-                except (ValueError, IndexError, RuntimeError, MemoryError) as exc:  # an odd model: the fused mesh is still one
+                except (
+                    ValueError,
+                    IndexError,
+                    RuntimeError,
+                    MemoryError,
+                ) as exc:  # an odd model: the fused mesh is still one
                     log.warning("clean model failed for model %s: %s", name, exc)
                     clean_info = {"status": "failed", "reason": str(exc)[:200]}
         dv, df, dvc = src_v, src_f, src_vc
-        if len(src_f) > 1.25 * max_triangles:  # 630k -> 600k cost 2.3 s per model for nothing a viewer notices
+        if (
+            len(src_f) > 1.25 * max_triangles
+        ):  # 630k -> 600k cost 2.3 s per model for nothing a viewer notices
             with clock("decimate"):
                 dv, df, dvc = _decimate(src_mesh, src_v, src_f, src_vc, max_triangles)
         baked, tex_info = None, None
@@ -424,19 +477,36 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                                        gain=texture_gain)  # fmt: skip
                 if res is not None:
                     baked, tex_info = (dv, df, res[0], res[1]), res[2]
-            except (RuntimeError, ValueError) as exc:  # texturing improves the mesh; never lose the mesh over it
+            except (
+                RuntimeError,
+                ValueError,
+            ) as exc:  # texturing improves the mesh; never lose the mesh over it
                 log.warning("texture baking failed for model %s: %s", name, exc)
         geo = geo_by_model.get(m["model"])
         if geo is not None:
             tr = geo["transform"]
-            t = SimilarityTransform(scale=tr["scale"], rotation=np.asarray(tr["rotation"]), translation=np.asarray(tr["translation"]))
-            v, p, cams, view, scale = t.apply(v), t.apply(p), t.apply(cams), t.apply(view), float(t.scale)
+            t = SimilarityTransform(
+                scale=tr["scale"],
+                rotation=np.asarray(tr["rotation"]),
+                translation=np.asarray(tr["translation"]),
+            )
+            v, p, cams, view, scale = (
+                t.apply(v),
+                t.apply(p),
+                t.apply(cams),
+                t.apply(view),
+                float(t.scale),
+            )
             cam_rots = np.asarray(t.rotation) @ cam_rots
             dv = t.apply(dv)
             if baked is not None:
                 baked = (t.apply(baked[0]), *baked[1:])
             units, frame = "m", "ENU"
-            to_export = {"scale": float(t.scale), "rotation": np.asarray(t.rotation).tolist(), "translation": np.asarray(t.translation).tolist()}
+            to_export = {
+                "scale": float(t.scale),
+                "rotation": np.asarray(t.rotation).tolist(),
+                "translation": np.asarray(t.translation).tolist(),
+            }
         else:
             v, p, cams, view, scale = v @ rot.T, p @ rot.T, cams @ rot.T, view @ rot.T, 1.0
             cam_rots = rot @ cam_rots
@@ -450,7 +520,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                                  mdir / "frames")  # fmt: skip
         frames_jobs.append((frames_job, len(rows), name))
         # SfM frame -> this model's export frame, for renderers that follow the keyframe cameras
-        (mdir / "frame.json").write_text(json.dumps({**to_export, "frame": frame, "units": units}, indent=1))
+        (mdir / "frame.json").write_text(
+            json.dumps({**to_export, "frame": frame, "units": units}, indent=1)
+        )
         splat_file, splat_info = None, None
         trained = splat_by_model.get(m["model"])
         if trained is not None and Path(trained["splat_ply"]).is_file():
@@ -460,14 +532,22 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 tf = compose((to_export["scale"], np.asarray(to_export["rotation"]), np.asarray(to_export["translation"])),
                              train_from_world(Path(trained["run_dir"]) / "scene_transform.json"))  # fmt: skip
                 splat_file = mdir / "splats.splat"
-                splat_info = export_splat(trained["splat_ply"], splat_file, transform=tf, max_splats=max_splats)
+                splat_info = export_splat(
+                    trained["splat_ply"], splat_file, transform=tf, max_splats=max_splats
+                )
         # OBJ has no standard vertex colour: with a texture, OBJ is written textured only
-        plain = [x for x in mesh_formats if x not in ("fbx", "blend") and not (x == "obj" and baked is not None)]
+        plain = [
+            x
+            for x in mesh_formats
+            if x not in ("fbx", "blend") and not (x == "obj" and baked is not None)
+        ]
         with clock("mesh_files"):
             files = write_mesh(v, f, vc, mdir / "mesh", tuple(x for x in plain if x == "ply"))
             files += write_mesh(dv, df, dvc, mdir / "mesh", tuple(x for x in plain if x != "ply"))
         # textured files and the FBX are written in the background while the GPU bakes the next model
-        fbx_src = mdir / "mesh.glb" if (mdir / "mesh.glb").is_file() else (files[0] if files else None)
+        fbx_src = (
+            mdir / "mesh.glb" if (mdir / "mesh.glb").is_file() else (files[0] if files else None)
+        )
         bg_jobs.append((pool.submit(_textured_and_fbx, baked, mdir, fbx_src, "fbx" in mesh_formats, "blend" in mesh_formats),
                         len(rows)))  # fmt: skip
         pts_ply = mdir / "points.ply"
@@ -486,7 +566,11 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 files.append(write_las(p_proj, pc, mdir / "points.las", epsg=epsg))
         if geotiff and len(p_proj):
             with clock("geotiff"):
-                cell = raster_cell or 2.0 * m.get("voxel", 0.0) * scale or float(np.ptp(p_proj[:, :2], 0).max() / 1000)
+                cell = (
+                    raster_cell
+                    or 2.0 * m.get("voxel", 0.0) * scale
+                    or float(np.ptp(p_proj[:, :2], 0).max() / 1000)
+                )
                 dsm, ortho, org = rasterize_top(p_proj, pc, cell)
                 files.append(write_geotiff(dsm, mdir / "dsm.tif", origin=org, cell=cell, epsg=epsg))
                 if ortho is not None:
@@ -519,7 +603,11 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
         with clock("frames_wait"):
             fr = fut.result()
         if fr:
-            scene_models[k]["frames"] = {**fr, "photo_dir": f"model_{name}/frames/photo", "depth_dir": f"model_{name}/frames/depth"}
+            scene_models[k]["frames"] = {
+                **fr,
+                "photo_dir": f"model_{name}/frames/photo",
+                "depth_dir": f"model_{name}/frames/depth",
+            }
     for fut, k in bg_jobs:  # attach the background files to their models' rows and download lists
         with clock("background_wait"):
             written = fut.result()
@@ -534,7 +622,9 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
             if dst.exists():
                 shutil.rmtree(dst) if dst.is_dir() else dst.unlink()
             shutil.copytree(src, dst) if src.is_dir() else shutil.copy2(src, dst)
-        gen = out_dir / "generated" / "result.json"  # a generated object placed earlier (drone3d.generate) stays linked
+        gen = (
+            out_dir / "generated" / "result.json"
+        )  # a generated object placed earlier (drone3d.generate) stays linked
         if gen.is_file():
             from drone3d.generate import NOTE
 
@@ -543,11 +633,18 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 aligned = g.get("aligned") or {}
                 k = int(aligned.get("model", -1))
                 if g.get("status") == "ok" and aligned.get("placed") and 0 <= k < len(scene_models):
-                    scene_models[k]["generated"] = {"mesh": "generated/object_aligned.glb", "note": NOTE}
+                    scene_models[k]["generated"] = {
+                        "mesh": "generated/object_aligned.glb",
+                        "note": NOTE,
+                    }
             except (ValueError, TypeError):
                 pass
-        (out_dir / "scene.json").write_text(json.dumps({"title": title, "models": scene_models}, indent=1))
-        comp = out_dir / "complete" / "result.json"  # a complete model built earlier (drone3d.complete) stays linked
+        (out_dir / "scene.json").write_text(
+            json.dumps({"title": title, "models": scene_models}, indent=1)
+        )
+        comp = (
+            out_dir / "complete" / "result.json"
+        )  # a complete model built earlier (drone3d.complete) stays linked
         if comp.is_file():
             from drone3d.complete import link_scene
 
@@ -555,4 +652,3 @@ def run_export(dense: dict, georef: dict | None, out_dir: Path, *, title: str, m
                 link_scene(out_dir.parent, int(json.loads(comp.read_text()).get("model", 0)))
     return {"models": rows, "viewer": str(out_dir / "index.html") if viewer and scene_models else None,
             "timing_s": clock.rounded()}  # fmt: skip
-

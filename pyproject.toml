@@ -36,6 +36,9 @@ dependencies = [
   "opencv-contrib-python-headless>=5.0",  # + ximgproc (guided filter, fast bilateral solver), xphoto
   "PyYAML>=6.0",
   "tqdm>=4.66",
+  "scipy>=1.15",  # ndimage / KD-trees in overlay detection, terrain, metrics and meshing
+  "pillow>=12.0",  # texture and preview images
+  "tifffile>=2025.1",  # GeoTIFF DSM / orthophoto writer (export/formats.py)
 ]
 
 [project.optional-dependencies]
@@ -64,7 +67,13 @@ sfm = ["pycolmap>=4.2"]
 # Fly-through rendering of trained splats. gsplat JIT-compiles its CUDA
 # kernels on first use: set CUDA_HOME to a toolkit >= torch's CUDA (13.x).
 render = ["gsplat>=1.5.3", "ninja>=1.11"]
-mesh = ["open3d>=0.20", "trimesh>=5.0", "plyfile>=1.1", "fast-simplification>=0.2"]
+mesh = [
+  "open3d>=0.20",
+  "trimesh>=5.0",
+  "plyfile>=1.1",
+  "fast-simplification>=0.2",
+  "scikit-image>=0.25",  # marching cubes in complete.py
+]
 geo = ["pyproj>=3.7", "laspy>=2.5"]
 api = [
   "fastapi>=0.110",
@@ -91,10 +100,7 @@ dev = [
   "pytest-cov>=5.0",
   "ruff>=0.6",
   "pre-commit>=3.7",
-]
-docs = [
-  "mkdocs-material>=9.5",
-  "mkdocstrings[python]>=0.25",
+  "httpx2>=2.16",  # backend of fastapi's TestClient (console and generate API tests)
 ]
 
 [tool.uv]
@@ -129,15 +135,11 @@ include = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
-markers = [
-  "slow: tests that need heavy optional backends or real datasets",
-  "gpu: tests that need a CUDA-capable device",
-]
 
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
-target-version = "py310"
+target-version = "py312"
 # `.tools/` holds external tooling (e.g. a conda env with the COLMAP binary);
 # it is vendored third-party code and must not be linted or formatted.
 extend-exclude = [".tools"]
@@ -145,9 +147,6 @@ extend-exclude = [".tools"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RET", "PTH"]
 ignore = ["E501"]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ARG001"]
 
 [tool.ruff.format]
 quote-style = "double"

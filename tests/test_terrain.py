@@ -52,12 +52,15 @@ def test_the_opening_removes_a_building_from_the_ground() -> None:
     xs = np.linspace(0, 40, 161)
     xx, yy = np.meshgrid(xs, xs)
     z = np.where((abs(xx - 20) < 3) & (abs(yy - 20) < 3), 8.0, 0.0)
-    ground, data, (x0, y0) = terrain_surface(np.stack([xx.ravel(), yy.ravel(), z.ravel()], 1), 0.5, 10.0)
+    ground, data, (x0, y0) = terrain_surface(
+        np.stack([xx.ravel(), yy.ravel(), z.ravel()], 1), 0.5, 10.0
+    )
     assert data.all()
     assert abs(ground).max() < 0.2  # the roof is not ground
 
 
 def test_clean_model_keeps_the_building_flattens_the_ground_and_drops_the_floater() -> None:
+    pytest.importorskip("trimesh")
     v, f = _scene()
     cv, cf, info = clean_model(v, f, voxel=0.25, window=12.0)
     assert info["object_triangles"] > 0 and info["terrain_triangles"] > 0
@@ -69,12 +72,20 @@ def test_clean_model_keeps_the_building_flattens_the_ground_and_drops_the_floate
     assert obj[:, 2].max() > 7.5  # the building stands
     assert not ((obj[:, 0] < 5) & (obj[:, 1] < 5)).any()  # the floater is gone
     # the building's east wall (x = 23) is flatter than it was
-    raw_wall = v[(abs(v[:, 0] - 23) < 0.3) & (v[:, 2] > 1) & (v[:, 2] < 7) & (abs(v[:, 1] - 20) < 2.5)]
-    new_wall = obj[(abs(obj[:, 0] - 23) < 0.3) & (obj[:, 2] > 1) & (obj[:, 2] < 7) & (abs(obj[:, 1] - 20) < 2.5)]
+    raw_wall = v[
+        (abs(v[:, 0] - 23) < 0.3) & (v[:, 2] > 1) & (v[:, 2] < 7) & (abs(v[:, 1] - 20) < 2.5)
+    ]
+    new_wall = obj[
+        (abs(obj[:, 0] - 23) < 0.3)
+        & (obj[:, 2] > 1)
+        & (obj[:, 2] < 7)
+        & (abs(obj[:, 1] - 20) < 2.5)
+    ]
     assert new_wall[:, 0].std() < 0.6 * raw_wall[:, 0].std()
 
 
 def test_terrain_faces_point_up() -> None:
+    pytest.importorskip("trimesh")
     v, f = _scene()
     cv, cf, info = clean_model(v, f, voxel=0.25, window=12.0)
     t = cv[cf[: info["terrain_triangles"]]]

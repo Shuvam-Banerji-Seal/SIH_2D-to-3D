@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-import torch
 
-from drone3d.fastsfm.dense import Camera, _project, fuse_depths, pair_depth
+torch = pytest.importorskip("torch")
+
+from drone3d.fastsfm.dense import Camera, _project, fuse_depths, pair_depth  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 
@@ -20,7 +21,11 @@ def _exact_flow(ci: Camera, cj: Camera, depth_of, h: int, w: int) -> torch.Tenso
     """Flow i -> j for a scene whose camera-i depth at pixel (x, y) is ``depth_of(x, y)``."""
     from drone3d.fastsfm.dense import _rays
 
-    py, px = torch.meshgrid(torch.arange(h, dtype=torch.float64, device="cuda"), torch.arange(w, dtype=torch.float64, device="cuda"), indexing="ij")
+    py, px = torch.meshgrid(
+        torch.arange(h, dtype=torch.float64, device="cuda"),
+        torch.arange(w, dtype=torch.float64, device="cuda"),
+        indexing="ij",
+    )
     rays = _rays(ci, px, py)
     pts = torch.as_tensor(ci.centre, device="cuda") + depth_of(px, py)[..., None] * rays
     u, v, _ = _project(cj, pts)
@@ -38,8 +43,16 @@ def test_pair_depth_recovers_a_slanted_plane(k1: float) -> None:
         return 10.0 + 0.05 * px + 0.02 * py
 
     flow = _exact_flow(ci, cj, depth_of, h, w)
-    depth, angle = pair_depth(ci, cj, flow, torch.ones(h, w, dtype=torch.bool, device="cuda"), min_angle_deg=1.0)
-    truth = depth_of(*torch.meshgrid(torch.arange(w, device="cuda").double(), torch.arange(h, device="cuda").double(), indexing="xy")).float()
+    depth, angle = pair_depth(
+        ci, cj, flow, torch.ones(h, w, dtype=torch.bool, device="cuda"), min_angle_deg=1.0
+    )
+    truth = depth_of(
+        *torch.meshgrid(
+            torch.arange(w, device="cuda").double(),
+            torch.arange(h, device="cuda").double(),
+            indexing="xy",
+        )
+    ).float()
     ok = depth > 0
     assert ok.float().mean() > 0.95
     torch.testing.assert_close(depth[ok], truth[ok], rtol=2e-4, atol=0)
@@ -58,12 +71,16 @@ def test_pair_depth_rejects_pure_rotation_and_bad_flow() -> None:
     cj2 = Camera(50.0, 24.0, 16.0, 0.0, np.eye(3), np.array([-1.0, 0.0, 0.0]))
     flow2 = _exact_flow(ci, cj2, lambda px, py: torch.full_like(px, 10.0), h, w)
     flow2[1] += 3.0
-    depth2, _ = pair_depth(ci, cj2, flow2, torch.ones(h, w, dtype=torch.bool, device="cuda"), max_reproj_px=1.5)
+    depth2, _ = pair_depth(
+        ci, cj2, flow2, torch.ones(h, w, dtype=torch.bool, device="cuda"), max_reproj_px=1.5
+    )
     assert not bool((depth2 > 0).any())
 
 
 def test_fuse_depths_needs_agreeing_views() -> None:
-    d = torch.tensor([[[10.0, 10.0]], [[10.2, 0.0]], [[30.0, 0.0]]], device="cuda")  # [K=3, H=1, W=2]
+    d = torch.tensor(
+        [[[10.0, 10.0]], [[10.2, 0.0]], [[30.0, 0.0]]], device="cuda"
+    )  # [K=3, H=1, W=2]
     wts = torch.ones_like(d)
     out = fuse_depths(d, wts, rel_tol=0.03, min_views=2)
     assert abs(float(out[0, 0]) - 10.1) < 1e-4  # the 30 m outlier is ignored
@@ -84,12 +101,18 @@ def test_tie_depths_rasterises_tie_points_at_their_camera_depth() -> None:
     from drone3d.fastsfm.dense_stage import tie_depths
 
     pose = NS(rotation=NS(matrix=lambda: np.eye(3)), translation=np.array([0.0, 0.0, 2.0]))
-    pts = {1: NS(xyz=np.array([0.0, 0.0, 3.0])), 2: NS(xyz=np.array([1.0, 0.0, 8.0])), 3: NS(xyz=np.array([0.0, 0.0, -5.0]))}
-    obs = [NS(xy=np.array([20.5, 10.5]), point3D_id=1, has_point3D=lambda: True),
-           NS(xy=np.array([61.0, 30.9]), point3D_id=2, has_point3D=lambda: True),
-           NS(xy=np.array([5.0, 5.0]), point3D_id=3, has_point3D=lambda: True),   # behind the camera
-           NS(xy=np.array([7.0, 7.0]), point3D_id=-1, has_point3D=lambda: False),  # not triangulated
-           NS(xy=np.array([900.0, 5.0]), point3D_id=1, has_point3D=lambda: True)]  # outside the image
+    pts = {
+        1: NS(xyz=np.array([0.0, 0.0, 3.0])),
+        2: NS(xyz=np.array([1.0, 0.0, 8.0])),
+        3: NS(xyz=np.array([0.0, 0.0, -5.0])),
+    }
+    obs = [
+        NS(xy=np.array([20.5, 10.5]), point3D_id=1, has_point3D=lambda: True),
+        NS(xy=np.array([61.0, 30.9]), point3D_id=2, has_point3D=lambda: True),
+        NS(xy=np.array([5.0, 5.0]), point3D_id=3, has_point3D=lambda: True),  # behind the camera
+        NS(xy=np.array([7.0, 7.0]), point3D_id=-1, has_point3D=lambda: False),  # not triangulated
+        NS(xy=np.array([900.0, 5.0]), point3D_id=1, has_point3D=lambda: True),
+    ]  # outside the image
     im = NS(points2D=obs, cam_from_world=lambda: pose)
     (d,) = tie_depths(NS(points3D=pts), [im], 0.5, (40, 20))
     assert d.shape == (20, 40) and (d > 0).sum() == 2

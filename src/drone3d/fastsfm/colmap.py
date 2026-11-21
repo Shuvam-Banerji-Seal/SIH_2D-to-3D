@@ -41,7 +41,9 @@ def write_database(
     w, h = tracks.size
     opts = pycolmap.ImageReaderOptions()
     opts.camera_model = camera_model
-    opts.camera_params = ",".join(f"{v:g}" for v in (focal_px, w / 2, h / 2) + ((0.0,) if "RADIAL" in camera_model else ()))
+    opts.camera_params = ",".join(
+        f"{v:g}" for v in (focal_px, w / 2, h / 2) + ((0.0,) if "RADIAL" in camera_model else ())
+    )
     pycolmap.import_images(str(db_path), str(image_dir), camera_mode=pycolmap.CameraMode.SINGLE,
                            image_names=list(names), options=opts)  # fmt: skip
     db = pycolmap.Database.open(str(db_path))
@@ -73,7 +75,11 @@ def write_database(
             if c < min_matches:
                 continue
             i, j = divmod(int(k), n)
-            db.write_matches(ids[names[i]], ids[names[j]], np.stack([a_kp[s : s + c], b_kp[s : s + c]], 1).astype(np.uint32))
+            db.write_matches(
+                ids[names[i]],
+                ids[names[j]],
+                np.stack([a_kp[s : s + c], b_kp[s : s + c]], 1).astype(np.uint32),
+            )
             pairs += 1
     finally:
         db.close()

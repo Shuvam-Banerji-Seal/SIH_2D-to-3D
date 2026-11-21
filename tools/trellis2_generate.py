@@ -25,7 +25,8 @@ for line in (ROOT / ".env").read_text().splitlines() if (ROOT / ".env").is_file(
     key, _, value = line.partition("=")
     if key and value:
         os.environ.setdefault(key.strip(), value.strip())
-os.environ.setdefault("HF_HOME", "/store/huggingface")
+if Path("/store/huggingface").is_dir():  # this project's weight disk, when the machine has it
+    os.environ.setdefault("HF_HOME", "/store/huggingface")
 os.environ.setdefault("ATTN_BACKEND", "xformers")
 os.environ.setdefault("SPARSE_ATTN_BACKEND", "xformers")
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")

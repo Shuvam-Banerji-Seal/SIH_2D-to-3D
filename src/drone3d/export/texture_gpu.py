@@ -37,7 +37,9 @@ class View:
     translation: np.ndarray
     image: torch.Tensor  # uint8 [H, W, 3] on the device
     k1: float = 0.0  # SIMPLE_RADIAL / RADIAL: at Jal Mahal's k1 = 0.12, 50 px at the image corners
-    mask: torch.Tensor | None = None  # bool [H, W]: a burnt-in overlay this view must not texture from
+    mask: torch.Tensor | None = (
+        None  # bool [H, W]: a burnt-in overlay this view must not texture from
+    )
 
 
 def _project(pts: torch.Tensor, v: View) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -72,7 +74,9 @@ def _view_gains(views: list[View], cen: torch.Tensor, scores: torch.Tensor, *, s
         u, y, _ = _project(cen[sel], v)
         g = torch.stack([2 * u / (w - 1) - 1, 2 * y / (h - 1) - 1], -1)[None, None]
         img = v.image.permute(2, 0, 1)[None].float()
-        cols[k, sel] = F.grid_sample(img, g, mode="bilinear", align_corners=True, padding_mode="border")[0, :, 0].T
+        cols[k, sel] = F.grid_sample(
+            img, g, mode="bilinear", align_corners=True, padding_mode="border"
+        )[0, :, 0].T
     visf = vis.float()
     n_ij = visf @ visf.T  # [V, V] shared triangles
     # [V, V, 3]: view i's colour summed over the triangles it shares with j (one [V, F] @ [F, 3] per view)
@@ -81,7 +85,9 @@ def _view_gains(views: list[View], cen: torch.Tensor, scores: torch.Tensor, *, s
     gains = torch.ones(n_v, 3, device=cen.device)
     # the normal equations in closed form: a Python loop over view pairs synced the GPU ~4 V^2 times per
     # channel, and a 47-view bake took 42.5 s (now 4.6 s)
-    pair = ((n_ij >= 20) & ~torch.eye(n_v, dtype=torch.bool, device=cen.device)).double() * n_ij.double()
+    pair = (
+        (n_ij >= 20) & ~torch.eye(n_v, dtype=torch.bool, device=cen.device)
+    ).double() * n_ij.double()
     for c in range(3):
         big_i = mean[..., c].double()
         a = -pair * big_i * big_i.T / sigma_n**2
@@ -120,7 +126,10 @@ def soup_layout(n_f: int, size: int, device) -> tuple[torch.Tensor, torch.Tensor
     # half 0: corners (lo,lo) (hi-1,lo) (lo,hi-1); half 1: (hi,hi) (lo+1,hi) (hi,lo+1) -- a 1-texel gap between them
     c0 = torch.tensor([[lo, lo], [hi - 1, lo], [lo, hi - 1]], device=device)
     c1 = torch.tensor([[hi, hi], [lo + 1, hi], [hi, lo + 1]], device=device)
-    corners = torch.where(half[:, None, None] == 0, c0[None], c1[None]) + torch.stack([ox, oy], -1)[:, None]  # [F, 3, 2] px
+    corners = (
+        torch.where(half[:, None, None] == 0, c0[None], c1[None])
+        + torch.stack([ox, oy], -1)[:, None]
+    )  # [F, 3, 2] px
     uv = corners / size
     return corners, torch.stack([uv[..., 0], 1.0 - uv[..., 1]], -1)  # OBJ/trimesh: v up
 
@@ -135,7 +144,9 @@ def soup_texels(corners: torch.Tensor, tri: torch.Tensor, size: int):  # type: i
     cs = size // per_side
     dev = corners.device
     rows_used = math.ceil(cells / per_side) * cs
-    ys, xs = torch.meshgrid(torch.arange(rows_used, device=dev), torch.arange(per_side * cs, device=dev), indexing="ij")
+    ys, xs = torch.meshgrid(
+        torch.arange(rows_used, device=dev), torch.arange(per_side * cs, device=dev), indexing="ij"
+    )
     px, py = xs.flatten().float() + 0.5, ys.flatten().float() + 0.5
     cid = (py.long() // cs) * per_side + (px.long() // cs)
     lx, ly = px - (px.long() // cs).float() * cs, py - (py.long() // cs).float() * cs
@@ -189,7 +200,9 @@ def bake_soup_texture(
 
     # ---- view scores per triangle: frontal, close, inside the frame, not occluded
     mid = (tri + tri.roll(-1, dims=1)) / 2  # edge midpoints
-    samples = torch.cat([tri.reshape(-1, 3), mid.reshape(-1, 3), cen])  # [3F corners (per triangle), 3F midpoints, F]
+    samples = torch.cat(
+        [tri.reshape(-1, 3), mid.reshape(-1, 3), cen]
+    )  # [3F corners (per triangle), 3F midpoints, F]
     scores = torch.full((len(views), n_f), -1.0, device=dev)
     for k, v in enumerate(views):
         h, w = v.image.shape[:2]
@@ -211,9 +224,13 @@ def bake_soup_texture(
         cell = cy * zw + cx
         # The occluders: the triangles' centroids ("samples": seven points of each, so that a large near triangle
         # covers every cell it spans -- measured, not better: experiments/texture_holdout.py).
-        su, sy, sz = _project(samples if occluders == "samples" else torch.cat([tri.reshape(-1, 3), cen]), v)
+        su, sy, sz = _project(
+            samples if occluders == "samples" else torch.cat([tri.reshape(-1, 3), cen]), v
+        )
         sin = (sz > 0) & (su >= 0) & (su <= w - 1) & (sy >= 0) & (sy <= h - 1)
-        if occluders != "samples":  # the centroids alone occlude (the corners are projected for the slope only)
+        if (
+            occluders != "samples"
+        ):  # the centroids alone occlude (the corners are projected for the slope only)
             sin[: 3 * n_f] = False
         scell = (sy * s).long().clamp(0, zh - 1) * zw + (su * s).long().clamp(0, zw - 1)
         zmin = torch.full((zh * zw,), float("inf"), device=dev)
@@ -225,7 +242,9 @@ def bake_soup_texture(
         # (at most 21 -> 15 %) and the PSNR moved by -0.07 to +0.24 dB.
         uc, yc, zc = su[: 3 * n_f].view(-1, 3), sy[: 3 * n_f].view(-1, 3), sz[: 3 * n_f].view(-1, 3)
         extent = torch.maximum(uc.amax(1) - uc.amin(1), yc.amax(1) - yc.amin(1)).clamp_min(0.5)
-        rise = (zc.amax(1) - zc.amin(1)) / extent / s  # depth change across one cell along this surface
+        rise = (
+            (zc.amax(1) - zc.amin(1)) / extent / s
+        )  # depth change across one cell along this surface
         visible = inside & (z <= zmin[cell] * 1.03 + (1.5 * rise if slope else 0.0))
         scores[k] = torch.where(visible, facing / dist, torch.full_like(dist, -1.0))
     # Blend the best ``blend`` views (weights by score, only views scoring >= half the best):
@@ -252,7 +271,9 @@ def bake_soup_texture(
             u, y, _ = _project(pts[sel], v)
             g = torch.stack([2 * u / (w - 1) - 1, 2 * y / (h - 1) - 1], -1)[None, None]
             img = v.image.permute(2, 0, 1)[None].float()
-            sample = F.grid_sample(img, g, mode="bilinear", align_corners=True, padding_mode="border")[0, :, 0].T
+            sample = F.grid_sample(
+                img, g, mode="bilinear", align_corners=True, padding_mode="border"
+            )[0, :, 0].T
             if gains is not None:
                 sample = sample * gains[k]
             col[sel] += w_r[sel, None] * sample

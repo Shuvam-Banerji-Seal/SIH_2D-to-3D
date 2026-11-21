@@ -2,7 +2,7 @@
 UV ?= uv
 RUN := $(UV) run
 
-.PHONY: help sync dev test lint format typecheck pre-commit clean run doctor lock
+.PHONY: help sync dev all-extras test lint format typecheck clean run doctor lock
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -15,7 +15,7 @@ dev: ## Install runtime + dev dependencies (default group) and git hooks
 	$(UV) sync
 	$(RUN) pre-commit install
 
-all-extras: ## Install every optional backend (ai, sfm, mesh, geo, api)
+all-extras: ## Install every optional backend (gpu, depth, sfm, render, mesh, geo, api)
 	$(UV) sync --all-extras
 
 lock: ## Regenerate uv.lock

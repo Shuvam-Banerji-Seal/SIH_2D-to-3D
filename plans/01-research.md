@@ -1,71 +1,79 @@
-# 01 — Research archive
+# 01 — Third-party components
 
-Started 2026-09-26 (cycle 2). Every claim below carries a source fetched **this session**.
+What the project builds on, under which licence, and how each component is integrated. The
+pipeline's own dependency table is in [`docs/architecture.md`](../docs/architecture.md); this file
+keeps the licence reasoning and the evaluation evidence behind it. Last revised 2026-11-22.
 
----
+## Register
 
-## R1: Is `harry7557558/spirula-studio` a good addition?
+The repository is **GPL-2.0-only**. A GPL-3.0 component therefore runs as a separate program and is
+never linked or bundled. Components marked *non-commercial* restrict use of the corresponding output
+and are called out in the README.
 
-**Queries**
-1. `https://github.com/harry7557558/spirula-studio` → README (fetched)
-2. `harry7557558 spirula-studio github` → websearch 8 results
-3. `raw.githubusercontent.com/.../master/LICENSE` → **GPL v3 text** (fetched)
-4. `api.github.com/repos/.../git/trees/master?recursive=1` → full file tree (fetched)
-5. `api.github.com/repos/.../contents/docs` → docs index (fetched)
-6. `raw.../docs/README.md` + `raw.../docs/architecture.md` → doc index + layer diagram (fetched)
-7. `raw.../src/mesh/MeshExport.h` → **export format surface** (fetched)
-8. `Spirula Studio CLI "spirula train" export mesh PLY telemetry` → websearch (weak results)
+| Component | Role | Licence | Integration | Outcome |
+|---|---|---|---|---|
+| spirula-studio | SfM, 3DGS training, meshing (accurate profile) | GPL-3.0 | separate program, CLI (`splat/spirula.py`); built from the submodule | adopted, see R1 |
+| Marigold v2 | depth prior (accurate profile) | code and weights Apache-2.0; base model Qwen-Image-Edit-2509 has its own licence | imported from the `third_party/marigold-v2` submodule | adopted; held-out AbsRel 2.7 % after per-image monotone calibration |
+| Depth Anything V2 Large | monocular fill (fast profile) | **CC-BY-NC-4.0, non-commercial**; the Small model is Apache-2.0 | `transformers`, held by the engine's model cache | adopted; Small selectable with `dense.mono_model` |
+| MoGe-3 ViT-L | optional monocular prior | MIT | `tools/setup_third_party.sh` | optional: half the far-field extrapolation error of Depth Anything, about seven times the GPU time |
+| RoMa v2 | dense matching that merges passes | MIT | `tools/setup_third_party.sh` | adopted |
+| torchvision RAFT | optical flow | BSD | patched forward, CUDA Graphs (`keyframes/flow.py`) | adopted; 87 → 110 flows/s on an A100, output identical to stock |
+| pycolmap (COLMAP) | global mapper on flow tracks | BSD-3-Clause | library | adopted |
+| Open3D | GPU TSDF fusion | MIT | library, `mesh` extra | adopted |
+| gsplat | fly-through rasteriser | Apache-2.0 | JIT CUDA extension, `render` extra | adopted |
+| TRELLIS.2 | generated object, on request | MIT | own environment, subprocess (`tools/setup_trellis2.sh`) | adopted as optional, always labelled *generated* |
+| RMBG-2.0, DINOv3 | background removal, backbone of the generator | Bria licence (*non-commercial*); Meta's DINOv3 licence | weights used by TRELLIS.2 | as above |
+| Fire3D | complete every object of an RGB-D video | MIT | `tools/fire3d_export.py` | **evaluated, not adopted**, see R2 |
+| three.js 0.180.0, Spark | web viewer and splat rendering | MIT | vendored in `viewer/static/vendor/` (three.js files unmodified) | adopted; Spark imports `three/addons/postprocessing/Pass.js`, so that file is required |
+| javascript-animation-skills | promo and explainer films | MIT | submodule, used only under `promo/` | adopted for `promo/` |
 
-**Findings** (Source = URL fetched)
+## R1 — spirula-studio
 
-| # | Finding | Source | Confidence |
-| --- | --- | --- | --- |
-| 1 | C++ 3D **Gaussian Splatting** trainer, one self-contained binary; video → splat → textured mesh | README | [VERIFIED] |
-| 2 | "No Python/PyTorch, no separate COLMAP install" — has **built-in SfM, AI masking (SAM), frame extraction** | README | [VERIFIED] |
-| 3 | **License = GNU GPL v3** ("Version 3, 29 June 2007"); AUR + radiancefields independently say GPL-3.0(-or-later) | LICENSE raw + AUR + radiancefields | [VERIFIED] |
-| 4 | CLI exists: `spirula --help`, `spirula train`; TrainerCore shared by CLI and GUI | README + architecture.md | [VERIFIED] |
-| 5 | Mesh writers: **PLY, OBJ(+mtl), glTF, GLB, STL**; colour modes vertex/texture | `src/mesh/MeshExport.h` | [VERIFIED] |
-| 6 | **Reads** COLMAP / Nerfstudio / Metashape dataset layouts | architecture.md table | [VERIFIED] |
-| 7 | Nothing left in Python — "the Python halves were deleted"; a note exists on "retiring the Python client" | architecture.md + docs index | [VERIFIED] |
-| 8 | 2026-09-10: dataset module uses **telemetry metadata for metric scale + orientation** | README News | [VERIFIED] |
-| 9 | 2026-09-23: editing/rendering export added; 2026-08-08: end-to-end video→splat→mesh in GUI **and CLI** | README News | [VERIFIED] |
-| 10 | Maintained "almost entirely by one person"; issues reviewed but replies late | README | [VERIFIED] |
-| 11 | Trains 10M SH3 Gaussians in 8 GB VRAM; Vulkan runs NVIDIA/AMD/Intel/Apple | README | [VERIFIED] |
+Evaluated 2026-09-26 from its README, licence file, source tree and documentation index.
 
-**Conflicts**
-- None material. GPL-3.0 (LICENSE file) vs "GPL-3.0-or-later" (AUR packaging) is a *packaging* description, not a conflict with the primary source.
+| Finding | Source |
+|---|---|
+| C++ 3D Gaussian Splatting trainer in one binary: built-in SfM, frame extraction, SAM masking, video → splat → textured mesh | README |
+| Licence GNU GPL-3.0 | `LICENSE` |
+| Mesh writers for PLY, OBJ (+ mtl), glTF, GLB and STL; vertex colour or texture atlas | `src/mesh/MeshExport.h` |
+| Reads COLMAP, Nerfstudio and Metashape dataset layouts | `docs/architecture.md` |
+| Trains 10 M SH-3 Gaussians in 8 GB of VRAM; Vulkan runs on NVIDIA, AMD, Intel and Apple | README |
+| Maintained almost entirely by one person | README |
 
-**Conclusion** [VERIFIED]
-Technically strong, actively developed, CLI-able. But it is a **C++ binary, not a Python package** — `uv` cannot install it — and its licence (GPL-3.0) is incompatible with this repo's `GPL-2.0-only` for anything other than arm's-length subprocess invocation.
+Consequences: it is a binary, not a Python package, so `uv` cannot install it; and GPL-3.0 against
+GPL-2.0-only allows invocation as a separate program but not bundling. Both hold today.
 
-**Open**
-- Does it **write** a COLMAP-format `sparse/` model, or only read one? [UNKNOWN] — decisive for our `georef` stage.
-- Does its dataset creation emit GeoJSON/EPSG? [UNKNOWN].
-- Actual `spirula train --help` flag list not yet retrieved (repo docs have no `cli.md`; authoritative list is `src/config/TrainConfig.h`).
+**Outcome.** The first reading (2026-09-26) was not to add it, because the problem statement does not
+ask for splats and COLMAP was the cheaper SfM. On 2026-09-27 the pipeline was rebuilt around the GPU
+stages and the COLMAP command-line backends were dropped; spirula-studio became the accurate
+profile's SfM, trainer and mesher, run through its CLI (`splat/spirula.py`, a watchdog kills a trainer
+that stops writing: `test_spirula_watchdog`). The fast profile, which is the deliverable, does not
+use it. Its open question, whether it *writes* a COLMAP sparse model, is answered: it does
+(`dataset/sparse/N/`). Build: `bash third_party/spirula-studio/build_develop.bash
+-DSS_BACKEND=vulkan -DSS_BUILD_GUI=OFF`.
 
----
+## R2 — Fire3D
 
-## R2: Environment after `uv sync`
+Completes every object of a posed RGB-D video from all frames at once. Run on the highrise orbit
+(62 GB of weights, 10.6 min), its perception found 17 objects and generated each as an indoor
+piece: the tower came out as a hollow frame among furniture-like blocks. It is trained on room
+scans and does not carry over to drone footage. The complete model (`complete.py`) does not use it;
+`tools/fire3d_export.py` and `tools/fire3d_outdoor_protocol.json` remain so the experiment can be
+repeated.
 
-**Queries**
-1. `uv init .` in a directory with `pyproject.toml` (in `/tmp/opencode/uvinit-probe`, isolated) → **`error: Project is already initialized`**, `README.md` untouched
-2. `uv sync` in the repo → exit 0
-3. `uv run drone3d --help` / `doctor` / `ruff check .` / `ruff format --check .` / `pytest`
-4. GPU/Vulkan/colmap probing commands
+## R3 — Environment
 
-**Findings**
+| Item | Value |
+|---|---|
+| Python | ≥ 3.12; developed on 3.14 (`.python-version`) |
+| PyTorch | 2.14 with CUDA 13.2 from the `pytorch-cu132` index; torchvision 0.29 (`uv.lock`) |
+| GPU | one NVIDIA A100 80 GB, driver 610; the Vulkan backend of spirula-studio needs a working Vulkan driver |
+| ffmpeg | ≥ 5 with NVDEC (`.tools/ffmpeg` or `$DRONE3D_FFMPEG`); `drone3d doctor` reports it |
+| Weights | Hugging Face and torch caches on `/store/huggingface` when that disk exists, else the libraries' defaults (`utils/model_cache.py`); Marigold assets in `$DEPTH_ASSETS_DIR` |
 
-| # | Finding | Confidence |
-| --- | --- | --- |
-| 1 | `uv init` **refuses** on an initialized project and does **not** clobber files → the `uv init` half of the request is a no-op by design | [VERIFIED: executed in /tmp] |
-| 2 | `uv sync` created `.venv` on **CPython 3.12.8** (`/store/miniforge3/bin/python3`), installed **22 packages**, built + installed `drone3d 0.1.0` editable | [VERIFIED: executed] |
-| 3 | `ruff check .` → *All checks passed!*; `ruff format --check .` → *54 files already formatted* | [VERIFIED: executed] |
-| 4 | `pytest` → *no tests ran in 0.00s*, exit 0 → confirms **zero tests exist** (Findings F-table in 00-understanding.md) | [VERIFIED: executed] |
-| 5 | `doctor`: core deps OK (numpy/cv2/yaml/tqdm), all 9 optional extras missing, **colmap not on PATH**, ffmpeg/ffprobe OK, exiftool missing | [VERIFIED: executed] |
-| 6 | Cosmetic but noisy: env var `VIRTUAL_ENV=/store/shuvam/.venv` ≠ project `.venv` → warning on **every** uv command | [VERIFIED: executed] |
-| 7 | GPU = **NVIDIA A100 80GB PCIe**, driver **610.43.02** | [VERIFIED: nvidia-smi] |
-| 8 | Vulkan loader `libvulkan.so.1` present; ICD manifests include **`nvidia_icd.json`** | [VERIFIED: /usr/share/vulkan/icd.d/] |
-| 9 | COLMAP installable: apt candidate **3.7-2**; conda-forge **4.2.0** (cpu/cuda_129/cuda_130) | [VERIFIED: apt-cache + conda search] |
+## Removed
 
-**REVERSALS recorded** (see 04-decisions.md)
-- `R2-a`: I first inferred "no NVIDIA Vulkan" from `ldconfig -p` showing only mesa/radeon/lvp ICDs. **Wrong.** The Vulkan loader resolves ICDs from JSON manifests in `/usr/share/vulkan/icd.d/`, where `nvidia_icd.json` exists. Hypothesis retracted → NVIDIA Vulkan **is** available.
+| Item | Why |
+|---|---|
+| `third_party/pdoom-video` submodule | Referenced by nothing |
+| `docs` dependency group (MkDocs) | There is no MkDocs site |

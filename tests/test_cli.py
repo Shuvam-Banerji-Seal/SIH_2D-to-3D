@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import http.server
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
+from drone3d import cli
 from drone3d.cli import main
 
 
@@ -32,6 +35,51 @@ def test_doctor_runs_and_reports(capsys: pytest.CaptureFixture[str]) -> None:
     assert "spirula" in out
     assert "ffmpeg" in out
     assert "optional extras" in out
+
+
+def test_doctor_exits_nonzero_and_names_a_missing_core_dependency(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    present = cli._has_module
+    monkeypatch.setattr(cli, "_has_module", lambda name: name != "tifffile" and present(name))
+
+    assert main(["doctor"]) == 1
+
+    captured = capsys.readouterr()
+    assert "MISSING tifffile" in captured.out
+    assert "tifffile" in captured.err
+
+
+def test_doctor_runs_without_torch(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # It once imported the torch-importing Marigold module just to read a path, and crashed on
+    # an install without the gpu extra -- the very install it is meant to diagnose.
+    monkeypatch.setitem(sys.modules, "torch", None)
+    monkeypatch.delitem(sys.modules, "drone3d.depth.marigold", raising=False)
+
+    assert main(["doctor"]) == 0
+
+    out = capsys.readouterr().out
+    assert "torch not installed" in out
+    assert "marigold" in out
+
+
+def test_viewer_serves_export_formats_without_touching_the_stdlib_table() -> None:
+    handler_class = cli._viewer_handler()
+    handler = handler_class.__new__(handler_class)  # guess_type needs no connection
+
+    assert handler.guess_type("export/model.glb") == "model/gltf-binary"
+    assert handler.guess_type("export/index.html") == "text/html"  # what the stdlib knows is kept
+    assert handler.guess_type("export/model.ply.gz") == "application/gzip"
+    assert ".glb" not in http.server.SimpleHTTPRequestHandler.extensions_map
+
+
+def test_view_without_an_export_is_an_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["view", str(tmp_path)]) == 1
+    assert "no viewer" in capsys.readouterr().err
 
 
 def test_init_config_writes_yaml(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

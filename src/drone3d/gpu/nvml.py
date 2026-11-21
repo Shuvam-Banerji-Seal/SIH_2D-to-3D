@@ -38,7 +38,9 @@ def _cmdline(pid: int) -> str:
     if not parts:
         return ""
     exe = Path(parts[0]).name
-    if exe.startswith("python") and len(parts) > 1:  # "python -m x" / "python x.py": name the script
+    if (
+        exe.startswith("python") and len(parts) > 1
+    ):  # "python -m x" / "python x.py": name the script
         rest = parts[2] if parts[1] == "-m" and len(parts) > 2 else parts[1]
         return f"{exe} {Path(rest).name}"
     return exe

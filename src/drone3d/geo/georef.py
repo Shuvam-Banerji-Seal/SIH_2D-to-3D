@@ -213,8 +213,12 @@ def estimate_up(
         rot = np.asarray(rotations, dtype=np.float64)
         right, img_up = rot[:, 0, :], -rot[:, 1, :]  # image x-axis and image up, in the world
         level = np.median(np.abs(normals @ right.T), axis=1) < np.sin(np.radians(max_roll_deg))
-        flip = np.where((normals @ img_up.mean(0)) < 0, -1.0, 1.0)  # each hypothesis as the image's up would have it
-        upright = np.median((normals * flip[:, None]) @ img_up.T, axis=1) > -0.2  # a wall facing a pitched camera: < 0
+        flip = np.where(
+            (normals @ img_up.mean(0)) < 0, -1.0, 1.0
+        )  # each hypothesis as the image's up would have it
+        upright = (
+            np.median((normals * flip[:, None]) @ img_up.T, axis=1) > -0.2
+        )  # a wall facing a pitched camera: < 0
         keep = level & upright
         if keep.sum() >= 10:
             a, normals = a[keep], normals[keep]

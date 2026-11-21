@@ -43,10 +43,14 @@ class Camera:
         p = list(camera.params)
         k1 = p[3] if len(p) > 3 else 0.0
         pose = image.cam_from_world()
-        return cls(p[0], p[1], p[2], k1, np.asarray(pose.rotation.matrix()), np.asarray(pose.translation))
+        return cls(
+            p[0], p[1], p[2], k1, np.asarray(pose.rotation.matrix()), np.asarray(pose.translation)
+        )
 
 
-def _undistort(xd: torch.Tensor, yd: torch.Tensor, k1: float, iters: int = 6) -> tuple[torch.Tensor, torch.Tensor]:
+def _undistort(
+    xd: torch.Tensor, yd: torch.Tensor, k1: float, iters: int = 6
+) -> tuple[torch.Tensor, torch.Tensor]:
     x, y = xd.clone(), yd.clone()
     for _ in range(iters):
         s = 1 + k1 * (x * x + y * y)
@@ -92,7 +96,11 @@ def pair_depth(
     """
     _, h, w = flow_ij.shape
     dev = flow_ij.device
-    py, px = torch.meshgrid(torch.arange(h, device=dev, dtype=torch.float64), torch.arange(w, device=dev, dtype=torch.float64), indexing="ij")
+    py, px = torch.meshgrid(
+        torch.arange(h, device=dev, dtype=torch.float64),
+        torch.arange(w, device=dev, dtype=torch.float64),
+        indexing="ij",
+    )
     fx = flow_ij.double()
     qx, qy = px + fx[0], py + fx[1]
     di, dj = _rays(cam_i, px, py), _rays(cam_j, qx, qy)
@@ -111,13 +119,23 @@ def pair_depth(
     ui, vi, zi = _project(cam_i, x)
     uj, vj, zj = _project(cam_j, x)
     err = torch.maximum(torch.hypot(ui - px, vi - py), torch.hypot(uj - qx, vj - qy))
-    ok = valid & (lam_i > 0) & (lam_j > 0) & (zi > 0) & (zj > 0) & (angle >= min_angle_deg) & (err <= max_reproj_px)
+    ok = (
+        valid
+        & (lam_i > 0)
+        & (lam_j > 0)
+        & (zi > 0)
+        & (zj > 0)
+        & (angle >= min_angle_deg)
+        & (err <= max_reproj_px)
+    )
     depth = torch.where(ok, zi, torch.zeros_like(zi))
     return depth.float(), torch.where(ok, angle, torch.zeros_like(angle)).float()
 
 
 @torch.inference_mode()
-def fuse_depths(depths: torch.Tensor, weights: torch.Tensor, *, rel_tol: float = 0.03, min_views: int = 2) -> torch.Tensor:
+def fuse_depths(
+    depths: torch.Tensor, weights: torch.Tensor, *, rel_tol: float = 0.03, min_views: int = 2
+) -> torch.Tensor:
     """Fuse ``[K, H, W]`` candidate depths (0 = none): median, then weighted mean of the agreeing ones.
 
     A pixel needs ``min_views`` candidates within ``rel_tol`` of the median, so
@@ -132,7 +150,12 @@ def fuse_depths(depths: torch.Tensor, weights: torch.Tensor, *, rel_tol: float =
     return torch.where((agree.sum(0) >= min_views) & (wsum > 0), fused, torch.zeros_like(fused))
 
 
-def _surface_blocks(frames: list[tuple[np.ndarray, np.ndarray, Camera]], block: float, depth_max: float, step: int = 1) -> int:
+def _surface_blocks(
+    frames: list[tuple[np.ndarray, np.ndarray, Camera]],
+    block: float,
+    depth_max: float,
+    step: int = 1,
+) -> int:
     """Number of distinct TSDF blocks the depth maps' surface points fall into (subsampled pixels)."""
     keys = []
     for depth, _, cam in frames:
@@ -141,9 +164,13 @@ def _surface_blocks(frames: list[tuple[np.ndarray, np.ndarray, Camera]], block: 
         if not len(xs):
             continue
         z = d[ys, xs].astype(np.float64)
-        pc = np.stack([(xs * step + 0.5 - cam.cx) / cam.f * z, (ys * step + 0.5 - cam.cy) / cam.f * z, z], 1)
+        pc = np.stack(
+            [(xs * step + 0.5 - cam.cx) / cam.f * z, (ys * step + 0.5 - cam.cy) / cam.f * z, z], 1
+        )
         pw = (pc - cam.translation) @ cam.rotation  # R^T (pc - t)
-        b = np.floor(pw / block).astype(np.int64) + (1 << 20)  # 21 bits per axis, packed into one int64
+        b = np.floor(pw / block).astype(np.int64) + (
+            1 << 20
+        )  # 21 bits per axis, packed into one int64
         keys.append(np.unique((b[:, 0] << 42) | (b[:, 1] << 21) | b[:, 2]))
     return int(len(np.unique(np.concatenate(keys)))) if keys else 0
 
@@ -228,17 +255,27 @@ def _fuse_once(frames: list[tuple[np.ndarray, np.ndarray, Camera]], *, voxel: fl
     )
     skipped = 0
     for depth, rgb, cam in frames:
-        if not ((depth > 0) & (depth < depth_max)).any():  # Open3D aborts on a frame that touches no block
+        if not (
+            (depth > 0) & (depth < depth_max)
+        ).any():  # Open3D aborts on a frame that touches no block
             skipped += 1
             continue
-        intr = o3c.Tensor(np.array([[cam.f, 0, cam.cx - 0.5], [0, cam.f, cam.cy - 0.5], [0, 0, 1]]), o3c.float64)
+        intr = o3c.Tensor(
+            np.array([[cam.f, 0, cam.cx - 0.5], [0, cam.f, cam.cy - 0.5], [0, 0, 1]]), o3c.float64
+        )
         extr = np.eye(4)
         extr[:3, :3], extr[:3, 3] = cam.rotation, cam.translation
         extr_t = o3c.Tensor(extr, o3c.float64)
-        d_img = o3d.t.geometry.Image(o3c.Tensor(np.ascontiguousarray(depth, dtype=np.float32))).to(device)
-        c_img = o3d.t.geometry.Image(o3c.Tensor(np.ascontiguousarray(rgb.astype(np.float32) / 255.0))).to(device)
+        d_img = o3d.t.geometry.Image(o3c.Tensor(np.ascontiguousarray(depth, dtype=np.float32))).to(
+            device
+        )
+        c_img = o3d.t.geometry.Image(
+            o3c.Tensor(np.ascontiguousarray(rgb.astype(np.float32) / 255.0))
+        ).to(device)
         try:
-            blocks = vbg.compute_unique_block_coordinates(d_img, intr, extr_t, 1.0, depth_max, trunc_voxels)
+            blocks = vbg.compute_unique_block_coordinates(
+                d_img, intr, extr_t, 1.0, depth_max, trunc_voxels
+            )
             vbg.integrate(blocks, d_img, c_img, intr, intr, extr_t, 1.0, depth_max, trunc_voxels)
         except RuntimeError:  # e.g. "no block is touched": one frame must not sink the model
             skipped += 1

@@ -1,60 +1,44 @@
 # Test suite
 
-Run with `uv run pytest`. **216 tests** across 15 files, all fast and
-deterministic — no network access and no external binaries required.
-Whole suite runs in well under a minute; coverage is **77%** (`--cov=drone3d`).
+Run with `uv sync --all-extras && uv run pytest`. The tests are fast and deterministic: no
+network access, no model downloads, no external binaries. Tests that need an optional library
+or a GPU skip themselves (`pytest.importorskip`, `skipif(not torch.cuda.is_available())`), so the
+suite also runs on a CPU-only machine with only part of the extras installed.
+
+```bash
+uv run pytest                          # everything this machine can run
+uv run pytest tests/test_geo.py -k enu # one file, one test
+uv run pytest --cov=drone3d            # with coverage
+```
 
 ## Layout
 
-| File | Tests | Covers |
-| --- | --- | --- |
-| `test_telemetry.py` | 33 | CSV / DJI SRT / GPX / JSON parsing, interpolation, summary |
-| `test_config.py` | 20 | YAML loading, `--set` override coercion, validation |
-| `test_preprocess.py` | 17 | quality scoring, keyframe selection, masks, deblur |
-| `test_projection.py` | 17 | intrinsics from FoV, GSD, `LocalTangentPlane` |
-| `test_features.py` | 16 | SIFT/ORB detection, ratio matching, frame overlap graph |
-| `test_geo.py` | 15 | ECEF/ENU round-trips, Umeyama similarity, GPS RMSE |
-| `test_metrics_quality.py` | 15 | Chamfer vs brute force, bounds, voxel coverage, completeness |
-| `test_preprocess_filters.py` | 14 | stabilization, Wiener deblur, dynamic masking |
-| `test_colmap_model.py` | 14 | COLMAP `images.txt` / `points3D.txt` parsing |
-| `test_dense_mesh.py` | 11 | dense MVS stage argv, Open3D/Trimesh meshing |
-| `test_cli.py` | 10 | CLI entry points (`doctor`, `init-config`, `run`) |
-| `test_ply.py` | 8 | PLY binary round-trip (interleaved vertex records) |
-| `test_sfm_colmap_backend.py` | 8 | COLMAP argv construction, mask wiring |
-| `test_io_video.py` | 6 | frame sampling, `max_frames` budget |
-| `test_mesh_colmap_mesher.py` | 4 | Poisson→Delaunay fallback |
-| `test_types.py` | 4 | `slots` dataclass serialisation |
-| `test_pipeline_smoke.py` | 4 | end-to-end run, graceful degradation |
+| Area | Files |
+| --- | --- |
+| Configuration, CLI, run bookkeeping | `test_config`, `test_cli`, `test_types`, `test_report`, `test_shell`, `test_thread_binding` |
+| Dependencies and model paths | `test_dependencies` (everything `src/` imports is declared in `pyproject.toml`), `test_model_paths` |
+| Telemetry, geodesy, georeferencing | `test_telemetry`, `test_projection`, `test_geo`, `test_georef_straight_track` |
+| Ingest and keyframes | `test_nv12`, `test_sidecar_decode`, `test_nvjpeg_threads`, `test_raft_graph_cache`, `test_keyframe_geometry`, `test_overlay` |
+| Fast profile: tracks, dense depth, fusion | `test_fastsfm_tracks`, `test_fastsfm_components`, `test_fastsfm_dense`, `test_fastsfm_mono`, `test_fusion_worker`, `test_merge_passes`, `test_depth_refine` |
+| Accurate profile: depth prior, splats | `test_depth_align`, `test_depth_calibration_and_crop`, `test_splats`, `test_spirula_watchdog`, `test_mesh_reuse` |
+| Export and metrics | `test_ply`, `test_export_formats`, `test_render_mesh`, `test_texture_gpu`, `test_terrain`, `test_metrics_quality` |
+| Complete and generated models | `test_complete`, `test_generate` |
+| Engine and web console | `test_engine`, `test_console_api` |
 
 ## Conventions
 
-- Keep tests fast and deterministic; **no network access**.
-- Heavy backends (COLMAP, Open3D, torch) are **not** required: tests stub
-  `run_command`/`which` and assert on the argv the backend would execute.
-- External tooling lives outside the package (`.tools/`, git-ignored) and is
-  never imported by tests.
-- Optional markers `slow` and `gpu` are declared in `pyproject.toml` for tests
-  that do need a real backend or device.
+- Test the maths against known answers (exact projections, recovered depths, round trips), not
+  against a snapshot of the current output. Round-trip tests compare **values**, never only shape
+  and dtype.
+- Anything that needs a GPU or an optional library guards itself at module level so that collection
+  never fails on a smaller install.
+- Wrappers around external programs (`utils/shell.py`, the spirula and ffmpeg launchers) are tested
+  by stubbing the subprocess and asserting on the argv.
+- Add a regression test with every bug fix.
 
-## Writing a new test
+## Not covered here
 
-If you are testing a wrapper around an external binary, stub `run_command` and
-`which`, then assert on the **argv** — that keeps the suite hermetic while still
-locking the command contract. See `test_sfm_colmap_backend.py` or
-`test_dense_mesh.py`.
-
-Two traps worth knowing, both hit while writing this suite:
-
-- `cv2.VideoWriter_fourcc` / `cv2.SIFT_create` / `cv2.ORB_create` are real
-  runtime attributes that the OpenCV 5.x type stubs do not model. LSP errors
-  about them are false positives.
-- `zip(a, a[1:], strict=True)` raises — the slices are never equal length.
-
-## Not yet covered
-
-- `dense/mono_depth.py` — needs torch + a model download (see the `ai` extra).
-- `mesh/texturing.py` Poisson path end-to-end — needs Open3D at runtime and is
-  slow; only its guard paths are covered.
-- `georef` end-to-end through `Pipeline._stage_georef` with **real** GPS —
-  blocked on data (F7): the bundled sample video carries no GPS. The maths
-  underneath is covered by `test_geo.py`.
+- A full run on real footage: it needs a GPU, the spirula build, the model weights and the sample
+  videos. `experiments/` holds the scripts that exercise those and write the numbers the paper uses.
+- Georeferencing against a real flight log: none of the public sample videos carries GPS. The maths
+  underneath is covered by `test_geo.py` and `test_georef_straight_track.py`.

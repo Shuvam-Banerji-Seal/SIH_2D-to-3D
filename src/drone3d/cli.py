@@ -3,32 +3,41 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
-import os
 import platform
+import subprocess
 import sys
 from pathlib import Path
 
 import yaml
 
 from drone3d.config import ALL_STAGES, PipelineConfig, load_config
+from drone3d.depth.assets import resolve_assets_dir
 from drone3d.exceptions import ConfigError, Drone3DError
 from drone3d.logging_utils import setup_logging
 from drone3d.pipeline import Pipeline
 from drone3d.version import __version__
 
-_OPTIONAL_MODULES = (
+# What `drone3d doctor` checks; tests/test_dependencies.py holds both tables to pyproject.toml.
+_CORE_MODULES = ("numpy", "cv2", "yaml", "tqdm", "scipy", "PIL", "tifffile")
+_OPTIONAL_MODULES = (  # (importable module, extra that installs it)
     ("torch", "gpu"),
     ("torchvision", "gpu"),
     ("pynvml", "gpu"),
     ("diffusers", "depth"),
+    ("transformers", "depth"),
     ("bitsandbytes", "depth"),
     ("peft", "depth"),
     ("pycolmap", "sfm"),
     ("gsplat", "render"),
     ("open3d", "mesh"),
     ("trimesh", "mesh"),
+    ("skimage", "mesh"),
     ("pyproj", "geo"),
+    ("laspy", "geo"),
+    ("fastapi", "api"),
+    ("uvicorn", "api"),
 )
 
 
@@ -67,7 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=f"Comma-separated subset of: {', '.join(ALL_STAGES)}",
     )
-    run_parser.add_argument("--quiet", action="store_true", help="No console log (logs/run.log still records everything)")
+    run_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="No console log (logs/run.log still records everything)",
+    )
     run_parser.set_defaults(func=cmd_run)
 
     init_parser = subparsers.add_parser("init-config", help="Write a default configuration file")
@@ -80,46 +93,75 @@ def build_parser() -> argparse.ArgumentParser:
     )
     doctor_parser.set_defaults(func=cmd_doctor)
 
-    view_parser = subparsers.add_parser("view", help="Serve a run's 3D viewer (export stage) over HTTP")
+    view_parser = subparsers.add_parser(
+        "view", help="Serve a run's 3D viewer (export stage) over HTTP"
+    )
     view_parser.add_argument("run_dir", help="Run directory containing export/index.html")
     view_parser.add_argument("--host", default="127.0.0.1")
     view_parser.add_argument("--port", type=int, default=8765)
     view_parser.set_defaults(func=cmd_view)
 
-    ui_parser = subparsers.add_parser("ui", help="Web app: configure, run and explore reconstructions")
+    ui_parser = subparsers.add_parser(
+        "ui", help="Web app: configure, run and explore reconstructions"
+    )
     ui_parser.add_argument("--host", default="127.0.0.1")
     ui_parser.add_argument("--port", type=int, default=8080)
-    ui_parser.add_argument("--engine-slots", type=int, default=1, help="runs at once in an engine the console starts")
+    ui_parser.add_argument(
+        "--engine-slots", type=int, default=1, help="runs at once in an engine the console starts"
+    )
     ui_parser.set_defaults(func=cmd_ui)
 
     engine_parser = subparsers.add_parser(
-        "engine", help="Resident GPU engine: keeps the models warm and runs reconstructions and live streams"
+        "engine",
+        help="Resident GPU engine: keeps the models warm and runs reconstructions and live streams",
     )
     engine_parser.add_argument("--host", default="127.0.0.1")
     engine_parser.add_argument("--port", type=int, default=8770)
-    engine_parser.add_argument("--outputs", type=Path, default=Path("outputs"), help="where runs are written")
-    engine_parser.add_argument("--warm", default=None,
-                               help="models to load at start, comma-separated (default: what the last engine held)")
-    engine_parser.add_argument("--reserve-gb", type=float, default=2.0, help="GPU memory always left free for others")
-    engine_parser.add_argument("--slots", type=int, default=1,
-                               help="runs at once: 1 times one video; 2 overlaps CPU and GPU phases of a batch")
+    engine_parser.add_argument(
+        "--outputs", type=Path, default=Path("outputs"), help="where runs are written"
+    )
+    engine_parser.add_argument(
+        "--warm",
+        default=None,
+        help="models to load at start, comma-separated (default: what the last engine held)",
+    )
+    engine_parser.add_argument(
+        "--reserve-gb", type=float, default=2.0, help="GPU memory always left free for others"
+    )
+    engine_parser.add_argument(
+        "--slots",
+        type=int,
+        default=1,
+        help="runs at once: 1 times one video; 2 overlaps CPU and GPU phases of a batch",
+    )
     engine_parser.set_defaults(func=cmd_engine)
 
     gen_parser = subparsers.add_parser(
-        "generate", help="Generated object (TRELLIS.2) from a finished run's subject keyframe -- not a measurement"
+        "generate",
+        help="Generated object (TRELLIS.2) from a finished run's subject keyframe -- not a measurement",
     )
     gen_parser.add_argument("run_dir", type=Path)
-    gen_parser.add_argument("--image", type=Path, default=None, help="keyframe to generate from (default: the subject's)")
+    gen_parser.add_argument(
+        "--image",
+        type=Path,
+        default=None,
+        help="keyframe to generate from (default: the subject's)",
+    )
     gen_parser.add_argument("--res", default="1024", choices=["512", "1024"])
     gen_parser.add_argument("--seed", type=int, default=0)
     gen_parser.set_defaults(func=cmd_generate)
 
     comp_parser = subparsers.add_parser(
-        "complete", help="Complete model of a run's subject (after `generate`): whole on every side, GLB/OBJ/FBX/STL"
+        "complete",
+        help="Complete model of a run's subject (after `generate`): whole on every side, GLB/OBJ/FBX/STL",
     )
     comp_parser.add_argument("run_dir", type=Path)
     comp_parser.add_argument("--model", type=int, default=0)
-    comp_parser.add_argument("--splats", action="store_true", help="also train Gaussian splats that are whole from every heading")
+    comp_parser.add_argument(
+        "--splats",
+        action="store_true",
+        help="also train Gaussian splats that are whole from every heading",
+    )
     comp_parser.set_defaults(func=cmd_complete)
 
     subparsers.add_parser("version", help="Print the version").set_defaults(func=cmd_version)
@@ -172,6 +214,23 @@ def cmd_init_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def _has_module(name: str) -> bool:
+    return importlib.util.find_spec(name) is not None
+
+
+def _ffmpeg_summary() -> str:
+    """Path, version and CUDA decode support of the ffmpeg that ingest would use (raises if none)."""
+    from drone3d.io.nvdec import ffmpeg_bin
+
+    exe = ffmpeg_bin()
+
+    def run(*flags: str) -> str:
+        return subprocess.run([exe, "-hide_banner", *flags], capture_output=True, text=True).stdout
+
+    version = run("-version").split("\n")[0].split(" Copyright")[0]
+    return f"{exe} ({version}; cuda hwaccel: {'cuda' in run('-hwaccels')})"
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"drone3d        {__version__}")
     print(
@@ -180,31 +239,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"executable     {sys.executable}")
 
     print("\ncore dependencies:")
-    for module in ("numpy", "cv2", "yaml"):
-        spec = importlib.util.find_spec(module)
-        print(f"  {'OK ' if spec else 'MISSING'} {module}")
+    core = {module: _has_module(module) for module in _CORE_MODULES}
+    for module, present in core.items():
+        print(f"  {'OK ' if present else 'MISSING'} {module}")
 
     print("\noptional extras (uv sync --extra <name>):")
     for module, extra in _OPTIONAL_MODULES:
-        spec = importlib.util.find_spec(module)
-        print(f"  {'OK ' if spec else '-- '} {module:<13} [{extra}]")
+        print(f"  {'OK ' if _has_module(module) else '-- '} {module:<13} [{extra}]")
 
     print("\nexternal tools:")
     try:
-        from drone3d.io.nvdec import ffmpeg_bin
-
-        ff = ffmpeg_bin()
-        import subprocess
-
-        version = subprocess.run(
-            [ff, "-hide_banner", "-version"], capture_output=True, text=True
-        ).stdout.split("\n")[0]
-        hw = subprocess.run(
-            [ff, "-hide_banner", "-hwaccels"], capture_output=True, text=True
-        ).stdout
-        print(
-            f"  OK  ffmpeg    {ff} ({version.split(' Copyright')[0]}; cuda hwaccel: {'cuda' in hw})"
-        )
+        print(f"  OK  ffmpeg    {_ffmpeg_summary()}")
     except Drone3DError as exc:
         print(f"  --  ffmpeg    {exc}")
     try:
@@ -213,13 +258,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print(f"  OK  spirula   {spirula_binary()}")
     except Drone3DError as exc:
         print(f"  --  spirula   {str(exc).splitlines()[0]}")
-    from drone3d.depth.marigold import _DEFAULT_ASSETS
-
-    assets = Path(os.environ.get("DEPTH_ASSETS_DIR", _DEFAULT_ASSETS)) / "checkpoints"
-    ok = (assets / "Qwen-Image-Edit-2509" / "transformer").is_dir() and (
-        assets / "Marigold-V2"
+    checkpoints = resolve_assets_dir() / "checkpoints"
+    marigold_ok = (checkpoints / "Qwen-Image-Edit-2509" / "transformer").is_dir() and (
+        checkpoints / "Marigold-V2"
     ).is_dir()
-    print(f"  {'OK ' if ok else '-- '} marigold  {assets}")
+    print(f"  {'OK ' if marigold_ok else '-- '} marigold  {checkpoints}")
 
     print("\ngpu:")
     try:
@@ -236,23 +279,43 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             )
     except ImportError:
         print("  torch not installed (uv sync --extra gpu)")
+
+    if missing := [module for module, present in core.items() if not present]:
+        print(f"\nmissing core dependencies: {', '.join(missing)} (uv sync)", file=sys.stderr)
+        return 1
     return 0
 
 
-def cmd_view(args: argparse.Namespace) -> int:
-    import functools
+@functools.cache
+def _viewer_handler() -> type:
+    """Static-file handler for ``drone3d view`` with the export formats' MIME types.
+
+    Built on first use: ``http.server`` is a sizeable import the other commands do not need.
+    """
     import http.server
-    from pathlib import Path
+
+    class ViewerHandler(http.server.SimpleHTTPRequestHandler):
+        extensions_map = {  # a copy: the stdlib class's own table is shared by every server in the process
+            **http.server.SimpleHTTPRequestHandler.extensions_map,
+            ".glb": "model/gltf-binary",
+            ".ply": "application/octet-stream",
+            ".las": "application/octet-stream",
+            ".fbx": "application/octet-stream",
+            ".tif": "image/tiff",
+            ".js": "text/javascript",
+        }
+
+    return ViewerHandler
+
+
+def cmd_view(args: argparse.Namespace) -> int:
+    import http.server
 
     root = Path(args.run_dir) / "export"
     if not (root / "index.html").is_file():
         print(f"no viewer in {root} (run the export stage)", file=sys.stderr)
         return 1
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(root))
-    handler.func.extensions_map.update(  # type: ignore[attr-defined]
-        {".glb": "model/gltf-binary", ".ply": "application/octet-stream", ".las": "application/octet-stream",
-         ".fbx": "application/octet-stream", ".tif": "image/tiff", ".js": "text/javascript"}
-    )  # fmt: skip
+    handler = functools.partial(_viewer_handler(), directory=str(root))
     with http.server.ThreadingHTTPServer((args.host, args.port), handler) as httpd:
         print(f"viewer: http://{args.host}:{args.port}/  (Ctrl+C to stop)")
         httpd.serve_forever()
@@ -260,8 +323,6 @@ def cmd_view(args: argparse.Namespace) -> int:
 
 
 def cmd_ui(args: argparse.Namespace) -> int:
-    from pathlib import Path
-
     try:
         import uvicorn
 
@@ -271,19 +332,32 @@ def cmd_ui(args: argparse.Namespace) -> int:
         return 1
     repo = Path.cwd()
     print(f"drone3d ui: http://{args.host}:{args.port}/  (runs in {repo / 'outputs'})")
-    uvicorn.run(create_app(repo, engine_slots=args.engine_slots), host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(
+        create_app(repo, engine_slots=args.engine_slots),
+        host=args.host,
+        port=args.port,
+        log_level="warning",
+    )
     return 0
 
 
 def cmd_engine(args: argparse.Namespace) -> int:
     from drone3d.engine.service import serve
-    from drone3d.logging_utils import setup_logging
 
     setup_logging("INFO")
     warm = None if args.warm is None else [k.strip() for k in args.warm.split(",") if k.strip()]
-    print(f"drone3d engine: http://{args.host}:{args.port}/status  (runs in {args.outputs.resolve()})")
-    serve(Path.cwd(), args.outputs.resolve(), host=args.host, port=args.port, warm=warm, reserve_gb=args.reserve_gb,
-          slots=args.slots)
+    print(
+        f"drone3d engine: http://{args.host}:{args.port}/status  (runs in {args.outputs.resolve()})"
+    )
+    serve(
+        Path.cwd(),
+        args.outputs.resolve(),
+        host=args.host,
+        port=args.port,
+        warm=warm,
+        reserve_gb=args.reserve_gb,
+        slots=args.slots,
+    )
     return 0
 
 
@@ -305,10 +379,20 @@ def cmd_complete(args: argparse.Namespace) -> int:
     from drone3d.complete import complete_model, splats_360
 
     rec = complete_model(args.run_dir, model=args.model)
-    print(json.dumps({k: v for k, v in rec.items() if k not in ("texture", "planes_snapped")}, indent=1))
+    print(
+        json.dumps(
+            {k: v for k, v in rec.items() if k not in ("texture", "planes_snapped")}, indent=1
+        )
+    )
     if args.splats:
         sp = splats_360(args.run_dir, model=args.model)
-        print(json.dumps({k: sp.get(k) for k in ("status", "views", "num_splats", "web", "seconds")}, indent=1, default=str))
+        print(
+            json.dumps(
+                {k: sp.get(k) for k in ("status", "views", "num_splats", "web", "seconds")},
+                indent=1,
+                default=str,
+            )
+        )
     return 0
 
 

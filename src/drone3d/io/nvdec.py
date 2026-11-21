@@ -223,7 +223,10 @@ def _ffmpeg_cmd_stacked(
         b = f"scale_cuda={w2}:{h2}:interp_algo=lanczos,hwdownload,format=nv12"
     else:
         dec = ["-threads", "0"]
-        a, b = f"scale={w1}:{h1}:flags=area,format=nv12", f"scale={w2}:{h2}:flags=lanczos,format=nv12"
+        a, b = (
+            f"scale={w1}:{h1}:flags=area,format=nv12",
+            f"scale={w2}:{h2}:flags=lanczos,format=nv12",
+        )
     graph = (f"[0:v]{pre + ',' if pre else ''}split=2[a][b];[a]{a},pad={width}:{h1}[aa];"
              f"[b]{b},pad={width}:{h2}[bb];[bb][aa]vstack=inputs=2[out]")  # fmt: skip
     return [ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", *dec, "-i", str(info.path),
@@ -372,7 +375,9 @@ def stream_analysis_chunks(
         stack_w, stack_h = max(width, sidecar[0]), height + sidecar[1]
         frame_bytes = stack_w * stack_h * 3 // 2
     else:
-        cmd = _ffmpeg_cmd(info, size, pre, hwaccel, ("-skip_frame", "nokey") if keyframes_only else ())
+        cmd = _ffmpeg_cmd(
+            info, size, pre, hwaccel, ("-skip_frame", "nokey") if keyframes_only else ()
+        )
         frame_bytes = width * height * 3 // 2
     q: queue.Queue = queue.Queue(maxsize=prefetch)
     stop, handle = threading.Event(), []
@@ -394,12 +399,20 @@ def stream_analysis_chunks(
                 break
             n = len(item) // frame_bytes
             if sidecar is None:
-                nv12 = torch.from_numpy(item).view(n, height * 3 // 2, width).to(device, non_blocking=True)
+                nv12 = (
+                    torch.from_numpy(item)
+                    .view(n, height * 3 // 2, width)
+                    .to(device, non_blocking=True)
+                )
                 rgb = nv12_to_rgb(nv12, height, width, **color)
                 side_rgb = None
             else:  # split the stacked planes; convert each part on its own (no chroma bleed at the seam)
                 sw, sh = sidecar
-                full = torch.from_numpy(item).view(n, stack_h * 3 // 2, stack_w).to(device, non_blocking=True)
+                full = (
+                    torch.from_numpy(item)
+                    .view(n, stack_h * 3 // 2, stack_w)
+                    .to(device, non_blocking=True)
+                )
                 y_side, y_an = full[:, :sh, :sw], full[:, sh:stack_h, :width]
                 uv_side = full[:, stack_h : stack_h + sh // 2, :sw]
                 uv_an = full[:, stack_h + sh // 2 :, :width]
@@ -410,7 +423,9 @@ def stream_analysis_chunks(
                 x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), size, multiple=8)
                 rgb = rgb[:, y0:y1, x0:x1].contiguous()
                 if side_rgb is not None:
-                    x0, y0, x1, y1 = scaled_crop(crop, (info.width, info.height), sidecar, multiple=2)
+                    x0, y0, x1, y1 = scaled_crop(
+                        crop, (info.width, info.height), sidecar, multiple=2
+                    )
                     side_rgb = side_rgb[:, y0:y1, x0:x1].contiguous()
             indices = (np.arange(produced, produced + n) * stride).astype(np.int64)
             produced += n
@@ -446,7 +461,11 @@ def write_sidecar_jpegs(chunks: Iterator[tuple], out_dir: Path, *, quality: int 
         for indices, rgb, side in chunks:
             data = encode_jpeg([f.permute(2, 0, 1).contiguous() for f in side], quality=quality)
             for idx, d in zip(indices, data, strict=True):
-                pending.append(pool.submit((out_dir / f"f_{int(idx):06d}.jpg").write_bytes, d.cpu().numpy().tobytes()))
+                pending.append(
+                    pool.submit(
+                        (out_dir / f"f_{int(idx):06d}.jpg").write_bytes, d.cpu().numpy().tobytes()
+                    )
+                )
             del side
             yield indices, rgb
         for fut in pending:
@@ -599,7 +618,9 @@ def detect_letterbox(
     size = analysis_size(info.width, info.height, 640, multiple=2)
     duration = info.duration_s or info.num_frames / max(info.fps, 1e-9)
     times = [duration * (k + 0.5) / samples for k in range(samples)]
-    return letterbox_from_frames(info, sample_frames(info, times, size, hwaccel=hwaccel), size, threshold=threshold)
+    return letterbox_from_frames(
+        info, sample_frames(info, times, size, hwaccel=hwaccel), size, threshold=threshold
+    )
 
 
 def letterbox_from_frames(info: StreamInfo, frames: Sequence[np.ndarray], size: tuple[int, int], *,

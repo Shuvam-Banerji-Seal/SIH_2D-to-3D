@@ -41,10 +41,14 @@ class MeshRenderer:
         """Pinhole ``f, cx, cy`` (COLMAP convention), cam_from_world ``rotation``, camera ``centre`` -> RGB."""
         w, h = size
         ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
-        d = np.stack([(xs + 0.5 - cx) / f, (ys + 0.5 - cy) / f, np.ones_like(xs)], -1).reshape(-1, 3)
+        d = np.stack([(xs + 0.5 - cx) / f, (ys + 0.5 - cy) / f, np.ones_like(xs)], -1).reshape(
+            -1, 3
+        )
         d = d @ np.asarray(rotation, dtype=np.float32)  # R^T d
         o = np.broadcast_to(np.asarray(centre, dtype=np.float32), d.shape)
-        rays = np.ascontiguousarray(np.concatenate([o, d], 1), dtype=np.float32)  # numpy-scalar params promote to float64
+        rays = np.ascontiguousarray(
+            np.concatenate([o, d], 1), dtype=np.float32
+        )  # numpy-scalar params promote to float64
         hit = self.scene.cast_rays(self._o3c.Tensor(rays))
         prim = hit["primitive_ids"].numpy().astype(np.int64)
         bary = hit["primitive_uvs"].numpy()
@@ -52,7 +56,11 @@ class MeshRenderer:
         out = np.tile(self.bg, (h * w, 1))
         if ok.any():
             p, b = prim[ok], bary[ok]
-            tuv = (1 - b[:, :1] - b[:, 1:]) * self.uv[p, 0] + b[:, :1] * self.uv[p, 1] + b[:, 1:] * self.uv[p, 2]
+            tuv = (
+                (1 - b[:, :1] - b[:, 1:]) * self.uv[p, 0]
+                + b[:, :1] * self.uv[p, 1]
+                + b[:, 1:] * self.uv[p, 2]
+            )
             s = self.albedo.shape[0]
             tx = np.clip(tuv[:, 0] * s - 0.5, 0, s - 1.001)
             ty = np.clip((1.0 - tuv[:, 1]) * s - 0.5, 0, s - 1.001)
@@ -65,7 +73,9 @@ class MeshRenderer:
         return out.reshape(h, w, 3)
 
 
-def load_parts(path: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None]]:
+def load_parts(
+    path: Path,
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None]]:
     """A mesh file's parts in the z-up export frame -> [(vertices, faces, corner UVs [F, 3, 2] (v up) or None,
     albedo or None)] -- for a vertex-coloured part, (vertices, faces, vertex colours, None); a GLB's node
     transforms applied."""
@@ -80,22 +90,41 @@ def load_parts(path: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray | No
     parts = []
     for m in meshes:
         v, f = np.asarray(m.vertices, np.float64), np.asarray(m.faces, np.int64)
-        if path.suffix.lower() in (".glb", ".gltf"):  # glTF is y-up: back to the export's z-up frame
+        if path.suffix.lower() in (
+            ".glb",
+            ".gltf",
+        ):  # glTF is y-up: back to the export's z-up frame
             v = np.stack([v[:, 0], -v[:, 2], v[:, 1]], 1)
         vis = getattr(m, "visual", None)
         mat = getattr(vis, "material", None)
         img = getattr(mat, "baseColorTexture", None) or getattr(mat, "image", None)
         uv = getattr(vis, "uv", None)
         ok = uv is not None and img is not None
-        if not ok and getattr(vis, "kind", None) == "vertex":  # vertex colours: albedo None, the colours in place of UV
+        if (
+            not ok and getattr(vis, "kind", None) == "vertex"
+        ):  # vertex colours: albedo None, the colours in place of UV
             parts.append((v, f, np.asarray(vis.vertex_colors)[:, :3].astype(np.float64), None))
             continue
-        parts.append((v, f, np.asarray(uv)[f] if ok else None, np.asarray(img.convert("RGB")) if ok else None))
+        parts.append(
+            (
+                v,
+                f,
+                np.asarray(uv)[f] if ok else None,
+                np.asarray(img.convert("RGB")) if ok else None,
+            )
+        )
     return parts
 
 
-def render_parts(parts, fpx: float, R: np.ndarray, c: np.ndarray, size: tuple[int, int], *,  # type: ignore[no-untyped-def]
-                 background: tuple[int, int, int] = (11, 29, 51)) -> tuple[np.ndarray, np.ndarray]:
+def render_parts(
+    parts,
+    fpx: float,
+    R: np.ndarray,
+    c: np.ndarray,
+    size: tuple[int, int],
+    *,  # type: ignore[no-untyped-def]
+    background: tuple[int, int, int] = (11, 29, 51),
+) -> tuple[np.ndarray, np.ndarray]:
     """Ray-cast ``load_parts`` parts together from a pinhole camera (``fpx``, principal point at the centre,
     cam_from_world ``R``, centre ``c``), unlit: the nearest hit wins -> (RGB [h, w, 3], the part each pixel
     shows [h, w]: its index in ``parts``, -1 where none; ``>= 0`` is the hit mask)."""
@@ -104,11 +133,25 @@ def render_parts(parts, fpx: float, R: np.ndarray, c: np.ndarray, size: tuple[in
 
     w, h = size
     scene = o3d.t.geometry.RaycastingScene()
-    ids = [scene.add_triangles(o3c.Tensor(v.astype(np.float32)), o3c.Tensor(f.astype(np.uint32))) for v, f, _, _ in parts]
+    ids = [
+        scene.add_triangles(o3c.Tensor(v.astype(np.float32)), o3c.Tensor(f.astype(np.uint32)))
+        for v, f, _, _ in parts
+    ]
     ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
-    d = (np.stack([(xs + 0.5 - w / 2) / fpx, (ys + 0.5 - h / 2) / fpx, np.ones_like(xs)], -1).reshape(-1, 3) @ R).astype(np.float32)
-    hit = scene.cast_rays(o3c.Tensor(np.concatenate([np.broadcast_to(c, d.shape).astype(np.float32), d], 1)))
-    geo, prim, bary = hit["geometry_ids"].numpy(), hit["primitive_ids"].numpy().astype(np.int64), hit["primitive_uvs"].numpy()
+    d = (
+        np.stack(
+            [(xs + 0.5 - w / 2) / fpx, (ys + 0.5 - h / 2) / fpx, np.ones_like(xs)], -1
+        ).reshape(-1, 3)
+        @ R
+    ).astype(np.float32)
+    hit = scene.cast_rays(
+        o3c.Tensor(np.concatenate([np.broadcast_to(c, d.shape).astype(np.float32), d], 1))
+    )
+    geo, prim, bary = (
+        hit["geometry_ids"].numpy(),
+        hit["primitive_ids"].numpy().astype(np.int64),
+        hit["primitive_uvs"].numpy(),
+    )
     ok = np.isfinite(hit["t_hit"].numpy())
     out = np.tile(np.array(background, np.uint8), (h * w, 1))
     for gid, (_, _, uv, albedo) in zip(ids, parts, strict=True):
@@ -121,7 +164,11 @@ def render_parts(parts, fpx: float, R: np.ndarray, c: np.ndarray, size: tuple[in
             continue
         if albedo is None:  # vertex colours
             ff = parts[ids.index(gid)][1][p]
-            out[sel] = ((1 - b[:, :1] - b[:, 1:]) * uv[ff[:, 0]] + b[:, :1] * uv[ff[:, 1]] + b[:, 1:] * uv[ff[:, 2]]).astype(np.uint8)
+            out[sel] = (
+                (1 - b[:, :1] - b[:, 1:]) * uv[ff[:, 0]]
+                + b[:, :1] * uv[ff[:, 1]]
+                + b[:, 1:] * uv[ff[:, 2]]
+            ).astype(np.uint8)
             continue
         tuv = (1 - b[:, :1] - b[:, 1:]) * uv[p, 0] + b[:, :1] * uv[p, 1] + b[:, 1:] * uv[p, 2]
         sh, sw = albedo.shape[:2]
@@ -138,13 +185,18 @@ def _encode(frames_dir: Path, fps: int, out: Path) -> None:
     from drone3d.io.nvdec import ffmpeg_bin
 
     ff = ffmpeg_bin()
-    for codec in (["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19"], ["-c:v", "libx264", "-crf", "18"]):
+    for codec in (
+        ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19"],
+        ["-c:v", "libx264", "-crf", "18"],
+    ):
         res = subprocess.run([ff, "-hide_banner", "-loglevel", "error", "-y", "-framerate", str(fps),
                               "-i", str(frames_dir / "%05d.jpg"), *codec, "-pix_fmt", "yuv420p", str(out)],
                              capture_output=True, check=False)  # fmt: skip
         if res.returncode == 0:
             return
-    raise RuntimeError(f"ffmpeg could not encode {out}: {res.stderr.decode(errors='replace')[-300:]}")
+    raise RuntimeError(
+        f"ffmpeg could not encode {out}: {res.stderr.decode(errors='replace')[-300:]}"
+    )
 
 
 def render_mesh_flythrough(model_export_dir: Path, sfm_model: Path, out: Path, *, seconds: float = 10.0,
@@ -176,7 +228,11 @@ def render_mesh_flythrough(model_export_dir: Path, sfm_model: Path, out: Path, *
     n = max(2, int(seconds * fps))
     path_c, path_r = camera_path(centres, rots, n)
     k = size[0] / cam.width
-    f, cx, cy = cam.params[0] * k, cam.params[1] * k, cam.params[2] * k + (size[1] - cam.height * k) / 2  # same scale, centred
+    f, cx, cy = (
+        cam.params[0] * k,
+        cam.params[1] * k,
+        cam.params[2] * k + (size[1] - cam.height * k) / 2,
+    )  # same scale, centred
     depth = float(np.median(np.linalg.norm(np.asarray(tm.vertices) - centres.mean(0), axis=1)))
     tmp = out.parent / (out.stem + "_frames")
     if tmp.exists():
@@ -185,7 +241,11 @@ def render_mesh_flythrough(model_export_dir: Path, sfm_model: Path, out: Path, *
     for i, (c, rr) in enumerate(zip(path_c, path_r, strict=True)):
         eye = c - pullback * depth * rr[2]  # back along the optical axis
         img = renderer.render(f, cx, cy, rr, eye, size)
-        cv2.imwrite(str(tmp / f"{i:05d}.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92])
+        cv2.imwrite(
+            str(tmp / f"{i:05d}.jpg"),
+            cv2.cvtColor(img, cv2.COLOR_RGB2BGR),
+            [cv2.IMWRITE_JPEG_QUALITY, 92],
+        )
     _encode(tmp, fps, out)
     shutil.rmtree(tmp)
     return out

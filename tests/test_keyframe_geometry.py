@@ -138,7 +138,9 @@ def test_null_vector_survives_a_solver_failure(monkeypatch) -> None:  # type: ig
     real = torch.linalg.eigh
 
     def failing(m):  # type: ignore[no-untyped-def]
-        raise torch.linalg.LinAlgError("linalg.eigh: (Batch element 1): The algorithm failed to converge")
+        raise torch.linalg.LinAlgError(
+            "linalg.eigh: (Batch element 1): The algorithm failed to converge"
+        )
 
     monkeypatch.setattr(torch.linalg, "eigh", failing)
     rows_nan = rows.clone()

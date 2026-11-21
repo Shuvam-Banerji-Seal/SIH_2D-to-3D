@@ -9,7 +9,6 @@ the number of frames regardless of how far apart keyframes end up.
 from __future__ import annotations
 
 import math
-import os
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -19,15 +18,11 @@ import torch
 import torch.nn.functional as F
 
 from drone3d.logging_utils import get_logger
+from drone3d.utils.model_cache import use_weight_store
 
 __all__ = ["ConsecutiveFlow", "RaftFlow", "consistency_mask", "frame_sharpness", "load_raft"]
 
 log = get_logger(__name__)
-
-
-def _default_torch_home() -> None:
-    # Weights live beside the other model files, not in ~/.cache.
-    os.environ.setdefault("TORCH_HOME", "/store/huggingface/torch")
 
 
 def _patch_raft(net: torch.nn.Module) -> None:
@@ -53,9 +48,13 @@ def _patch_raft(net: torch.nn.Module) -> None:
 
     def build_pyramid(self, fmap1, fmap2):  # type: ignore[no-untyped-def]  # returned, never stored on the module
         min_fmap_size = 2 * (2 ** (self.num_levels - 1))
-        if any(d < min_fmap_size for d in fmap1.shape[-2:]):  # as torchvision: smaller maps pool to nothing
-            raise ValueError(f"feature maps of {tuple(fmap1.shape[-2:])} are too small for the correlation pyramid "
-                             f"(at least {min_fmap_size}; images of at least {8 * min_fmap_size} px)")
+        if any(
+            d < min_fmap_size for d in fmap1.shape[-2:]
+        ):  # as torchvision: smaller maps pool to nothing
+            raise ValueError(
+                f"feature maps of {tuple(fmap1.shape[-2:])} are too small for the correlation pyramid "
+                f"(at least {min_fmap_size}; images of at least {8 * min_fmap_size} px)"
+            )
         volume = self._compute_corr_volume(fmap1, fmap2)
         b, h, w, c, _, _ = volume.shape
         volume = volume.reshape(b * h * w, c, h, w)
@@ -127,7 +126,7 @@ def _patch_raft(net: torch.nn.Module) -> None:
 
 def load_raft(model: str = "raft_large", device: str | torch.device = "cuda") -> torch.nn.Module:
     """RAFT with torchvision's pretrained weights, patched for bf16, in eval mode on ``device``."""
-    _default_torch_home()
+    use_weight_store()
     from torchvision.models import optical_flow as of
 
     if model == "raft_large":
@@ -211,7 +210,9 @@ class RaftFlow:
                     self._eager(sa, sb)
             torch.cuda.current_stream(self.device).wait_stream(side)
             graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph, capture_error_mode="relaxed"):  # another slot may be running kernels and nvJPEG
+            with torch.cuda.graph(
+                graph, capture_error_mode="relaxed"
+            ):  # another slot may be running kernels and nvJPEG
                 out = self._eager(sa, sb)
             self._graphs[key] = (graph, sa, sb, out)
         return self._graphs[key]

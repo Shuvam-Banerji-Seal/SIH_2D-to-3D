@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytest.importorskip("torch")
+
 from pathlib import Path
 
-from drone3d.fastsfm import stage
+from drone3d.fastsfm import stage  # noqa: E402
 
 
 class _Rec:
@@ -29,7 +33,9 @@ def test_no_fallback_when_components_together_cover_the_pass(monkeypatch) -> Non
 
     monkeypatch.setattr(stage, "map_tracks", fake_map)
     comps, used, _, t = stage._map_pass(Path("db"), Path("im"), Path("w"), "p", 80, "global", 3)
-    assert calls == ["global"] and used == "global" and [c.n for c in comps] == [43, 25, 6]  # 74/80 > 80 %
+    assert (
+        calls == ["global"] and used == "global" and [c.n for c in comps] == [43, 25, 6]
+    )  # 74/80 > 80 %
     assert t["mapping_s"] == 1.0
 
 

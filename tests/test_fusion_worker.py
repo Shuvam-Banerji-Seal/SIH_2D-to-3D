@@ -5,9 +5,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from drone3d.fastsfm.dense import Camera
-
+pytest.importorskip("torch")
 o3d = pytest.importorskip("open3d")
+
+from drone3d.fastsfm.dense import Camera  # noqa: E402
 
 
 def _plane_frames(n: int = 4) -> list:
@@ -41,6 +42,22 @@ def test_worker_extraction_weight_counts_views() -> None:
 
     kw = {"voxel": 0.05, "depth_max": 10.0, "trunc_voxels": 4.0, "memory_gb": 0.5}
     with FusionWorker() as fw:
-        assert len(fw.fuse(_plane_frames(3), **kw)["triangles"]) == 0  # Open3D's default (> 3) wants four views
-        assert len(fw.fuse(_plane_frames(3), weight_threshold=extraction_weight(3, 3), **kw)["triangles"]) > 100
-        assert len(fw.fuse(_plane_frames(2), weight_threshold=extraction_weight(3, 2), **kw)["triangles"]) == 0
+        assert (
+            len(fw.fuse(_plane_frames(3), **kw)["triangles"]) == 0
+        )  # Open3D's default (> 3) wants four views
+        assert (
+            len(
+                fw.fuse(_plane_frames(3), weight_threshold=extraction_weight(3, 3), **kw)[
+                    "triangles"
+                ]
+            )
+            > 100
+        )
+        assert (
+            len(
+                fw.fuse(_plane_frames(2), weight_threshold=extraction_weight(3, 2), **kw)[
+                    "triangles"
+                ]
+            )
+            == 0
+        )

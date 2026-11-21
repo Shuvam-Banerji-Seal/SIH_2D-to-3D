@@ -19,13 +19,13 @@ from __future__ import annotations
 
 import gc
 import importlib
-import os
 import sys
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 
+from drone3d.depth.assets import resolve_assets_dir
 from drone3d.exceptions import BackendUnavailable
 from drone3d.logging_utils import get_logger
 
@@ -35,7 +35,6 @@ log = get_logger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _UPSTREAM = _REPO_ROOT / "third_party" / "marigold-v2"
-_DEFAULT_ASSETS = Path("/store/huggingface/marigold-v2")
 _EMBED_PREFIX = {
     "depth": "qwen_edit_2509_qwen_depth_realimg512",
     "normals": "qwen_edit_2509_qwen_normals_dummy512",
@@ -151,7 +150,7 @@ class MarigoldDepth:
         seed: int = 2025,
         cache: bool = True,
     ) -> None:
-        assets = Path(assets_dir or os.environ.get("DEPTH_ASSETS_DIR", _DEFAULT_ASSETS))
+        assets = resolve_assets_dir(assets_dir)
         qwen = assets / "checkpoints" / "Qwen-Image-Edit-2509"
         marigold = assets / "checkpoints" / "Marigold-V2"
         trainables = marigold / checkpoint / "trainables.safetensors"

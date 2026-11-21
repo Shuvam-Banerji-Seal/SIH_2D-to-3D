@@ -17,11 +17,21 @@ import numpy as np
 
 from drone3d.logging_utils import get_logger
 
-__all__ = ["Y_UP", "rasterize_top", "write_blend", "write_fbx", "write_geotiff", "write_las", "write_mesh"]
+__all__ = [
+    "Y_UP",
+    "rasterize_top",
+    "write_blend",
+    "write_fbx",
+    "write_geotiff",
+    "write_las",
+    "write_mesh",
+]
 
 log = get_logger(__name__)
 NODATA = -9999.0
-Y_UP = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]])  # z-up frame -> glTF y-up: (x, y, z) -> (x, z, -y)
+Y_UP = np.array(
+    [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]]
+)  # z-up frame -> glTF y-up: (x, y, z) -> (x, z, -y)
 _ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -33,13 +43,17 @@ def write_mesh(vertices: np.ndarray, faces: np.ndarray, colors: np.ndarray | Non
     vc = None
     if colors is not None:
         c = np.asarray(colors)
-        vc = (np.clip(c, 0, 1) * 255).astype(np.uint8) if c.dtype.kind == "f" else c.astype(np.uint8)
+        vc = (
+            (np.clip(c, 0, 1) * 255).astype(np.uint8) if c.dtype.kind == "f" else c.astype(np.uint8)
+        )
     v = np.asarray(vertices, dtype=np.float64)
     out = []
     for fmt in formats:
         path = stem.with_suffix(f".{fmt}")
         verts = v @ Y_UP.T if fmt == "glb" else v
-        trimesh.Trimesh(vertices=verts, faces=np.asarray(faces), vertex_colors=vc, process=False).export(path)
+        trimesh.Trimesh(
+            vertices=verts, faces=np.asarray(faces), vertex_colors=vc, process=False
+        ).export(path)
         out.append(path)
     return out
 
@@ -61,13 +75,19 @@ def write_las(points: np.ndarray, rgb: np.ndarray | None, path: Path, *, epsg: i
     las.x, las.y, las.z = pts[:, 0], pts[:, 1], pts[:, 2]
     if rgb is not None:
         c = np.asarray(rgb)
-        c16 = (np.clip(c, 0, 1) * 65535).astype(np.uint16) if c.dtype.kind == "f" else c.astype(np.uint16) * 257
+        c16 = (
+            (np.clip(c, 0, 1) * 65535).astype(np.uint16)
+            if c.dtype.kind == "f"
+            else c.astype(np.uint16) * 257
+        )
         las.red, las.green, las.blue = c16[:, 0], c16[:, 1], c16[:, 2]
     las.write(str(path))
     return path
 
 
-def rasterize_top(points: np.ndarray, rgb: np.ndarray | None, cell: float) -> tuple[np.ndarray, np.ndarray | None, tuple[float, float]]:
+def rasterize_top(
+    points: np.ndarray, rgb: np.ndarray | None, cell: float
+) -> tuple[np.ndarray, np.ndarray | None, tuple[float, float]]:
     """Top-down raster of the highest point per ``cell`` -> ``(dsm [H, W], ortho [H, W, 3] | None, (x_min, y_max))``.
 
     Row 0 is the northern (max y) edge, as GeoTIFF expects; empty cells are ``NODATA``.
@@ -86,7 +106,9 @@ def rasterize_top(points: np.ndarray, rgb: np.ndarray | None, cell: float) -> tu
     ortho = None
     if rgb is not None:
         c = np.asarray(rgb)
-        c8 = (np.clip(c, 0, 1) * 255).astype(np.uint8) if c.dtype.kind == "f" else c.astype(np.uint8)
+        c8 = (
+            (np.clip(c, 0, 1) * 255).astype(np.uint8) if c.dtype.kind == "f" else c.astype(np.uint8)
+        )
         ortho = np.zeros((h * w, 3), dtype=np.uint8)
         ortho[flat[top]] = c8[top]
         ortho = ortho.reshape(h, w, 3)
@@ -119,20 +141,35 @@ def blender_binary() -> Path | None:
     import os
     import shutil
 
-    for cand in (os.environ.get("DRONE3D_BLENDER"), _ROOT / ".tools" / "blender" / "blender", shutil.which("blender")):
+    for cand in (
+        os.environ.get("DRONE3D_BLENDER"),
+        _ROOT / ".tools" / "blender" / "blender",
+        shutil.which("blender"),
+    ):
         if cand and Path(cand).is_file():
             return Path(cand)
     return None
 
 
-def write_blend(src_glb: Path, dst: Path, *, blender: Path | None = None, timeout: float = 300.0) -> Path | None:
+def write_blend(
+    src_glb: Path, dst: Path, *, blender: Path | None = None, timeout: float = 300.0
+) -> Path | None:
     """A native Blender scene (``.blend``, texture packed) from a GLB, with Blender run headless."""
     exe = blender or blender_binary()
     if exe is None:
         log.warning(".blend skipped: no Blender (put one in .tools/blender or set DRONE3D_BLENDER)")
         return None
     script = _ROOT / "tools" / "glb_to_blend.py"
-    cmd = [str(exe), "--background", "--factory-startup", "--python", str(script), "--", str(src_glb), str(dst)]
+    cmd = [
+        str(exe),
+        "--background",
+        "--factory-startup",
+        "--python",
+        str(script),
+        "--",
+        str(src_glb),
+        str(dst),
+    ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
@@ -147,11 +184,15 @@ def write_blend(src_glb: Path, dst: Path, *, blender: Path | None = None, timeou
 def write_fbx(src: Path, dst: Path, converter: str | None = None) -> Path | None:
     """Convert a mesh file to binary FBX with assimp (``tools/build_meshconv.sh``), if built."""
     root = Path(__file__).resolve().parents[3]
-    exe = converter or next((str(p) for p in (root / ".tools" / "bin" / "meshconv",) if p.is_file()), None)
+    exe = converter or next(
+        (str(p) for p in (root / ".tools" / "bin" / "meshconv",) if p.is_file()), None
+    )
     if exe is None:
         log.warning("FBX skipped: build .tools/bin/meshconv with tools/build_meshconv.sh")
         return None
-    res = subprocess.run([exe, str(src), str(dst), "fbx"], capture_output=True, text=True, check=False)
+    res = subprocess.run(
+        [exe, str(src), str(dst), "fbx"], capture_output=True, text=True, check=False
+    )
     if res.returncode != 0 or not dst.is_file():
         log.warning("FBX export failed: %s", (res.stderr or res.stdout)[-300:])
         return None

@@ -5,7 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from drone3d.complete import carve, fill_ground, snap_planes, solidify
+pytest.importorskip("torch")
+pytest.importorskip("open3d")
+pytest.importorskip("trimesh")
+
+from drone3d.complete import carve, fill_ground, snap_planes, solidify  # noqa: E402
 
 
 def _grid(n: int) -> tuple[np.ndarray, np.ndarray]:
@@ -30,7 +34,7 @@ def _box(lo, hi, n: int = 16, faces: tuple[str, ...] = ("-x", "+x", "-y", "+y", 
         p[:, w] = lo[w] + g[:, 1] * (hi[w] - lo[w])
         p[:, axis] = hi[axis] if side else lo[axis]
         # outward: the grid's (u, w) normal is +axis when (u, w, axis) is a right-handed cycle
-        flip = (side != ((u, w, axis) in ((0, 1, 2), (1, 2, 0), (2, 0, 1))))
+        flip = side != ((u, w, axis) in ((0, 1, 2), (1, 2, 0), (2, 0, 1)))
         vs.append(p)
         fs.append((f[:, ::-1] if flip else f) + off)
         off += len(p)
@@ -58,7 +62,9 @@ def test_snap_planes_leaves_a_sphere_alone() -> None:
 
 
 def test_solidify_closes_an_open_top_into_a_solid() -> None:
-    v, f = _box([0, 0, 0], [2, 2, 3], faces=("-x", "+x", "-y", "+y", "-z"))  # carving opened the roof
+    v, f = _box(
+        [0, 0, 0], [2, 2, 3], faces=("-x", "+x", "-y", "+y", "-z")
+    )  # carving opened the roof
     sv, sf, info = solidify(v, f, resolution=96)
     import trimesh
 
@@ -77,16 +83,25 @@ def test_solidify_keeps_a_courtyard_open_when_the_walls_are_closed() -> None:
     """A closed ring of walls round a courtyard open to the sky: the flood fill works, the courtyard stays empty."""
     import trimesh
 
-    walls = [([0, 0, 0], [6, 1.5, 2]), ([0, 4.5, 0], [6, 6, 2]), ([0, 1.5, 0], [1.5, 4.5, 2]), ([4.5, 1.5, 0], [6, 4.5, 2])]
+    walls = [
+        ([0, 0, 0], [6, 1.5, 2]),
+        ([0, 4.5, 0], [6, 6, 2]),
+        ([0, 1.5, 0], [1.5, 4.5, 2]),
+        ([4.5, 1.5, 0], [6, 4.5, 2]),
+    ]
     parts = [_box(lo, hi, n=12) for lo, hi in walls]
     v = np.concatenate([p[0] for p in parts])
     f = np.concatenate([p[1] + sum(len(q[0]) for q in parts[:i]) for i, p in enumerate(parts)])
     sv, sf, info = solidify(v, f, resolution=96)
     assert info["fill"] == "flood fill"
-    assert trimesh.Trimesh(sv, sf).volume == pytest.approx(54.0, rel=0.12)  # 72 if the courtyard were filled
+    assert trimesh.Trimesh(sv, sf).volume == pytest.approx(
+        54.0, rel=0.12
+    )  # 72 if the courtyard were filled
 
 
-def _view(centre: np.ndarray, target: np.ndarray, size: tuple[int, int] = (320, 240), f: float = 300.0):  # type: ignore[no-untyped-def]
+def _view(
+    centre: np.ndarray, target: np.ndarray, size: tuple[int, int] = (320, 240), f: float = 300.0
+):  # type: ignore[no-untyped-def]
     import torch
 
     from drone3d.export.texture_gpu import View
@@ -95,14 +110,27 @@ def _view(centre: np.ndarray, target: np.ndarray, size: tuple[int, int] = (320, 
     right = np.cross(fwd, [0.0, 0.0, 1.0])
     right /= np.linalg.norm(right)
     r = np.stack([right, np.cross(fwd, right), fwd])
-    return View(f, size[0] / 2, size[1] / 2, r, -r @ centre, torch.zeros(size[1], size[0], 3, dtype=torch.uint8))
+    return View(
+        f,
+        size[0] / 2,
+        size[1] / 2,
+        r,
+        -r @ centre,
+        torch.zeros(size[1], size[0], 3, dtype=torch.uint8),
+    )
 
 
 def test_carving_removes_what_the_camera_saw_through() -> None:
     dev = "cuda" if __import__("torch").cuda.is_available() else "cpu"
-    wall_v, wall_f = _box([0, 0, 0], [0.2, 4, 4], faces=("-x",))  # the measured facade, seen from -x
-    slab_v, slab_f = _box([-1.0, 1.5, 2.0], [-0.9, 2.5, 2.1], n=4)  # an invented canopy in front of it
-    back_v, back_f = _box([4, 0, 0], [4.2, 4, 4], n=6, faces=("+x",))  # a generated wall no camera sees
+    wall_v, wall_f = _box(
+        [0, 0, 0], [0.2, 4, 4], faces=("-x",)
+    )  # the measured facade, seen from -x
+    slab_v, slab_f = _box(
+        [-1.0, 1.5, 2.0], [-0.9, 2.5, 2.1], n=4
+    )  # an invented canopy in front of it
+    back_v, back_f = _box(
+        [4, 0, 0], [4.2, 4, 4], n=6, faces=("+x",)
+    )  # a generated wall no camera sees
     gv = np.concatenate([slab_v, back_v])
     gf = np.concatenate([slab_f, back_f + len(slab_v)])
     views = [_view(np.array([-8.0, y, 2.2]), np.array([0.0, 2.0, 2.0])) for y in (1.5, 2.0, 2.5)]
@@ -135,8 +163,12 @@ def test_the_platform_a_generator_stood_the_object_on_goes() -> None:
     f = np.concatenate([house_f, slab_f + len(house_v)])
     keep = drop_base_slab(v, f)
     cen = v[f].mean(1)
-    assert not keep[len(house_f) :][~((abs(cen[len(house_f) :, 0] - 6) < 2.2) & (abs(cen[len(house_f) :, 1] - 6) < 2.2))].any()
-    assert not keep[: len(house_f)][cen[: len(house_f), 2] < 1.7].any()  # under the water line: not the object
+    assert not keep[len(house_f) :][
+        ~((abs(cen[len(house_f) :, 0] - 6) < 2.2) & (abs(cen[len(house_f) :, 1] - 6) < 2.2))
+    ].any()
+    assert not keep[: len(house_f)][
+        cen[: len(house_f), 2] < 1.7
+    ].any()  # under the water line: not the object
     assert keep[: len(house_f)][cen[: len(house_f), 2] > 2.2].all()  # what stands on it stays
     alone = drop_base_slab(house_v, house_f)
     assert alone.all()  # no platform, nothing goes (the roof is horizontal, but at the top)
@@ -150,11 +182,16 @@ def test_what_one_generation_alone_invents_is_voted_out() -> None:
 
     tower = _box([0, 0, 0], [2, 2, 6], n=12)
     wing_v, wing_f = _box([2, 0, 0], [5, 2, 2], n=12)
-    with_wing = (np.concatenate([tower[0], wing_v]), np.concatenate([tower[1], wing_f + len(tower[0])]))
+    with_wing = (
+        np.concatenate([tower[0], wing_v]),
+        np.concatenate([tower[1], wing_f + len(tower[0])]),
+    )
     sv, sf, info = solidify_consensus([tower, tower, with_wing], resolution=96)
     m = trimesh.Trimesh(sv, sf, process=False)
     assert info["consensus"]["agreed"] and info["consensus"]["votes"] == 2 and m.is_watertight
-    assert m.volume == pytest.approx(24.0, rel=0.1)  # the tower's 2 x 2 x 6; the wing (12 more) is gone
+    assert m.volume == pytest.approx(
+        24.0, rel=0.1
+    )  # the tower's 2 x 2 x 6; the wing (12 more) is gone
     union, _, _ = solidify_consensus([tower, tower, with_wing], resolution=96, votes=1)
     assert union[:, 0].max() > 4.5  # voted with one, the wing would stay
 
@@ -170,5 +207,9 @@ def test_generations_that_disagree_do_not_vote() -> None:
     wide, deep = _box([0, 0, 0], [2.6, 2, 5], n=12), _box([0, 0, 0], [2, 2.6, 5.4], n=12)
     sv, sf, info = solidify_consensus([first, wide, deep], resolution=96)
     m = trimesh.Trimesh(sv, sf, process=False)
-    assert not info["consensus"]["agreed"] and max(info["consensus"]["iou"]) < 0.75 and m.is_watertight
-    assert np.ptp(sv[:, 2]) == pytest.approx(6.0, rel=0.03) and np.ptp(sv[:, 0]) < 2.3  # the first: 6 high, 2 wide
+    assert (
+        not info["consensus"]["agreed"] and max(info["consensus"]["iou"]) < 0.75 and m.is_watertight
+    )
+    assert (
+        np.ptp(sv[:, 2]) == pytest.approx(6.0, rel=0.03) and np.ptp(sv[:, 0]) < 2.3
+    )  # the first: 6 high, 2 wide

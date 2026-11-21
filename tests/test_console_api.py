@@ -137,20 +137,31 @@ def test_upload_a_video_then_it_is_listed(client: TestClient, tmp_path: Path) ->
     assert listed["my flight.mp4"]["origin"] == "upload" and listed["my flight.mp4"]["width"] == 320
 
 
-def test_upload_never_overwrites_and_reuses_identical_bytes(client: TestClient, tmp_path: Path) -> None:
+def test_upload_never_overwrites_and_reuses_identical_bytes(
+    client: TestClient, tmp_path: Path
+) -> None:
     def up(data: bytes) -> dict:
         r = client.post("/api/upload", files={"file": ("log.srt", data, "text/plain")})
         assert r.status_code == 200, r.text
         return r.json()
 
-    a, again, other = up(b"1\n00:00:00,000 --> 00:00:01,000\n"), up(b"1\n00:00:00,000 --> 00:00:01,000\n"), up(b"different")
+    a, again, other = (
+        up(b"1\n00:00:00,000 --> 00:00:01,000\n"),
+        up(b"1\n00:00:00,000 --> 00:00:01,000\n"),
+        up(b"different"),
+    )
     assert a["path"] == again["path"] == "uploads/log.srt" and again["reused"] and not a["reused"]
     assert other["path"] == "uploads/log-2.srt" and not other["reused"]
-    assert sorted(p.name for p in (tmp_path / "repo" / "uploads").iterdir()) == ["log-2.srt", "log.srt"]  # no .part left
+    assert sorted(p.name for p in (tmp_path / "repo" / "uploads").iterdir()) == [
+        "log-2.srt",
+        "log.srt",
+    ]  # no .part left
 
 
 def test_upload_refuses_a_file_that_is_not_a_video(client: TestClient, tmp_path: Path) -> None:
-    r = client.post("/api/upload", files={"file": ("flight.mp4", b"\x00\x01garbage" * 1000, "video/mp4")})
+    r = client.post(
+        "/api/upload", files={"file": ("flight.mp4", b"\x00\x01garbage" * 1000, "video/mp4")}
+    )
     assert r.status_code == 400 and "not a readable video" in r.json()["detail"]
     assert not (tmp_path / "repo" / "uploads" / "flight.mp4").exists()
     assert not list((tmp_path / "repo" / "uploads").iterdir())  # nor its .part
